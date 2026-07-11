@@ -75,7 +75,7 @@
                     { key: 'inflation', label: 'Inflation rate', unit: '%', step: 0.1 },
                     { key: 'swr', label: 'Safe withdrawal rate', unit: '%', step: 0.1 },
                     { key: 'volatility', label: 'Return volatility', unit: '%', step: 1, hint: 'Annual std-dev used by the Monte Carlo simulation' },
-                    { key: 'mcSims', label: 'Simulations', step: 100, min: 50, max: 2000 }
+                    { key: 'mcSims', label: 'Simulations', step: 100, min: 50, max: 2000, hint: '50–2,000. More runs are steadier but slower.' }
                 ]
             }
         ],

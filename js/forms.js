@@ -50,10 +50,23 @@
         if (f.max !== undefined) input.setAttribute('max', f.max);
         if (money) U.bindCurrency(input, { prefix: false });
 
-        input.addEventListener('input', U.debounce(function () {
-            var v = money ? U.parseNum(input.value) : (input.value === '' ? null : input.value);
-            if (v !== null) FireStore.setInput(f.key, v);
-        }, 250));
+        // Clamp to the schema bounds so the stored value always matches what
+        // the engine will actually use.
+        function commit() {
+            var v = money ? U.parseNum(input.value) : (input.value === '' ? null : Number(input.value));
+            if (v === null || isNaN(v)) return;
+            if (f.min !== undefined && v < f.min) v = f.min;
+            if (f.max !== undefined && v > f.max) v = f.max;
+            FireStore.setInput(f.key, v);
+        }
+
+        input.addEventListener('input', U.debounce(commit, 250));
+        input.addEventListener('change', function () {
+            commit();
+            var val = FireStore.get().inputs[f.key];
+            if (money) U.setMoneyEl(input, val);
+            else if (String(val) !== input.value) input.value = val;
+        });
 
         var labelBits = [U.el('span', { class: 'ff-label-text', text: f.label })];
         if (f.hint) {

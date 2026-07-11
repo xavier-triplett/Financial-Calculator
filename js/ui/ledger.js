@@ -44,11 +44,12 @@
                     '<p class="lg-v-note" data-el="coastNote"></p>' +
                 '</article>' +
                 '<article class="lg-verdict" data-v="mc">' +
-                    '<span class="lg-eyebrow">Resilience &mdash; Monte Carlo</span>' +
+                    '<span class="lg-eyebrow">Resilience &mdash; Monte Carlo' +
+                        '<span class="ff-hint" tabindex="0" role="img" data-tooltip="Rather than betting on one average return, your plan is re-run against randomly generated market futures &mdash; booms, crashes and flat decades alike. The rate is the share that still has money at 95." ' +
+                            'aria-label="Rather than betting on one average return, your plan is re-run against randomly generated market futures. The rate is the share that still has money at 95.">i</span></span>' +
                     '<span class="lg-v-range" data-el="mcSims"></span>' +
                     '<div class="lg-bignum" data-el="mcRate">&mdash;</div>' +
-                    '<p class="lg-v-note">of thousands of randomly generated market futures &mdash; booms, crashes and flat decades alike &mdash; leave you with money at 95. ' +
-                        'Rather than betting on one average return, it stress-tests your plan against good luck and bad. ' +
+                    '<p class="lg-v-note">of simulated market futures leave you with money at 95. ' +
                         '<button class="lg-link" type="button" data-el="reroll">Re-roll markets</button></p>' +
                 '</article>' +
                 '<article class="lg-verdict" data-v="fi">' +

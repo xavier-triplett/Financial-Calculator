@@ -73,6 +73,7 @@ html[data-theme="dark"] .ui-ledger .ff-phase-cell input:read-only { background: 
     margin-bottom: 22px;
 }
 .lg-verdict { background: var(--panel); padding: 18px 20px 16px; position: relative; }
+.lg-verdict .lg-eyebrow { display: flex; align-items: center; gap: 6px; }
 .lg-v-range {
     display: block;
     font: 500 11px/1 "IBM Plex Mono", monospace;
@@ -157,6 +158,7 @@ html[data-theme="dark"] .ui-ledger .ff-phase-cell input:read-only { background: 
     border: 1px solid var(--faint); color: var(--faint);
     font-size: 9px; cursor: pointer;
 }
+.ui-ledger .ff-hint[data-tooltip]::after { width: 190px; }
 .ui-ledger .ff-control { display: flex; align-items: center; gap: 4px; }
 .ui-ledger .ff-unit { font: 500 11px/1 "IBM Plex Mono", monospace; color: var(--faint); }
 .ui-ledger .ff-control input {
