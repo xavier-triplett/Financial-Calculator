@@ -314,8 +314,15 @@ html[data-theme="dark"] .trk-btn-primary:hover {
 @media (max-width: 680px) {
     .trk-shell { padding: 18px 14px 40px; }
     .trk-masthead h1 { font-size: 26px; }
-    .trk-kpis { grid-template-columns: 1fr; }
+    .trk-kpis { grid-template-columns: 1fr 1fr; }
     .trk-book { grid-template-columns: 1fr; }
     .trk-spine { position: static; flex-direction: row; flex-wrap: wrap; max-height: none; }
     .trk-book-side { grid-template-columns: 1fr; }
+    .trk-grid th.trk-sticky, .trk-grid td.trk-sticky { min-width: 128px; max-width: 150px; }
+    .trk-chart { height: 240px; }
+    .trk-chart-tall { height: 280px; }
+    .trk-chart-sm { height: 200px; }
+    /* No hover on touch screens — keep row controls visible and tappable. */
+    .trk-x { visibility: visible; font-size: 14px; padding: 4px 8px; }
+    .trk-mini { padding: 5px 8px; }
 }

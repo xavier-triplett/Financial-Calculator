@@ -198,6 +198,26 @@
             if (e.key === 'Escape' && pendingConfirm) closeConfirm(false);
         });
 
+        /* Info hints: tap toggles the tooltip. Explicit focus()/blur()
+         * because Safari never focuses a tapped span, and hints inside a
+         * <label> would otherwise hand the tap to the labelled input. */
+        var hintWasOpen = false;
+        document.addEventListener('pointerdown', function (e) {
+            var hint = e.target.closest('.ff-hint[data-tooltip]');
+            hintWasOpen = !!hint && document.activeElement === hint;
+        });
+        document.addEventListener('click', function (e) {
+            var hint = e.target.closest('.ff-hint[data-tooltip]');
+            if (!hint) {
+                var a = document.activeElement;
+                if (a && a.classList && a.classList.contains('ff-hint')) a.blur();
+                return;
+            }
+            e.preventDefault();
+            if (hintWasOpen) hint.blur();
+            else hint.focus();
+        });
+
         mountActive();
 
         FireStore.subscribe(function () {

@@ -304,6 +304,9 @@ html[data-theme="dark"] .ui-ledger .ff-phase-cell input:read-only { background: 
 }
 @media (max-width: 620px) {
     .lg-shell { padding: 18px 14px 40px; }
-    .lg-verdicts, .lg-figures { grid-template-columns: 1fr; }
+    .lg-verdicts { grid-template-columns: 1fr 1fr; }
+    .lg-figures { grid-template-columns: 1fr; }
     .lg-brand h1 { font-size: 26px; }
+    .lg-chart { height: 260px; }
+    .lg-chart-mc { height: 240px; }
 }

@@ -63,10 +63,19 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
 
 /* Phones: a tooltip anchored right of the icon can't fit, so tapping the
  * icon shows it as a fixed sheet pinned to the bottom of the screen
- * (fixed boxes never widen the page). */
+ * (fixed boxes never widen the page). The arrow pseudo-element becomes an
+ * invisible 36px tap pad — the 13px chips are untappable on their own. */
 @media (max-width: 720px) {
+    .ff-hint[data-tooltip]::before,
     .ff-hint[data-tooltip]:hover::before,
-    .ff-hint[data-tooltip]:focus::before { display: none; }
+    .ff-hint[data-tooltip]:focus::before {
+        display: block;
+        left: 50%; top: 50%;
+        width: 36px; height: 36px;
+        background: transparent;
+        transform: translate(-50%, -50%);
+        pointer-events: auto;
+    }
     .ff-hint[data-tooltip]::after {
         position: fixed;
         left: 12px; right: 12px; bottom: 12px; top: auto;
