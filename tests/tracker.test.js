@@ -100,6 +100,16 @@ check('no data → null', T.ageIncomeAt({ ageIncome: {}, profile: {} }, '2026-06
 const bs = T.benchmarkSeries(benchState, ['2024-03', '2024-04']);
 check('benchmarkSeries aligned + flagged', bs.any === true && bs.paw.length === 2 && Math.abs(bs.paw[0] - 340000) < 0.01);
 
+// income-only entries (the grid's income row) resolve age from the profile
+const mixState = {
+    ageIncome: { '2026-01': { income: 190000 } },
+    profile: { birthMonth: '1998-04', annualIncome: 180000 }
+};
+check('income-only entry keeps profile age', T.ageIncomeAt(mixState, '2026-01').age === 27);
+check('income-only entry overrides profile income', T.ageIncomeAt(mixState, '2026-01').income === 190000);
+check('later months inherit recorded income', T.ageIncomeAt(mixState, '2026-06').income === 190000);
+check('earlier months keep profile income', T.ageIncomeAt(mixState, '2025-06').income === 180000);
+
 // ---------- Rocket Money CSV ----------
 const csv =
 'Date,Original Date,Account Type,Account Name,Account Number,Institution Name,Name,Custom Name,Amount,Description,Category,Note,Ignored From,Tax Deductible\n' +

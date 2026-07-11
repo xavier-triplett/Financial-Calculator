@@ -48,20 +48,22 @@
         return a && a.tagName === 'INPUT' && container && container.contains(a) ? a : null;
     }
 
-    /* Age & income for the benchmarks come from the shared Profile tab. */
-    function sharedProfile() {
-        var st = FireStore.get();
-        return { birthMonth: U.dobToMonth(st.profile.birthDate), annualIncome: st.inputs.income || null };
-    }
-
-    function profileSummary() {
-        var p = sharedProfile();
-        if (!p.birthMonth || !p.annualIncome) {
+    function profileSummary(state) {
+        var p = K.sharedProfile();
+        var months = Object.keys(state.snapshots).sort();
+        var latest = months[months.length - 1];
+        var eff = latest ? E.ageIncomeAt(state, latest, p) : null;
+        if (!eff) {
             return 'Set your date of birth &amp; income on the <strong>Profile</strong> tab to draw the PAW / AAW / UAW lines.';
         }
-        var st = FireStore.get();
-        return 'Age ' + st.inputs.currentAge + ' · income ' + U.compact(p.annualIncome) +
-            ', from the <strong>Profile</strong> tab. A recorded age &amp; income for a month overrides this.';
+        var rec = (state.ageIncome || {})[latest];
+        var source = rec && rec.income !== undefined
+            ? 'recorded on the grid&rsquo;s income row'
+            : Object.keys(state.ageIncome || {}).some(function (k) { return k < latest && (state.ageIncome[k] || {}).income !== undefined; })
+                ? 'carried forward on the grid&rsquo;s income row'
+                : 'from the <strong>Profile</strong> tab';
+        return E.monthLabel(latest) + ': age ' + eff.age + ' · income ' + U.compact(eff.income) + ', ' + source +
+            '. Record a change in the month it lands; blank months inherit.';
     }
 
     /* ---------------- KPIs ---------------- */
@@ -87,7 +89,7 @@
         var d12 = n > 12 ? nw - s.netWorth[n - 13] : (n > 1 ? nw - s.netWorth[0] : null);
         var ctx = K.planContext();
         var fiPct = n && ctx.fiNumber > 0 ? (s.investable[n - 1] / ctx.fiNumber) * 100 : null;
-        var ai = n ? E.ageIncomeAt(state, s.months[n - 1], sharedProfile()) : null;
+        var ai = n ? E.ageIncomeAt(state, s.months[n - 1], K.sharedProfile()) : null;
         var verdict = wealthVerdict(nw, ai && E.benchmarks(ai.age, ai.income));
 
         var html = '<section class="trk-kpis" data-el="kpis-inner">';
@@ -140,7 +142,7 @@
                 '<aside class="trk-obs-side">' +
                     '<section class="trk-panel">' +
                         '<div class="trk-panel-head"><h2>Benchmark profile</h2></div>' +
-                        '<p class="trk-kpi-note" style="margin:0">' + profileSummary() + '</p>' +
+                        '<p class="trk-kpi-note" style="margin:0">' + profileSummary(state) + '</p>' +
                     '</section>' +
                     '<section class="trk-panel trk-bridge" data-el="bridge"></section>' +
                 '</aside>' +
@@ -202,6 +204,20 @@
                 (d === null ? '—' : (d > 0 ? '+' : '') + U.compact(d)) + '</td>';
         }).join('') + '</tr>';
 
+        // Benchmark income: record a raise in the month it lands; blank
+        // months inherit from the last recorded month or the Profile tab.
+        var profile = K.sharedProfile();
+        body += '<tr class="trk-incomerow"><td class="trk-sticky">Annual income' +
+            ' <span class="ff-hint" tabindex="0" role="img" data-tooltip="Gross annual income used for the PAW / AAW / UAW benchmarks. Type it in the month it changes; blank months inherit from the last recorded month, or the Profile tab.">i</span></td>';
+        months.forEach(function (mo) {
+            var rec = (state.ageIncome || {})[mo];
+            var eff = E.ageIncomeAt(state, mo, profile);
+            body += '<td class="num"><input class="trk-cell trk-income" type="text" inputmode="numeric" value="' +
+                (rec && rec.income !== undefined ? Math.round(rec.income) : '') +
+                '" placeholder="' + (eff ? U.moneyStr(eff.income, true) : '—') + '" data-income-month="' + mo + '"></td>';
+        });
+        body += '</tr>';
+
         return '<table class="trk-grid"><thead>' + head + '</thead><tbody>' + body + '</tbody></table>';
     }
 
@@ -216,6 +232,7 @@
         grid.addEventListener('change', function (e) {
             var t = e.target;
             if (t.dataset.month) TrackerStore.setBalance(t.dataset.month, t.dataset.acct, U.parseNum(t.value));
+            else if (t.dataset.incomeMonth) TrackerStore.setAgeIncome(t.dataset.incomeMonth, U.parseNum(t.value));
             else if (t.dataset.rename) TrackerStore.renameAccount(t.dataset.rename, t.value);
         });
         grid.querySelectorAll('.trk-cell').forEach(function (c) { U.bindCurrency(c, { prefix: true }); });
@@ -296,7 +313,7 @@
     function feedCharts(state, s) {
         var labels = s.months.map(function (mo) { return E.monthLabel(mo, true); });
         if (charts.bench) {
-            var bench = E.benchmarkSeries(state, s.months, sharedProfile());
+            var bench = E.benchmarkSeries(state, s.months, K.sharedProfile());
             charts.bench.data.labels = labels;
             charts.bench.data.datasets[0].data = s.netWorth;
             charts.bench.data.datasets[1].data = bench.paw;

@@ -209,24 +209,28 @@
         return (Number(b[0]) - Number(a[0])) * 12 + (Number(b[1]) - Number(a[1]));
     }
 
-    /* Age & income for a month: an exact recorded entry wins; otherwise the
-     * nearest earlier entry carried forward (age advanced by elapsed years);
-     * otherwise derived from the profile. `profile` (from the shared Profile
-     * tab) overrides state.profile when supplied: { birthMonth, annualIncome }. */
+    /* Age & income for a month, resolved independently per field: an exact
+     * recorded entry wins; otherwise the nearest earlier entry carries
+     * forward (age advanced by elapsed years); otherwise the profile fills
+     * in. Entries may hold just an income (the grid's income row) or just an
+     * age. `profile` (from the shared Profile tab) overrides state.profile
+     * when supplied: { birthMonth, annualIncome }. */
     function ageIncomeAt(state, mo, profile) {
         var ai = state.ageIncome || {};
-        if (ai[mo]) return ai[mo];
+        var entry = ai[mo] || {};
+        var age = entry.age, income = entry.income;
+
         var earlier = Object.keys(ai).filter(function (k) { return k < mo; }).sort();
-        if (earlier.length) {
-            var last = earlier[earlier.length - 1];
-            var e = ai[last];
-            return { age: e.age + Math.floor(monthDiff(last, mo) / 12), income: e.income };
+        for (var i = earlier.length - 1; i >= 0 && (age === undefined || income === undefined); i--) {
+            var e = ai[earlier[i]];
+            if (income === undefined && e.income !== undefined) income = e.income;
+            if (age === undefined && e.age !== undefined) age = e.age + Math.floor(monthDiff(earlier[i], mo) / 12);
         }
+
         var p = profile || state.profile || {};
-        if (p.birthMonth && p.annualIncome) {
-            return { age: Math.floor(monthDiff(p.birthMonth, mo) / 12), income: p.annualIncome };
-        }
-        return null;
+        if (age === undefined && p.birthMonth) age = Math.floor(monthDiff(p.birthMonth, mo) / 12);
+        if (income === undefined && p.annualIncome) income = p.annualIncome;
+        return age !== undefined && income !== undefined ? { age: age, income: income } : null;
     }
 
     /* benchmarkSeries(state, months, profile) → { paw, aaw, uaw, any } aligned to months. */

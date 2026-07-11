@@ -142,6 +142,24 @@
             commit();
         },
 
+        /* Annual income recorded against a month, for the PAW/AAW/UAW
+         * benchmarks. Clearing removes the override so the month inherits
+         * from earlier months or the Profile tab again. */
+        setAgeIncome: function (month, income) {
+            if (!/^\d{4}-\d{2}$/.test(String(month))) return;
+            var v = Number(income);
+            if (income === null || income === '' || isNaN(v)) {
+                var entry = state.ageIncome[month];
+                if (entry) {
+                    delete entry.income;
+                    if (Object.keys(entry).length === 0) delete state.ageIncome[month];
+                }
+            } else {
+                state.ageIncome[month] = Object.assign({}, state.ageIncome[month], { income: v });
+            }
+            commit();
+        },
+
         /* ---------- cashbook: months + transactions ---------- */
         addCashMonth: function () {
             var months = E.txnMonths(state.txns).concat(state.cashMonths).sort();

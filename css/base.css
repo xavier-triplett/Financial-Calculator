@@ -9,8 +9,9 @@ input[type="number"] { appearance: textfield; -moz-appearance: textfield; }
 input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 
 /* ---------- Immediate field help ---------- */
-.ui-ledger .ff-hint[data-tooltip],
-.ui-profile .ff-hint[data-tooltip] {
+/* Every skin defines the same --panel/--ink/--green/--rule-dark variables,
+ * so the hint works anywhere; skins may restyle the chip itself. */
+.ff-hint[data-tooltip] {
     position: relative; isolation: isolate;
     width: 16px; height: 16px;
     border: 1px solid var(--rule-dark);
@@ -20,16 +21,13 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
     cursor: pointer;
     transition: border-color .12s, background .12s, transform .12s;
 }
-.ui-ledger .ff-hint[data-tooltip]:hover,
-.ui-ledger .ff-hint[data-tooltip]:focus-visible,
-.ui-profile .ff-hint[data-tooltip]:hover,
-.ui-profile .ff-hint[data-tooltip]:focus-visible {
+.ff-hint[data-tooltip]:hover,
+.ff-hint[data-tooltip]:focus-visible {
     border-color: var(--green);
     background: color-mix(in srgb, var(--panel) 68%, var(--green));
     transform: translateY(-1px);
 }
-.ui-ledger .ff-hint[data-tooltip]::before,
-.ui-profile .ff-hint[data-tooltip]::before {
+.ff-hint[data-tooltip]::before {
     content: "";
     position: absolute; z-index: 1001;
     left: calc(100% + 7px); top: 50%;
@@ -38,8 +36,7 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
     transform: translate(3px, -50%) rotate(45deg);
     opacity: 0; pointer-events: none;
 }
-.ui-ledger .ff-hint[data-tooltip]::after,
-.ui-profile .ff-hint[data-tooltip]::after {
+.ff-hint[data-tooltip]::after {
     content: attr(data-tooltip);
     position: absolute; z-index: 1000;
     left: calc(100% + 10px); top: 50%;
@@ -54,21 +51,15 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
     transform: translate(3px, -50%);
     transition: opacity .08s ease-out, transform .08s ease-out;
 }
-.ui-ledger .ff-hint[data-tooltip]:hover::before,
-.ui-ledger .ff-hint[data-tooltip]:hover::after,
-.ui-ledger .ff-hint[data-tooltip]:focus-visible::before,
-.ui-ledger .ff-hint[data-tooltip]:focus-visible::after,
-.ui-profile .ff-hint[data-tooltip]:hover::before,
-.ui-profile .ff-hint[data-tooltip]:hover::after,
-.ui-profile .ff-hint[data-tooltip]:focus-visible::before,
-.ui-profile .ff-hint[data-tooltip]:focus-visible::after {
+.ff-hint[data-tooltip]:hover::before,
+.ff-hint[data-tooltip]:hover::after,
+.ff-hint[data-tooltip]:focus-visible::before,
+.ff-hint[data-tooltip]:focus-visible::after {
     opacity: 1;
     transform: translate(0, -50%);
 }
-.ui-ledger .ff-hint[data-tooltip]:hover::before,
-.ui-ledger .ff-hint[data-tooltip]:focus-visible::before,
-.ui-profile .ff-hint[data-tooltip]:hover::before,
-.ui-profile .ff-hint[data-tooltip]:focus-visible::before {
+.ff-hint[data-tooltip]:hover::before,
+.ff-hint[data-tooltip]:focus-visible::before {
     transform: translate(0, -50%) rotate(45deg);
 }
 
