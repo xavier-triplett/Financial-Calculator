@@ -123,6 +123,17 @@ const row0 = capped.rows[0];
 check('401k limit enforced year 1', Math.abs(row0.contrib.deferred - E.DEFAULTS.limit401k) < 1, '=' + row0.contrib.deferred);
 check('overflow spills to taxable', row0.contrib.taxable > 150000, '=' + Math.round(row0.contrib.taxable));
 
+// SECURE 2.0 super catch-up: ages 60-63 get the larger 401k catch-up
+const at60 = E.simulate(
+    Object.assign({}, DEMO, { currentAge: 60, retireAge: 70, standardRetireAge: 70, income: 800000, savingsRate: 50 }),
+    [{ id: 1, age: 60, deferred: 100, free: 0, taxable: 0 }], {});
+check('super catch-up applies at 60',
+    Math.abs(at60.rows[0].contrib.deferred - (E.DEFAULTS.limit401k + E.DEFAULTS.superCatchUp401k)) < 1,
+    '=' + at60.rows[0].contrib.deferred);
+check('regular catch-up resumes at 64',
+    Math.abs(at60.rows[4].contrib.deferred - (E.DEFAULTS.limit401k + E.DEFAULTS.catchUp401k) * Math.pow(1.03, 4)) < 1,
+    '=' + at60.rows[4].contrib.deferred);
+
 // 3b. Lean mode (Monte Carlo fast path) must match the full run exactly
 {
     const years = 95 - 30 + 1;

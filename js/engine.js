@@ -59,6 +59,7 @@
         limit401k: 24500,
         limitIRA: 7500,
         catchUp401k: 8000,
+        superCatchUp401k: 11250,  // SECURE 2.0, ages 60-63
         catchUpIRA: 1100,
         catchUpAge: 50,
 
@@ -196,9 +197,11 @@
                 var wantF = totalSavings * pct(activePhase.free);
                 var wantT = totalSavings * pct(activePhase.taxable);
 
-                // IRS limits, indexed to inflation, with catch-up at 50+
+                // IRS limits, indexed to inflation, with catch-up at 50+.
+                // SECURE 2.0: ages 60-63 use the larger 401k super catch-up.
                 var catchUpEligible = age >= d.catchUpAge;
-                var lim401k = (d.limit401k + (catchUpEligible ? d.catchUp401k : 0)) * inflFactor;
+                var catchUp401 = age >= 60 && age <= 63 ? d.superCatchUp401k : (catchUpEligible ? d.catchUp401k : 0);
+                var lim401k = (d.limit401k + catchUp401) * inflFactor;
                 var limIRA = (d.limitIRA + (catchUpEligible ? d.catchUpIRA : 0)) * inflFactor;
 
                 var cD = wantD < lim401k ? wantD : lim401k;
