@@ -1,0 +1,311 @@
+/* ============ TRACKER — shared chrome + three skins ============ */
+/* Same paper, same hairlines, same serif verdicts as the Ledger. */
+.ui-observatory, .ui-cashbook {
+    --paper: #F1F2EE;
+    --panel: #FFFFFF;
+    --ink: #1A211D;
+    --muted: #66716B;
+    --faint: #9AA39D;
+    --rule: #E2E5E0;
+    --rule-dark: #C9CEC8;
+    --green: #17604A;
+    --amber: #A9720F;
+    --steel: #33608C;
+    --red: #A83A31;
+
+    background: var(--paper);
+    color: var(--ink);
+    font: 400 14px/1.5 "Public Sans", system-ui, sans-serif;
+    min-height: 100vh;
+}
+
+html[data-theme="dark"] .ui-observatory,
+html[data-theme="dark"] .ui-cashbook {
+    --paper: #111714;
+    --panel: #19211D;
+    --ink: #E8ECE8;
+    --muted: #A4AFA8;
+    --faint: #78847D;
+    --rule: #2A342E;
+    --rule-dark: #3B4740;
+    --green: #8BE8BC;
+    --amber: #E0AD55;
+    --steel: #7FAAD5;
+    --red: #E37C73;
+}
+html[data-theme="dark"] .trk-subtotal td,
+html[data-theme="dark"] .trk-total td { background: #151C18; }
+
+.trk-shell { max-width: 1360px; margin: 0 auto; padding: 28px 28px 40px; }
+
+/* ---------- Masthead (mirrors .lg-masthead) ---------- */
+.trk-masthead {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    border-bottom: 2px solid var(--ink);
+    padding-bottom: 18px; margin-bottom: 22px;
+    gap: 16px; flex-wrap: wrap;
+}
+.trk-eyebrow {
+    display: block;
+    font: 600 10px/1.4 "Public Sans", sans-serif;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--muted);
+}
+.trk-masthead h1 { font: 600 34px/1.05 "Fraunces", Georgia, serif; letter-spacing: -0.01em; margin: 4px 0; }
+.trk-sub { font-size: 12.5px; color: var(--muted); }
+.trk-mast-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* ---------- Buttons, selects ---------- */
+.trk-btn {
+    border: 1px solid var(--rule-dark); background: transparent; color: var(--muted);
+    font: 500 12px/1 "Public Sans", sans-serif;
+    padding: 8px 14px; border-radius: 3px;
+    transition: color .15s, border-color .15s, background .15s;
+}
+.trk-btn:hover { color: var(--ink); border-color: var(--ink); }
+.trk-btn.drag { background: color-mix(in srgb, transparent 88%, var(--green)); border-color: var(--green); color: var(--green); }
+.trk-btn-primary { border-color: var(--green); color: var(--green); }
+.trk-btn-primary:hover { background: var(--green); border-color: var(--green); color: #fff; }
+.trk-btn-danger:hover { color: var(--red); border-color: var(--red); }
+.trk-select, .trk-search {
+    border: 1px solid var(--rule-dark); background: var(--panel); color: var(--ink);
+    font: 500 12px/1.2 "Public Sans", sans-serif;
+    padding: 7px 10px; border-radius: 3px;
+}
+.trk-search:focus, .trk-select:focus { outline: none; border-color: var(--green); }
+.trk-mini {
+    border: none; background: none; color: var(--faint);
+    font: 500 10.5px/1 "Public Sans", sans-serif; padding: 0 4px;
+}
+.trk-mini:hover { color: var(--green); }
+.trk-x { border: none; background: none; color: var(--faint); font-size: 12px; padding: 0 3px; visibility: hidden; }
+th:hover .trk-x, td:hover .trk-x { visibility: visible; }
+.trk-x:hover { color: var(--red); }
+
+/* ---------- Panels ---------- */
+.trk-panel { background: var(--panel); border: 1px solid var(--rule-dark); padding: 18px 20px; margin-bottom: 22px; }
+.trk-panel-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+.trk-panel-head h2 { font: 600 19px/1.2 "Fraunces", Georgia, serif; margin: 0; }
+.trk-panel-note { font-size: 11.5px; color: var(--muted); }
+.trk-chart { height: 300px; position: relative; }
+.trk-chart-tall { height: 380px; }
+.trk-chart-sm { height: 220px; }
+
+.num { text-align: right; font: 500 12px/1.4 "IBM Plex Mono", monospace; }
+.dim { color: var(--faint); }
+.strong { font-weight: 600; }
+.pos { color: var(--green); }
+.neg { color: var(--red); }
+
+/* ---------- Empty state ---------- */
+.trk-empty {
+    background: var(--panel); border: 1px dashed var(--rule-dark);
+    padding: 48px 24px; text-align: center;
+}
+.trk-empty h3 { font: 600 24px/1.2 "Fraunces", Georgia, serif; margin: 0 0 8px; }
+.trk-empty p { color: var(--muted); font-size: 13px; max-width: 460px; margin: 0 auto 20px; }
+.trk-empty-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
+/* ---------- Plan bridge ---------- */
+.trk-bridge-head { border-bottom: 1px solid var(--ink); padding-bottom: 8px; margin-bottom: 12px; }
+.trk-bridge-title {
+    display: block; font: 600 11px/1 "Public Sans", sans-serif;
+    letter-spacing: 0.16em; text-transform: uppercase;
+}
+.trk-bridge-sub { font: 500 10.5px/1.6 "IBM Plex Mono", monospace; color: var(--faint); }
+.trk-fi { margin-bottom: 12px; }
+.trk-fi-row { display: flex; justify-content: space-between; font-size: 12.5px; padding: 2px 0; }
+.trk-fi-row strong { font: 600 13px/1.4 "IBM Plex Mono", monospace; }
+.trk-fi-bar { height: 6px; background: var(--rule); margin: 8px 0 6px; border-radius: 3px; overflow: hidden; }
+.trk-fi-bar span { display: block; height: 100%; background: var(--green); border-radius: 3px; }
+.trk-fi-pct { font-size: 11px; color: var(--muted); }
+.trk-bridge-diff { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 12px; }
+.trk-bridge-diff td { padding: 5px 4px; border-bottom: 1px solid var(--rule); }
+.trk-bridge-diff .arrow { color: var(--faint); text-align: center; width: 20px; }
+.trk-bridge-ok { font-size: 12px; color: var(--muted); font-style: italic; font-family: "Fraunces", Georgia, serif; }
+.trk-bridge .trk-btn { width: 100%; padding: 10px; }
+
+/* ---------- Grids (Statement + cashflow) ---------- */
+.trk-gridwrap { overflow: auto; max-height: 72vh; }
+.trk-grid { border-collapse: separate; border-spacing: 0; font-size: 12px; min-width: 100%; }
+.trk-grid th {
+    position: sticky; top: 0; z-index: 3;
+    background: var(--panel);
+    font: 600 10px/1.3 "Public Sans", sans-serif;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--muted); text-align: right;
+    box-shadow: inset 0 -1.5px 0 var(--ink);
+    padding: 8px 10px; white-space: nowrap;
+}
+.trk-grid th.trk-sticky, .trk-grid td.trk-sticky {
+    position: sticky; left: 0; z-index: 2; background: var(--panel);
+    text-align: left; border-right: 1px solid var(--rule-dark);
+    min-width: 190px; max-width: 240px;
+}
+.trk-grid th.trk-sticky { z-index: 4; }
+.trk-grid td { padding: 4px 10px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+.trk-grid td.num { font: 500 12px/1.4 "IBM Plex Mono", monospace; }
+.trk-grouprow td {
+    font: 600 10.5px/1.4 "Public Sans", sans-serif;
+    letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
+    padding-top: 12px; border-bottom: 1px solid var(--rule-dark);
+    background: var(--panel);
+}
+.trk-subtotal td { font-weight: 600; border-bottom: 1px solid var(--rule-dark); background: #FAFBF9; }
+.trk-total td { font-weight: 600; border-top: 1px solid var(--ink); background: #FAFBF9; }
+.trk-nwrow td { font: 600 13px/1.5 "IBM Plex Mono", monospace; background: color-mix(in srgb, var(--panel) 94%, var(--green)); }
+.trk-deltarow td { color: var(--muted); font-size: 11px; }
+.trk-cell {
+    width: 100px; text-align: right;
+    font: 500 12px/1 "IBM Plex Mono", monospace;
+    border: none; border-bottom: 1px dashed transparent;
+    background: transparent; color: var(--ink); padding: 3px 0;
+}
+.trk-cell:hover { border-bottom-color: var(--rule-dark); }
+.trk-cell:focus { outline: none; border-bottom: 1px solid var(--green); }
+.trk-acctcell { display: flex; align-items: center; }
+.trk-acct-name {
+    flex: 1; min-width: 0; border: none; background: transparent;
+    font: inherit; color: var(--ink); padding: 2px 0;
+}
+.trk-acct-name:focus { outline: none; box-shadow: 0 1px 0 var(--green); }
+
+/* ---------- Statement band ---------- */
+.trk-band { display: grid; grid-template-columns: 1fr 330px; gap: 22px; align-items: start; }
+.trk-band .trk-panel { margin-bottom: 22px; }
+
+/* ---------- Observatory ---------- */
+.trk-kpis {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px;
+    background: var(--rule-dark); border: 1px solid var(--rule-dark);
+    margin-bottom: 22px;
+}
+.trk-kpi { background: var(--panel); padding: 18px 20px 14px; }
+.trk-kpi-val { font: 600 30px/1.1 "Fraunces", Georgia, serif; margin-top: 8px; font-variant-numeric: lining-nums; }
+.trk-kpi-val.neg { color: var(--red); }
+.trk-kpi-note { font-size: 11.5px; color: var(--muted); margin: 8px 0 0; line-height: 1.45; }
+.trk-obs-grid { display: grid; grid-template-columns: 1fr 330px; gap: 22px; align-items: start; }
+.trk-obs-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+.trk-obs-side .trk-panel { margin-bottom: 22px; }
+.trk-acct-group {
+    display: flex; align-items: center; gap: 7px;
+    border-bottom: 1px solid var(--rule-dark);
+    padding: 8px 0 5px; margin-top: 4px;
+}
+.trk-acct-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.trk-acct-glabel { font: 600 10.5px/1 "Public Sans", sans-serif; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); flex: 1; }
+.trk-acct-gval { font: 600 12px/1 "IBM Plex Mono", monospace; }
+.trk-acct-row { display: flex; justify-content: space-between; font-size: 12.5px; padding: 4px 0 4px 15px; border-bottom: 1px solid var(--rule); }
+.trk-acct-row .num { color: var(--muted); }
+.trk-merchants { margin-top: 12px; border-top: 1px solid var(--rule-dark); padding-top: 10px; }
+
+/* ---------- Cashbook ---------- */
+.trk-book { display: grid; grid-template-columns: 170px 1fr 330px; gap: 22px; align-items: start; }
+.trk-spine { display: flex; flex-direction: column; gap: 6px; position: sticky; top: 60px; max-height: calc(100vh - 80px); overflow-y: auto; }
+.trk-spine-mo {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+    background: var(--panel); border: 1px solid var(--rule-dark);
+    padding: 9px 12px; text-align: left;
+    transition: border-color .15s;
+}
+.trk-spine-mo:hover { border-color: var(--ink); }
+.trk-spine-mo.active { border-left: 3px solid var(--green); }
+.trk-spine-label { font: 600 12px/1.2 "Public Sans", sans-serif; }
+.trk-spine-saved { font: 500 11px/1 "IBM Plex Mono", monospace; }
+.trk-page { min-width: 0; }
+.trk-book-side .trk-panel { margin-bottom: 22px; }
+
+/* cashflow statement */
+.trk-st-section { margin-bottom: 14px; }
+.trk-st-title {
+    font: 600 10.5px/1 "Public Sans", sans-serif;
+    letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted);
+    border-bottom: 1px solid var(--ink);
+    padding-bottom: 6px; margin-bottom: 6px;
+}
+.trk-st-row { display: flex; align-items: baseline; gap: 8px; font-size: 13px; padding: 3.5px 0; }
+.trk-st-dots { flex: 1; border-bottom: 1px dotted var(--rule-dark); transform: translateY(-3px); }
+.trk-st-total { font-weight: 600; border-top: 1px solid var(--rule-dark); margin-top: 3px; padding-top: 6px; }
+.trk-st-verdict {
+    display: flex; justify-content: space-between; align-items: baseline;
+    border-top: 2px solid var(--ink); margin-top: 18px; padding-top: 12px;
+    font: 600 15px/1.3 "Fraunces", Georgia, serif;
+}
+.trk-st-verdict strong { font: 600 22px/1.1 "Fraunces", Georgia, serif; }
+.trk-st-verdict em { font: 500 12px/1 "IBM Plex Mono", monospace; color: var(--muted); font-style: normal; }
+
+/* the stamp, tracker edition */
+.trk-st-stamp {
+    display: inline-block;
+    padding: 5px 12px 4px;
+    border: 2px solid currentColor;
+    box-shadow: inset 0 0 0 1.5px var(--panel), inset 0 0 0 2.5px currentColor;
+    font: 700 14px/1.15 "Fraunces", Georgia, serif;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    transform: rotate(-3deg);
+    border-radius: 3px;
+}
+.trk-stamp-pos { color: var(--green); }
+.trk-stamp-neg { color: var(--red); }
+
+/* manual transaction form */
+.trk-txnform {
+    display: flex; gap: 8px; flex-wrap: wrap;
+    border: 1px dashed var(--rule-dark);
+    padding: 10px; margin-bottom: 12px;
+}
+.trk-txnform input {
+    border: 1px solid var(--rule-dark); background: var(--panel); color: var(--ink);
+    font: 500 12px/1.2 "Public Sans", sans-serif;
+    padding: 7px 9px; border-radius: 3px;
+}
+.trk-txnform input:focus { outline: none; border-color: var(--green); }
+.trk-txnform [data-f="name"] { flex: 1; min-width: 140px; }
+.trk-txnform [data-f="amount"] { width: 110px; text-align: right; font-family: "IBM Plex Mono", monospace; }
+.trk-txnform [data-f="category"] { width: 150px; }
+.trk-txnform [data-f="account"] { width: 120px; }
+.trk-rowbtns { white-space: nowrap; text-align: right; }
+
+/* register */
+.trk-reg-filters { display: flex; gap: 8px; }
+.trk-regwrap { overflow: auto; max-height: 56vh; }
+.trk-register { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12.5px; }
+.trk-register th {
+    position: sticky; top: 0; z-index: 2; background: var(--panel);
+    font: 600 10px/1.3 "Public Sans", sans-serif;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--muted); text-align: left;
+    box-shadow: inset 0 -1.5px 0 var(--ink);
+    padding: 8px 10px; white-space: nowrap;
+}
+.trk-register th.num { text-align: right; }
+.trk-register td { padding: 6px 10px; border-bottom: 1px solid var(--rule); }
+.trk-badge {
+    display: inline-block; font: 500 10.5px/1 "Public Sans", sans-serif;
+    padding: 3px 8px; border-radius: 10px;
+    background: rgba(26,33,29,0.05); color: var(--muted);
+    white-space: nowrap;
+}
+.trk-badge-income { background: color-mix(in srgb, transparent 88%, var(--green)); color: var(--green); }
+
+html[data-theme="dark"] .trk-btn-primary:hover {
+    color: #111714;
+}
+.trk-badge-fixed { background: rgba(169,114,15,0.1); color: var(--amber); }
+.trk-badge-variable { background: rgba(51,96,140,0.1); color: var(--steel); }
+
+/* ---------- Responsive ---------- */
+@media (max-width: 1150px) {
+    .trk-book { grid-template-columns: 150px 1fr; }
+    .trk-book-side { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+    .trk-obs-grid, .trk-obs-grid2, .trk-band { grid-template-columns: 1fr; }
+    .trk-kpis { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 680px) {
+    .trk-shell { padding: 18px 14px 40px; }
+    .trk-masthead h1 { font-size: 26px; }
+    .trk-kpis { grid-template-columns: 1fr; }
+    .trk-book { grid-template-columns: 1fr; }
+    .trk-spine { position: static; flex-direction: row; flex-wrap: wrap; max-height: none; }
+    .trk-book-side { grid-template-columns: 1fr; }
+}
