@@ -7,8 +7,26 @@ function check(name, cond, detail) {
     else console.log('ok:   ' + name);
 }
 
-// 1. Defaults run
-const base = E.simulate({}, null, { startYear: 2026 });
+// Shipped defaults hold no personal financial data (all dollar figures are
+// zero), so the behavioral tests run against this demo plan instead.
+const DEMO = Object.assign({}, E.DEFAULTS, {
+    income: 120000, expenses: 60000,
+    balDeferred: 150000, balFree: 40000, balTaxable: 25000
+});
+
+// 0. Zero defaults stay sane: nothing to spend means nothing ever breaks
+const blank = E.simulate({}, null, { startYear: 2026 });
+check('zero defaults: dollar fields are zero',
+    E.DEFAULTS.income === 0 && E.DEFAULTS.expenses === 0 &&
+    E.DEFAULTS.balDeferred === 0 && E.DEFAULTS.balFree === 0 && E.DEFAULTS.balTaxable === 0);
+check('zero defaults: full age span', blank.rows.length === 95 - 30 + 1);
+check('zero defaults: FI number is zero', blank.summary.fiNumber === 0);
+check('zero defaults: never marked broke', blank.summary.ranOutOfMoneyAge === null && blank.summary.bridgeFailureAge === null);
+check('zero defaults: no NaN in totals', blank.rows.every(r => Number.isFinite(r.total)));
+check('zero defaults: MC succeeds trivially', E.monteCarlo({}, null, { seed: 1 }).successRate === 1);
+
+// 1. Demo plan runs
+const base = E.simulate(DEMO, null, { startYear: 2026 });
 check('rows span currentAge..95', base.rows.length === 95 - 30 + 1);
 // Default plan underfunds the brokerage bridge (0% taxable contributions in
 // phase 1) — failure between retireAge and standardRetireAge is the correct read.
@@ -16,7 +34,7 @@ check('bridge failure lands inside bridge window if present',
     base.summary.bridgeFailureAge === null ||
     (base.summary.bridgeFailureAge >= 50 && base.summary.bridgeFailureAge < 60),
     'failAge=' + base.summary.bridgeFailureAge);
-const taxHeavy = E.simulate({}, [{ id: 1, age: 30, deferred: 20, free: 20, taxable: 60 }], {});
+const taxHeavy = E.simulate(DEMO, [{ id: 1, age: 30, deferred: 20, free: 20, taxable: 60 }], {});
 check('taxable-heavy plan secures the bridge', taxHeavy.summary.bridgeFailureAge === null,
     'failAge=' + taxHeavy.summary.bridgeFailureAge);
 check('never broke with defaults', base.summary.ranOutOfMoneyAge === null);
@@ -74,7 +92,7 @@ function legacySim(d, phases) {
     return { rows, bridgeFail, broke };
 }
 
-const legacyInputs = Object.assign({}, E.DEFAULTS, {
+const legacyInputs = Object.assign({}, DEMO, {
     employerMatchRate: 0, employerMatchCap: 0,
     limit401k: 1e9, limitIRA: 1e9, catchUp401k: 0, catchUpIRA: 0,
     taxDeferredRate: 0, taxTaxableRate: 0
@@ -90,17 +108,17 @@ check('legacy parity: totals match within $1', maxDiff < 1, 'maxDiff=' + maxDiff
 check('legacy parity: bridge status', (mine.summary.bridgeFailureAge === legacy.bridgeFail));
 
 // 3. New features move numbers the right direction
-const withMatch = E.simulate({}, phases, {});
-const noMatch = E.simulate(Object.assign({}, E.DEFAULTS, { employerMatchRate: 0 }), phases, {});
+const withMatch = E.simulate(DEMO, phases, {});
+const noMatch = E.simulate(Object.assign({}, DEMO, { employerMatchRate: 0 }), phases, {});
 check('employer match increases retirement NW', withMatch.summary.netWorthAtRetirement > noMatch.summary.netWorthAtRetirement);
 check('match total positive', withMatch.summary.totalMatch > 0, '=' + Math.round(withMatch.summary.totalMatch));
 
-const highTax = E.simulate(Object.assign({}, E.DEFAULTS, { taxDeferredRate: 40, taxTaxableRate: 30 }), phases, {});
+const highTax = E.simulate(Object.assign({}, DEMO, { taxDeferredRate: 40, taxTaxableRate: 30 }), phases, {});
 check('higher taxes lower ending NW', highTax.summary.endingNetWorth < withMatch.summary.endingNetWorth);
 check('taxes tracked', highTax.summary.totalTaxes > withMatch.summary.totalTaxes);
 
 // Contribution limits: someone saving 50% of 400k into deferred should hit the cap
-const capped = E.simulate(Object.assign({}, E.DEFAULTS, { income: 400000, savingsRate: 50 }), [{ id: 1, age: 30, deferred: 100, free: 0, taxable: 0 }], {});
+const capped = E.simulate(Object.assign({}, DEMO, { income: 400000, savingsRate: 50 }), [{ id: 1, age: 30, deferred: 100, free: 0, taxable: 0 }], {});
 const row0 = capped.rows[0];
 check('401k limit enforced year 1', Math.abs(row0.contrib.deferred - 23500) < 1, '=' + row0.contrib.deferred);
 check('overflow spills to taxable', row0.contrib.taxable > 150000, '=' + Math.round(row0.contrib.taxable));
@@ -110,9 +128,9 @@ check('overflow spills to taxable', row0.contrib.taxable > 150000, '=' + Math.ro
     const years = 95 - 30 + 1;
     const R = new Float64Array(years);
     for (let i = 0; i < years; i++) R[i] = 0.03 + 0.001 * i; // varied returns
-    const full = E.simulate(E.DEFAULTS, phases, { returns: R });
+    const full = E.simulate(DEMO, phases, { returns: R });
     const totals = new Float64Array(years);
-    const lean = E.simulate(E.DEFAULTS, phases, { returns: R, lean: true, totalsOut: totals });
+    const lean = E.simulate(DEMO, phases, { returns: R, lean: true, totalsOut: totals });
     let leanDiff = 0;
     for (let i = 0; i < years; i++) leanDiff = Math.max(leanDiff, Math.abs(full.rows[i].total - totals[i]));
     check('lean totals match full run', leanDiff < 1e-6, 'maxDiff=' + leanDiff);
@@ -123,12 +141,12 @@ check('overflow spills to taxable', row0.contrib.taxable > 150000, '=' + Math.ro
 }
 
 // 4. Monte Carlo
-const mc = E.monteCarlo(E.DEFAULTS, phases, { seed: 42 });
+const mc = E.monteCarlo(DEMO, phases, { seed: 42 });
 check('MC success rate in (0,1]', mc.successRate > 0 && mc.successRate <= 1, '=' + mc.successRate);
 check('MC bands ordered p10<=p50<=p90', mc.bands.p10.every((v, i) => v <= mc.bands.p50[i] + 1 && mc.bands.p50[i] <= mc.bands.p90[i] + 1));
-const mc2 = E.monteCarlo(E.DEFAULTS, phases, { seed: 42 });
+const mc2 = E.monteCarlo(DEMO, phases, { seed: 42 });
 check('MC deterministic for same seed', mc.successRate === mc2.successRate);
-const mc3 = E.monteCarlo(Object.assign({}, E.DEFAULTS, { volatility: 40 }), phases, { seed: 42 });
+const mc3 = E.monteCarlo(Object.assign({}, DEMO, { volatility: 40 }), phases, { seed: 42 });
 check('higher volatility lowers success', mc3.successRate <= mc.successRate, mc3.successRate + ' vs ' + mc.successRate);
 
 console.log('\nDefault plan: NW@50=' + Math.round(base.summary.netWorthAtRetirement / 1000) + 'k, FI#=' + Math.round(base.summary.fiNumber / 1000) + 'k, coverage=' + base.summary.standardCoverage.toFixed(0) + '%, MC success=' + (mc.successRate * 100).toFixed(0) + '%');

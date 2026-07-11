@@ -63,6 +63,11 @@
             // Currency formatting: dollar fields grouped, others left plain
             check('parseNum round-trips currency', FireUtil.parseNum('$1,234.50') === 1234.5);
             check('parseNum rejects empty', FireUtil.parseNum('') === null && FireUtil.parseNum('$') === null);
+            check('defaults hold no personal data',
+                FireStore.get().inputs.income === 0 && FireStore.get().inputs.expenses === 0 &&
+                FireStore.get().inputs.balDeferred === 0 && FireStore.get().inputs.balFree === 0 &&
+                FireStore.get().inputs.balTaxable === 0);
+            FireStore.setInput('balDeferred', 150000);
             var defEl = document.querySelector('input[data-key="balDeferred"]');
             check('money field shows grouped value', defEl.value === '150,000');
             check('money field is a text input', defEl.type === 'text');

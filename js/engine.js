@@ -19,18 +19,19 @@
         retireAge: 50,
         standardRetireAge: 60,
 
-        // Income & savings
-        income: 120000,
+        // Income & savings — personal dollar figures ship as zero so a
+        // signed-out visitor sees no financial data.
+        income: 0,
         savingsRate: 25,          // %
         savingsRateIncrease: 1,   // % points per year
         maxSavingsRate: 50,       // %
-        expenses: 60000,
+        expenses: 0,
         incomeGrowth: 3,          // %
 
         // Current buckets
-        balDeferred: 150000,
-        balFree: 40000,
-        balTaxable: 25000,
+        balDeferred: 0,
+        balFree: 0,
+        balTaxable: 0,
 
         // Market assumptions
         marketReturn: 7,          // %
