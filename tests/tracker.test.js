@@ -69,6 +69,10 @@ check('refund nets against category', byMo['2025-01'].byCategory['Groceries'] ==
 check('transfers excluded', byMo['2025-01'].expenses === 2790, '=' + byMo['2025-01'].expenses);
 check('saved = income - expenses', byMo['2025-01'].saved === 2210);
 
+const janRows = T.categoryRows(byMo['2025-01']);
+check('income listed by category', janRows.income.length === 1 &&
+    janRows.income[0].category === 'Paychecks' && janRows.income[0].amount === 5000);
+
 const trail = T.trailing(txns, 12);
 check('trailing annualizes short history', Math.abs(trail.annualIncome - 60000) < 1, '=' + trail.annualIncome);
 check('trailing savings rate', Math.abs(trail.savingsRate - (10000 - 2830) / 10000) < 1e-9, '=' + trail.savingsRate);

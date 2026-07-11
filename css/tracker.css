@@ -263,12 +263,13 @@ th:hover .trk-x, td:hover .trk-x { visibility: visible; }
     border: 1px dashed var(--rule-dark);
     padding: 10px; margin-bottom: 12px;
 }
-.trk-txnform input {
+.trk-txnform input, .trk-txnform select {
     border: 1px solid var(--rule-dark); background: var(--panel); color: var(--ink);
     font: 500 12px/1.2 "Public Sans", sans-serif;
     padding: 7px 9px; border-radius: 3px;
 }
-.trk-txnform input:focus { outline: none; border-color: var(--green); }
+.trk-txnform input:focus, .trk-txnform select:focus { outline: none; border-color: var(--green); }
+.trk-catwrap { display: contents; }
 .trk-txnform [data-f="name"] { flex: 1; min-width: 140px; }
 .trk-txnform [data-f="amount"] { width: 110px; text-align: right; font-family: "IBM Plex Mono", monospace; }
 .trk-txnform [data-f="category"] { width: 150px; }

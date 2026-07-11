@@ -61,14 +61,17 @@
     }
 
     /* Months with expenses but no income transactions (Rocket Money exports
-     * are often expenses-only) borrow 1/12 of the effective annual income —
-     * the Net Worth grid's income row or the Profile tab — marked "est.".
-     * Actual income transactions always win. */
+     * are often expenses-only) borrow 1/12 of the estimated annual take-home:
+     * gross income — the Net Worth grid's income row or the Profile tab —
+     * less the Profile's effective income tax. Marked "est."; actual income
+     * transactions (already net deposits) always win. */
     function withEstIncome(state, mo, agg) {
         if (!agg || agg.count === 0 || agg.income > 0) return agg;
         var ai = E.ageIncomeAt(state, mo, K.sharedProfile());
         if (!ai) return agg;
-        var inc = Math.round(ai.income / 12);
+        var keep = 1 - (Number(FireStore.get().inputs.incomeTaxRate) || 0) / 100;
+        if (keep < 0) keep = 0;
+        var inc = Math.round(ai.income * keep / 12);
         return Object.assign({}, agg, { income: inc, saved: inc - agg.expenses, estIncome: true });
     }
 
@@ -155,11 +158,13 @@
                 (saved >= 0 ? 'Surplus' : 'Deficit') + '</div>';
 
         var incomeHint = agg.estIncome
-            ? ' <span class="ff-hint" tabindex="0" role="img" data-tooltip="No income transactions this month, so this is 1/12 of your annual income (from the Net Worth grid&rsquo;s income row or the Profile tab). Add paycheck transactions to use actuals.">i</span>'
+            ? ' <span class="ff-hint" tabindex="0" role="img" data-tooltip="No income transactions this month, so this is 1/12 of your estimated take-home: gross annual income (the Net Worth grid&rsquo;s income row or the Profile tab) less the effective income tax set on the Profile tab. Log a money-in transaction to use actuals.">i</span>'
             : '';
         return '<div class="trk-panel-head"><h2>' + E.monthLabel(selMonth) + '</h2>' + stampHTML + '</div>' +
             '<div class="trk-st-section"><div class="trk-st-title">Income' + incomeHint + '</div>' +
-                '<div class="trk-st-row trk-st-total"><span>Total income</span><span class="trk-st-dots"></span>' +
+                rows(sections.income) +
+                '<div class="trk-st-row trk-st-total"><span>' + (agg.estIncome ? 'Estimated take-home' : 'Total income') +
+                '</span><span class="trk-st-dots"></span>' +
                 '<span class="num pos">' + U.money(agg.income) +
                 (agg.estIncome ? ' <em class="trk-est">est.</em>' : '') + '</span></div></div>' +
             section('Fixed expenses', sections.fixed, agg.fixed) +
@@ -173,27 +178,50 @@
     }
 
     /* ---------------- manual add / edit ---------------- */
+    /* Money-out suggestions only — money-in categories come from the
+     * direction select's own list. */
     function knownCategories(state) {
         var set = {};
-        state.txns.forEach(function (t) { set[t.category] = true; });
+        state.txns.forEach(function (t) {
+            if (E.categoryKind(t.category) !== 'income') set[t.category] = true;
+        });
         ['Groceries', 'Dining & Drinks', 'Mortgage', 'Rent', 'Internet', 'Insurance Payments', 'Car Payments',
          'Auto & Transport', 'Gas Bill', 'Water & Light', 'Garbage', 'Subscriptions', 'Shopping',
-         'Entertainment & Rec.', 'Travel & Vacation', 'Paychecks', 'Other Income'].forEach(function (c) { set[c] = true; });
+         'Entertainment & Rec.', 'Travel & Vacation'].forEach(function (c) { set[c] = true; });
         return Object.keys(set).sort();
+    }
+
+    /* Category control per direction: money out keeps the free-text field
+     * with the expense suggestions; money in offers the income categories. */
+    function catControl(dir, t) {
+        if (dir === 'in') {
+            var cats = ['Income', 'Other Income'];
+            if (t && E.categoryKind(t.category) === 'income' && cats.indexOf(t.category) === -1) cats.unshift(t.category);
+            return '<select data-f="category">' + cats.map(function (c) {
+                return '<option value="' + escapeAttr(c) + '"' + (t && t.category === c ? ' selected' : '') + '>' + c + '</option>';
+            }).join('') + '</select>';
+        }
+        return '<input type="text" data-f="category" list="trk-cats" placeholder="Category" value="' +
+            (t ? escapeAttr(t.category) : '') + '">';
     }
 
     function formHTML(state) {
         var t = editingId ? state.txns.filter(function (t) { return t.id === editingId; })[0] : null;
         if (editingId && !t) editingId = null;
+        var dir = t && E.categoryKind(t.category) === 'income' ? 'in' : 'out';
         var datalist = '<datalist id="trk-cats">' + knownCategories(state).map(function (c) {
             return '<option value="' + escapeAttr(c) + '">';
         }).join('') + '</datalist>';
 
         return datalist +
             '<input type="date" data-f="date" value="' + (t ? t.date : selMonth + '-15') + '">' +
+            '<select data-f="dir" title="Money in or out">' +
+                '<option value="out"' + (dir === 'out' ? ' selected' : '') + '>&minus; Money out</option>' +
+                '<option value="in"' + (dir === 'in' ? ' selected' : '') + '>+ Money in</option>' +
+            '</select>' +
             '<input type="text" data-f="name" placeholder="Merchant" value="' + (t ? escapeAttr(t.name) : '') + '">' +
             '<input type="text" inputmode="decimal" data-f="amount" placeholder="Amount" value="' + (t ? t.amount : '') + '">' +
-            '<input type="text" data-f="category" list="trk-cats" placeholder="Category" value="' + (t ? escapeAttr(t.category) : '') + '">' +
+            '<span class="trk-catwrap" data-el="catwrap">' + catControl(dir, t) + '</span>' +
             '<input type="text" data-f="account" placeholder="Account" value="' + (t ? escapeAttr(t.account || '') : '') + '">' +
             '<button class="trk-btn trk-btn-primary" type="button" data-act="save">' + (t ? 'Save' : 'Add') + '</button>' +
             (t ? '<button class="trk-btn" type="button" data-act="cancel">Cancel</button>' : '');
@@ -284,6 +312,14 @@
         els.body.querySelector('[data-el="cat"]').addEventListener('change', function (e) {
             filter.cat = e.target.value;
             renderRegister(TrackerStore.get());
+        });
+
+        els.body.querySelector('[data-el="form"]').addEventListener('change', function (e) {
+            if (e.target.dataset.f !== 'dir') return;
+            var t = editingId ? TrackerStore.get().txns.filter(function (t) { return t.id === editingId; })[0] : null;
+            // Keep the txn's category only when it matches the chosen direction
+            if (t && (E.categoryKind(t.category) === 'income') !== (e.target.value === 'in')) t = null;
+            els.body.querySelector('[data-el="catwrap"]').innerHTML = catControl(e.target.value, t);
         });
 
         els.body.querySelector('[data-el="form"]').addEventListener('click', function (e) {

@@ -25,6 +25,7 @@
                 blurb: 'What comes in and what goes out today.',
                 fields: [
                     { key: 'income', label: 'Annual gross income', unit: '$', step: 1000 },
+                    { key: 'incomeTaxRate', label: 'Effective income tax', unit: '%', step: 1, min: 0, max: 60, hint: 'All payroll and income taxes as a share of gross pay. The Cashbook uses it to estimate monthly take-home when a month has no income transactions.' },
                     { key: 'expenses', label: 'Current annual expenses', unit: '$', step: 1000 }
                 ]
             },

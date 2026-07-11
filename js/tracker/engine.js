@@ -134,11 +134,11 @@
             if (kind === 'transfer') return;
             var amt = Number(t.amount) || 0;
             agg.count++;
+            var cat = t.category || 'Uncategorized';
+            agg.byCategory[cat] = (agg.byCategory[cat] || 0) + amt;
             if (kind === 'income') { agg.income += amt; return; }
             agg[kind] += amt;
             agg.expenses += amt;
-            var cat = t.category || 'Uncategorized';
-            agg.byCategory[cat] = (agg.byCategory[cat] || 0) + amt;
         });
         for (var mo in out) out[mo].saved = out[mo].income - out[mo].expenses;
         return out;
@@ -149,9 +149,9 @@
     }
 
     /* categoryRows(agg) → Cashflow-statement rows for one month's aggregate,
-     * grouped Fixed / Variable / Spending, largest first inside each. */
+     * grouped Income / Fixed / Variable / Spending, largest first inside each. */
     function categoryRows(agg) {
-        var sections = { fixed: [], variable: [], spending: [] };
+        var sections = { income: [], fixed: [], variable: [], spending: [] };
         for (var cat in agg.byCategory) {
             var kind = categoryKind(cat);
             if (sections[kind]) sections[kind].push({ category: cat, amount: agg.byCategory[cat] });

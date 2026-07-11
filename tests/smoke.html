@@ -222,6 +222,19 @@
             check('cashbook spine renders months', document.querySelectorAll('.trk-spine-mo').length === 1);
             check('cashbook statement has stamp', document.querySelector('.trk-st-stamp') !== null);
             check('cashbook has txn form', document.querySelector('.trk-txnform') !== null);
+            check('statement lists income by category', /Paychecks/.test(text('.trk-st-section')));
+
+            // Direction select separates categories by type
+            var dirSel = document.querySelector('[data-f="dir"]');
+            check('txn form has direction select', dirSel !== null);
+            dirSel.value = 'in';
+            dirSel.dispatchEvent(new Event('change', { bubbles: true }));
+            check('money-in offers income categories',
+                document.querySelector('select[data-f="category"] option[value="Income"]') !== null);
+            dirSel.value = 'out';
+            dirSel.dispatchEvent(new Event('change', { bubbles: true }));
+            check('money-out restores expense field',
+                document.querySelector('input[data-f="category"][list="trk-cats"]') !== null);
             check('no net worth data on cashbook', document.querySelector('.ui-cashbook .trk-grid') === null);
 
             var added = TrackerStore.addTxn({ date: '2026-06-10', name: 'Cafe', amount: 18.5, category: 'Dining & Drinks', account: 'Card' });
@@ -251,13 +264,13 @@
                 FireStore.get().inputs.expenses === Math.round(TrackerEngine.trailing(TrackerStore.get().txns).annualExpenses));
             check('cashflow bridge leaves buckets alone', FireStore.get().inputs.balDeferred === deferredBefore);
 
-            // Expense-only months estimate income as annual income ÷ 12
-            // (carried from the ageIncome row: 180k → $15,000/mo)
+            // Expense-only months estimate take-home income: gross annual ÷ 12
+            // less the effective income tax (180k × 75% → $11,250/mo)
             TrackerStore.addTxn({ date: '2026-08-05', name: 'Grocer', amount: 200, category: 'Groceries', account: 'Card' });
             var estBtn = document.querySelector('[data-month="2026-08"]');
             check('expense-only month in spine', estBtn !== null);
             estBtn.click();
-            check('income estimated at annual/12', /\$15,000/.test(text('.trk-st-section .num.pos')));
+            check('income estimated at take-home/12', /\$11,250/.test(text('.trk-st-section .num.pos')));
             check('estimate is marked', document.querySelector('.trk-est') !== null &&
                 document.querySelector('.trk-st-title .ff-hint') !== null);
             check('stamp reflects estimated surplus', /Surplus/i.test(text('.trk-st-stamp')));

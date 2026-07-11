@@ -22,6 +22,7 @@
         // Income & savings — personal dollar figures ship as zero so a
         // signed-out visitor sees no financial data.
         income: 0,
+        incomeTaxRate: 25,        // % of gross pay lost to payroll + income tax
         savingsRate: 25,          // %
         savingsRateIncrease: 1,   // % points per year
         maxSavingsRate: 50,       // %
