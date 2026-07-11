@@ -3,6 +3,23 @@
 (function (global) {
     'use strict';
 
+    /* Group icons as inline SVG so every glyph shares one visual language
+     * (24-unit grid, 2px round stroke, currentColor) instead of the mixed
+     * weights that unicode characters render with. */
+    function icon(paths) {
+        return '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"' +
+            ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + paths + '</svg>';
+    }
+    var ICONS = {
+        target: icon('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/>'),
+        dollar: icon('<line x1="12" y1="2" x2="12" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>'),
+        trendingUp: icon('<polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>'),
+        layers: icon('<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>'),
+        plusCircle: icon('<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>'),
+        percent: icon('<line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>'),
+        activity: icon('<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>')
+    };
+
     global.FireSchema = {
         /* Which groups belong to the Profile tab (baseline facts shared by
          * every tab) vs. the Planner tab (simulation assumptions). Date of
@@ -13,7 +30,7 @@
 
         groups: [
             {
-                id: 'goals', title: 'Retirement goals', icon: '&#9673;',
+                id: 'goals', title: 'Retirement goals', icon: ICONS.target,
                 blurb: 'When you want out.',
                 fields: [
                     { key: 'retireAge', label: 'Early retirement age', step: 1, min: 25, max: 80 },
@@ -21,7 +38,7 @@
                 ]
             },
             {
-                id: 'baseline', title: 'Income & spending', icon: '&#36;',
+                id: 'baseline', title: 'Income & spending', icon: ICONS.dollar,
                 blurb: 'What comes in and what goes out today.',
                 fields: [
                     { key: 'income', label: 'Annual gross income', unit: '$', step: 1000 },
@@ -30,7 +47,7 @@
                 ]
             },
             {
-                id: 'savings', title: 'Savings behavior', icon: '&#8599;',
+                id: 'savings', title: 'Savings behavior', icon: ICONS.trendingUp,
                 blurb: 'How much you keep, and how it grows.',
                 fields: [
                     { key: 'savingsRate', label: 'Starting savings rate', unit: '%', step: 1 },
@@ -40,7 +57,7 @@
                 ]
             },
             {
-                id: 'buckets', title: 'Current buckets', icon: '&#9645;',
+                id: 'buckets', title: 'Current buckets', icon: ICONS.layers,
                 blurb: 'Where your money sits today.',
                 fields: [
                     { key: 'balDeferred', label: 'Tax-deferred (401k / IRA)', unit: '$', step: 1000, bucket: 'deferred' },
@@ -49,7 +66,7 @@
                 ]
             },
             {
-                id: 'employer', title: 'Employer match & IRS limits', icon: '&#43;',
+                id: 'employer', title: 'Employer match & IRS limits', icon: ICONS.plusCircle,
                 blurb: 'Free money, and the 2026 IRS ceilings on tax-advantaged saving — statutory assumptions, not your data.',
                 fields: [
                     { key: 'employerMatchRate', label: 'Match rate', unit: '%', step: 5, hint: '% of your 401k contribution your employer matches' },
@@ -62,7 +79,7 @@
                 ]
             },
             {
-                id: 'taxes', title: 'Withdrawal taxes', icon: '&#167;',
+                id: 'taxes', title: 'Withdrawal taxes', icon: ICONS.percent,
                 blurb: 'Effective rates applied when you draw money out.',
                 fields: [
                     { key: 'taxDeferredRate', label: 'Tax-deferred draws', unit: '%', step: 1, hint: 'Effective income tax on 401k / IRA withdrawals' },
@@ -70,7 +87,7 @@
                 ]
             },
             {
-                id: 'market', title: 'Market assumptions', icon: '&#8767;',
+                id: 'market', title: 'Market assumptions', icon: ICONS.activity,
                 blurb: 'The world your plan lives in.',
                 fields: [
                     { key: 'marketReturn', label: 'Market return', unit: '%', step: 0.1 },

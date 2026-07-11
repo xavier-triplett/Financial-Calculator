@@ -143,7 +143,8 @@ html[data-theme="dark"] .ui-ledger .ff-phase-cell input:read-only { background: 
     font: 600 13px/1 "Public Sans", sans-serif; color: var(--ink);
     text-align: left;
 }
-.ui-ledger .ff-group-icon { color: var(--faint); font-size: 11px; width: 14px; }
+.ui-ledger .ff-group-icon { color: var(--faint); width: 14px; height: 14px; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.ui-ledger .ff-group-icon svg { display: block; }
 .ui-ledger .ff-group-caret { margin-left: auto; width: 7px; height: 7px; border-right: 1.5px solid var(--faint); border-bottom: 1.5px solid var(--faint); transform: rotate(45deg); transition: transform .15s; }
 .ui-ledger .ff-group.open .ff-group-caret { transform: rotate(225deg); }
 .ui-ledger .ff-group-body { display: none; padding: 2px 2px 14px; }
