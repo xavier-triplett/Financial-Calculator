@@ -13,7 +13,12 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
  * so the hint works anywhere; skins may restyle the chip itself. */
 .ff-hint[data-tooltip] {
     position: relative; isolation: isolate;
+    display: inline-flex; align-items: center; justify-content: center;
+    /* The chip is a fixed-size circle inside flex labels; without flex:none a
+     * wrapping label (phone widths) shrinks it into an oval. */
+    flex: none;
     width: 16px; height: 16px;
+    border-radius: 50%;
     border: 1px solid var(--rule-dark);
     background: color-mix(in srgb, var(--panel) 82%, var(--green));
     color: var(--green);
