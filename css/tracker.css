@@ -163,6 +163,15 @@ th:hover .trk-x, td:hover .trk-x { visibility: visible; }
 }
 .trk-cell:hover { border-bottom-color: var(--rule-dark); }
 .trk-cell:focus { outline: none; border-bottom: 1px solid var(--green); }
+.trk-cell::placeholder { color: var(--faint); }
+.trk-incomerow td { border-top: 1px solid var(--rule-dark); }
+.trk-incomerow td.trk-sticky { font-weight: 600; color: var(--muted); }
+.trk-incomerow .ff-hint, .trk-st-title .ff-hint {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 13px; height: 13px; border-radius: 50%;
+    font-size: 9px; margin-left: 4px; vertical-align: -2px;
+}
+.trk-est { font: italic 500 10px/1 "Public Sans", sans-serif; color: var(--faint); }
 .trk-acctcell { display: flex; align-items: center; }
 .trk-acct-name {
     flex: 1; min-width: 0; border: none; background: transparent;

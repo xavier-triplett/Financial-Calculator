@@ -67,6 +67,13 @@
      * planContext() reads the planner; proposals() computes what the
      * tracker would push back; apply() commits it.
      * ------------------------------------------------------------------ */
+    /* Age & income baseline from the shared Profile tab, in the shape
+     * TrackerEngine.ageIncomeAt expects. */
+    function sharedProfile() {
+        var st = FireStore.get();
+        return { birthMonth: U.dobToMonth(st.profile.birthDate), annualIncome: st.inputs.income || null };
+    }
+
     function planContext() {
         var results = FireApp.results();
         var inputs = FireStore.get().inputs;
@@ -227,6 +234,7 @@
         alpha: alpha,
         chartFont: chartFont,
         chartOpts: chartOpts,
+        sharedProfile: sharedProfile,
         planContext: planContext,
         proposals: proposals,
         applyProposals: applyProposals,

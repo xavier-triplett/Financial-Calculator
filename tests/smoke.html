@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <title>UI smoke test</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <script src="../js/vendor/chart.umd.min.js"></script>
+    <script src="../js/vendor/flatpickr.min.js"></script>
     <link rel="stylesheet" href="../css/base.css">
     <link rel="stylesheet" href="../css/ledger.css">
     <link rel="stylesheet" href="../css/tracker.css">
@@ -12,6 +13,15 @@
     <nav id="app-nav"></nav>
     <div id="ui-root"></div>
     <div id="toast"></div>
+    <div id="confirm-layer" aria-hidden="true">
+        <div id="confirm-prompt" role="alertdialog" aria-modal="true" aria-labelledby="confirm-message">
+            <span id="confirm-message"></span>
+            <span class="confirm-actions">
+                <button type="button" data-confirm-cancel>Cancel</button>
+                <button type="button" class="confirm-danger" data-confirm-accept>Delete</button>
+            </span>
+        </div>
+    </div>
     <pre id="smoke-result">RUNNING</pre>
 
     <script src="../js/engine.js"></script>
@@ -53,24 +63,38 @@
             // Currency formatting: dollar fields grouped, others left plain
             check('parseNum round-trips currency', FireUtil.parseNum('$1,234.50') === 1234.5);
             check('parseNum rejects empty', FireUtil.parseNum('') === null && FireUtil.parseNum('$') === null);
-            var incEl = document.querySelector('input[data-key="income"]');
-            check('money field shows grouped value', incEl.value === '120,000');
-            check('money field is a text input', incEl.type === 'text');
+            var defEl = document.querySelector('input[data-key="balDeferred"]');
+            check('money field shows grouped value', defEl.value === '150,000');
+            check('money field is a text input', defEl.type === 'text');
             check('non-money field stays plain number',
-                document.querySelector('input[data-key="currentAge"]').value === '30' &&
-                document.querySelector('input[data-key="currentAge"]').type === 'number');
-            document.querySelector('[data-group="income"]').classList.add('open'); // reveal so it can focus
-            incEl.focus();
-            check('money field bares number on focus', incEl.value === '120000');
-            incEl.blur();
+                document.querySelector('input[data-key="marketReturn"]').value === '7' &&
+                document.querySelector('input[data-key="marketReturn"]').type === 'number');
+            document.querySelector('[data-group="buckets"]').classList.add('open'); // reveal so it can focus
+            defEl.focus();
+            check('money field bares number on focus', defEl.value === '150000');
+            defEl.blur();
 
             // Reactivity through the store (as typed inputs would)
             var before = text('[data-el="nwAtRetire"]');
             FireStore.setInput('income', 200000);
             var after = text('[data-el="nwAtRetire"]');
             check('reacts to input change', before !== after);
+            FireStore.setInput('balDeferred', 175000);
             check('money field regroups from store',
-                document.querySelector('input[data-key="income"]').value === '200,000');
+                document.querySelector('input[data-key="balDeferred"]').value === '175,000');
+
+            // Out-of-range entries clamp to schema bounds so the field, the
+            // store and the Monte Carlo card readout all agree.
+            var simsEl = document.querySelector('input[data-key="mcSims"]');
+            simsEl.value = '5000';
+            simsEl.dispatchEvent(new Event('change', { bubbles: true }));
+            check('sims entry clamps to max', FireStore.get().inputs.mcSims === 2000 && simsEl.value === '2000');
+            check('mc card readout matches clamp', /^2000 simulations/.test(text('[data-el="mcSims"]')));
+            simsEl.value = '10';
+            simsEl.dispatchEvent(new Event('change', { bubbles: true }));
+            check('sims entry clamps to min', FireStore.get().inputs.mcSims === 50 && simsEl.value === '50');
+            FireStore.setInput('mcSims', 2000);
+            check('mc card has info hint', document.querySelector('[data-v="mc"] .ff-hint[data-tooltip]') !== null);
 
             // Phases: add + remove
             var countBefore = FireStore.get().phases.length;
@@ -162,6 +186,19 @@
             check('grid commits parsed currency',
                 TrackerStore.get().snapshots[firstCell.dataset.month][firstCell.dataset.acct] === 1234);
 
+            // Benchmark income row: recorded per month, inherited when blank
+            var incCell = document.querySelector('input[data-income-month="2026-06"]');
+            check('income row renders', incCell !== null);
+            check('blank income shows inherited placeholder', incCell.placeholder === '$180,000');
+            incCell.value = '$190,000';
+            incCell.dispatchEvent(new Event('change', { bubbles: true }));
+            check('income row commits', TrackerStore.get().ageIncome['2026-06'].income === 190000);
+            incCell = document.querySelector('input[data-income-month="2026-06"]');
+            check('income cell regroups', incCell.value === '$190,000');
+            incCell.value = '';
+            incCell.dispatchEvent(new Event('change', { bubbles: true }));
+            check('cleared income reverts to inherited', TrackerStore.get().ageIncome['2026-06'] === undefined);
+
             // Manual balance edit flows through
             TrackerStore.setBalance('2026-06', 'a1', 20000);
             check('edited balance flows to series',
@@ -209,8 +246,21 @@
                 FireStore.get().inputs.expenses === Math.round(TrackerEngine.trailing(TrackerStore.get().txns).annualExpenses));
             check('cashflow bridge leaves buckets alone', FireStore.get().inputs.balDeferred === deferredBefore);
 
+            // Expense-only months estimate income as annual income ÷ 12
+            // (carried from the ageIncome row: 180k → $15,000/mo)
+            TrackerStore.addTxn({ date: '2026-08-05', name: 'Grocer', amount: 200, category: 'Groceries', account: 'Card' });
+            var estBtn = document.querySelector('[data-month="2026-08"]');
+            check('expense-only month in spine', estBtn !== null);
+            estBtn.click();
+            check('income estimated at annual/12', /\$15,000/.test(text('.trk-st-section .num.pos')));
+            check('estimate is marked', document.querySelector('.trk-est') !== null &&
+                document.querySelector('.trk-st-title .ff-hint') !== null);
+            check('stamp reflects estimated surplus', /Surplus/i.test(text('.trk-st-stamp')));
+            document.querySelector('[data-month="2026-06"]').click();
+            check('months with real income are untouched', document.querySelector('.trk-est') === null);
+
             // Back to the planner, still alive after all the switching
-            nav('[data-view="planner"]');
+            nav('[data-view="ledger"]');
             check('planner remounts', document.querySelector('.lg-shell') !== null);
 
             localStorage.clear();

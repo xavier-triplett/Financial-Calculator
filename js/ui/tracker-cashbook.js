@@ -60,6 +60,18 @@
         return Object.keys(set).sort();
     }
 
+    /* Months with expenses but no income transactions (Rocket Money exports
+     * are often expenses-only) borrow 1/12 of the effective annual income —
+     * the Net Worth grid's income row or the Profile tab — marked "est.".
+     * Actual income transactions always win. */
+    function withEstIncome(state, mo, agg) {
+        if (!agg || agg.count === 0 || agg.income > 0) return agg;
+        var ai = E.ageIncomeAt(state, mo, K.sharedProfile());
+        if (!ai) return agg;
+        var inc = Math.round(ai.income / 12);
+        return Object.assign({}, agg, { income: inc, saved: inc - agg.expenses, estIncome: true });
+    }
+
     function update(state) {
         destroyCharts();
         if (datePicker) { datePicker.destroy(); datePicker = null; }
@@ -76,11 +88,11 @@
         var byMo = E.spendByMonth(state.txns);
         var months = monthsOf(state);
         if (!selMonth || months.indexOf(selMonth) === -1) selMonth = months[months.length - 1];
-        var agg = byMo[selMonth] || ZERO_AGG;
+        var agg = withEstIncome(state, selMonth, byMo[selMonth]) || ZERO_AGG;
 
         els.body.innerHTML =
             '<div class="trk-book">' +
-                '<nav class="trk-spine" data-el="spine">' + spineHTML(byMo, months) + '</nav>' +
+                '<nav class="trk-spine" data-el="spine">' + spineHTML(state, byMo, months) + '</nav>' +
                 '<main class="trk-page">' +
                     '<section class="trk-panel" data-el="statement">' + statementHTML(agg) + '</section>' +
                     '<section class="trk-panel">' +
@@ -103,13 +115,13 @@
 
         renderRegister(state);
         K.renderBridge(els.body.querySelector('[data-el="bridge"]'), state, { scope: 'cashflow' });
-        makeFlowChart(byMo, months);
+        makeFlowChart(state, byMo, months);
         wire(state);
     }
 
-    function spineHTML(byMo, months) {
+    function spineHTML(state, byMo, months) {
         return months.map(function (mo) {
-            var agg = byMo[mo];
+            var agg = withEstIncome(state, mo, byMo[mo]);
             var saved = agg ? agg.saved : 0;
             return '<button class="trk-spine-mo' + (mo === selMonth ? ' active' : '') + '" data-month="' + mo + '">' +
                 '<span class="trk-spine-label">' + E.monthLabel(mo) + '</span>' +
@@ -142,10 +154,14 @@
             : '<div class="trk-st-stamp ' + (saved >= 0 ? 'trk-stamp-pos' : 'trk-stamp-neg') + '">' +
                 (saved >= 0 ? 'Surplus' : 'Deficit') + '</div>';
 
+        var incomeHint = agg.estIncome
+            ? ' <span class="ff-hint" tabindex="0" role="img" data-tooltip="No income transactions this month, so this is 1/12 of your annual income (from the Net Worth grid&rsquo;s income row or the Profile tab). Add paycheck transactions to use actuals.">i</span>'
+            : '';
         return '<div class="trk-panel-head"><h2>' + E.monthLabel(selMonth) + '</h2>' + stampHTML + '</div>' +
-            '<div class="trk-st-section"><div class="trk-st-title">Income</div>' +
+            '<div class="trk-st-section"><div class="trk-st-title">Income' + incomeHint + '</div>' +
                 '<div class="trk-st-row trk-st-total"><span>Total income</span><span class="trk-st-dots"></span>' +
-                '<span class="num pos">' + U.money(agg.income) + '</span></div></div>' +
+                '<span class="num pos">' + U.money(agg.income) +
+                (agg.estIncome ? ' <em class="trk-est">est.</em>' : '') + '</span></div></div>' +
             section('Fixed expenses', sections.fixed, agg.fixed) +
             section('Variable expenses', sections.variable, agg.variable) +
             section('Spending', sections.spending, agg.spending) +
@@ -222,16 +238,17 @@
         host.innerHTML = html + '</tbody></table>';
     }
 
-    function makeFlowChart(byMo, months) {
+    function makeFlowChart(state, byMo, months) {
         var take = months.slice(-12);
+        var aggs = take.map(function (mo) { return withEstIncome(state, mo, byMo[mo]) || ZERO_AGG; });
         charts.flow = new Chart(els.body.querySelector('[data-el="flowChart"]').getContext('2d'), {
             type: 'bar',
             data: {
                 labels: take.map(function (mo) { return E.monthLabel(mo, true); }),
                 datasets: [
-                    { label: 'In', data: take.map(function (mo) { return (byMo[mo] || ZERO_AGG).income; }), backgroundColor: K.alpha(K.PALETTE.income, 0.7) },
-                    { label: 'Out', data: take.map(function (mo) { return (byMo[mo] || ZERO_AGG).expenses; }), backgroundColor: K.alpha(K.PALETTE.spending, 0.65) },
-                    { label: 'Set aside', type: 'line', data: take.map(function (mo) { return (byMo[mo] || ZERO_AGG).saved; }),
+                    { label: 'In', data: aggs.map(function (a) { return a.income; }), backgroundColor: K.alpha(K.PALETTE.income, 0.7) },
+                    { label: 'Out', data: aggs.map(function (a) { return a.expenses; }), backgroundColor: K.alpha(K.PALETTE.spending, 0.65) },
+                    { label: 'Set aside', type: 'line', data: aggs.map(function (a) { return a.saved; }),
                       borderColor: K.PALETTE.ink, borderWidth: 1.8, pointRadius: 2, tension: 0.3, fill: false }
                 ]
             },
