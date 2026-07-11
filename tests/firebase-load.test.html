@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Firebase SDK load test (real vendored SDK)</title>
+</head>
+<body>
+    <pre id="out">RUNNING</pre>
+
+    <script src="../js/vendor/firebase-app-compat.js"></script>
+    <script src="../js/vendor/firebase-auth-compat.js"></script>
+    <script src="../js/vendor/firebase-firestore-compat.js"></script>
+    <script src="../js/firebase-config.js"></script>
+    <script src="../js/cloud.js"></script>
+
+    <script>
+    window.addEventListener('load', function () {
+        var out = [], fails = 0;
+        function check(name, cond) { out.push((cond ? 'ok:   ' : 'FAIL: ') + name); if (!cond) fails++; }
+        try {
+            check('firebase global present', typeof firebase !== 'undefined');
+            check('auth compat loaded', typeof firebase.auth === 'function');
+            check('firestore compat loaded', typeof firebase.firestore === 'function');
+            check('real config present', !!(window.FirebaseConfig && FirebaseConfig.apiKey));
+            check('config has project id', !!(window.FirebaseConfig && FirebaseConfig.projectId));
+
+            var app = firebase.initializeApp(FirebaseConfig);
+            check('initializeApp succeeds', !!app);
+            check('auth() constructs', !!firebase.auth());
+            check('firestore() constructs', !!firebase.firestore());
+            check('GoogleAuthProvider constructs', !!(new firebase.auth.GoogleAuthProvider()));
+            check('serverTimestamp available', typeof firebase.firestore.FieldValue.serverTimestamp === 'function');
+
+            // FireCloud sees the real SDK + real config as available
+            check('FireCloud.available() is true', window.FireCloud && FireCloud.available() === true);
+        } catch (e) {
+            fails++; out.push('EXCEPTION: ' + e.message);
+        }
+        document.getElementById('out').textContent =
+            (fails ? 'FBLOAD FAIL (' + fails + ')\n' : 'FBLOAD PASS\n') + out.join('\n');
+    });
+    </script>
+</body>
+</html>

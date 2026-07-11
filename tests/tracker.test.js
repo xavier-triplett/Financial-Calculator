@@ -1,0 +1,140 @@
+require('C:/source/FIRE-CALCULATOR/js/tracker/engine.js');
+require('C:/source/FIRE-CALCULATOR/js/tracker/rocketmoney.js');
+const T = globalThis.TrackerEngine;
+const RM = globalThis.RocketMoney;
+
+let failures = 0;
+function check(name, cond, detail) {
+    if (!cond) { failures++; console.log('FAIL: ' + name + (detail ? ' — ' + detail : '')); }
+    else console.log('ok:   ' + name);
+}
+
+// ---------- month helpers ----------
+check('monthKey from ISO', T.monthKey('2025-01-13') === '2025-01');
+check('monthKey year rollover', T.nextMonth('2024-12') === '2025-01');
+check('monthLabel', T.monthLabel('2024-03') === 'Mar 2024');
+
+// ---------- category kinds ----------
+check('Mortgage is fixed', T.categoryKind('Mortgage') === 'fixed');
+check('Groceries is variable', T.categoryKind('Groceries') === 'variable');
+check('Dining is spending', T.categoryKind('Dining & Drinks') === 'spending');
+check('Paychecks is income', T.categoryKind('Paychecks') === 'income');
+check('Credit Card Payment is transfer', T.categoryKind('Credit Card Payment') === 'transfer');
+check('unknown category is spending', T.categoryKind('Snowboarding') === 'spending');
+
+// ---------- net worth series ----------
+const state = {
+    accounts: [
+        { id: 'a', name: 'Savings', group: 'cash' },
+        { id: 'b', name: 'Roth', group: 'taxFree' },
+        { id: 'c', name: '401k', group: 'taxDeferred' },
+        { id: 'd', name: 'Brokerage', group: 'afterTax' },
+        { id: 'e', name: 'House', group: 'property' },
+        { id: 'f', name: 'Mortgage', group: 'liability' }
+    ],
+    snapshots: {
+        '2025-01': { a: 1000, b: 5000, c: 4000, d: 2000, e: 500000, f: 400000 },
+        '2025-02': { a: 1100, b: 5200, c: 4100, d: 2100, e: 500000, f: 399000 }
+    },
+    txns: []
+};
+const s = T.series(state);
+check('series months sorted', s.months.join(',') === '2025-01,2025-02');
+check('assets sum', s.assets[0] === 512000, '=' + s.assets[0]);
+check('net worth = assets - liabilities', s.netWorth[0] === 112000, '=' + s.netWorth[0]);
+check('investable excludes property', s.investable[0] === 12000, '=' + s.investable[0]);
+
+const b = T.buckets(state);
+check('buckets use latest month', b.month === '2025-02');
+check('bucket deferred', b.deferred === 4100);
+check('bucket free', b.free === 5200);
+check('bucket taxable = afterTax + cash', b.taxable === 3200, '=' + b.taxable);
+
+// ---------- expenses ----------
+const txns = [
+    { date: '2025-01-01', name: 'Paycheck', amount: 5000, category: 'Paychecks' },
+    { date: '2025-01-02', name: 'Mr. Cooper', amount: 2700, category: 'Mortgage' },
+    { date: '2025-01-05', name: 'Fred Meyer', amount: 100, category: 'Groceries' },
+    { date: '2025-01-07', name: 'Fred Meyer', amount: -20, category: 'Groceries' }, // refund
+    { date: '2025-01-09', name: 'Dutch Bros', amount: 10, category: 'Coffee' },
+    { date: '2025-01-10', name: 'CC Payment', amount: 900, category: 'Credit Card Payment' }, // ignored
+    { date: '2025-02-01', name: 'Paycheck', amount: 5000, category: 'Paychecks' },
+    { date: '2025-02-03', name: 'Cafe Yumm', amount: 40, category: 'Dining & Drinks' }
+];
+const byMo = T.spendByMonth(txns);
+check('two txn months', Object.keys(byMo).length === 2);
+check('income summed', byMo['2025-01'].income === 5000);
+check('fixed = mortgage', byMo['2025-01'].fixed === 2700);
+check('refund nets against category', byMo['2025-01'].byCategory['Groceries'] === 80);
+check('transfers excluded', byMo['2025-01'].expenses === 2790, '=' + byMo['2025-01'].expenses);
+check('saved = income - expenses', byMo['2025-01'].saved === 2210);
+
+const trail = T.trailing(txns, 12);
+check('trailing annualizes short history', Math.abs(trail.annualIncome - 60000) < 1, '=' + trail.annualIncome);
+check('trailing savings rate', Math.abs(trail.savingsRate - (10000 - 2830) / 10000) < 1e-9, '=' + trail.savingsRate);
+
+const top = T.topMerchants(txns, '2025-01', 3);
+check('top merchant is mortgage', top[0].name === 'Mr. Cooper');
+
+// ---------- PAW / AAW / UAW benchmarks (values from the workbook's Dashboard Data) ----------
+const b25 = T.benchmarks(25, 170000);
+check('AAW at 25/170k', Math.abs(b25.aaw - 170000) < 0.01, '=' + b25.aaw);
+check('PAW = 2×AAW', Math.abs(b25.paw - 340000) < 0.01);
+check('UAW = AAW/2', Math.abs(b25.uaw - 85000) < 0.01);
+const b26 = T.benchmarks(26, 173000);
+check('AAW at 26/173k', Math.abs(b26.aaw - 187416.6667) < 0.01, '=' + b26.aaw);
+const b27 = T.benchmarks(27, 180000);
+check('PAW at 27/180k', Math.abs(b27.paw - 422608.6957) < 0.01, '=' + b27.paw);
+check('benchmarks null without inputs', T.benchmarks(0, 100000) === null && T.benchmarks(30, 0) === null);
+
+const benchState = {
+    ageIncome: { '2024-03': { age: 25, income: 170000 } },
+    profile: { birthMonth: null, annualIncome: null }
+};
+check('exact ageIncome entry wins', T.ageIncomeAt(benchState, '2024-03').age === 25);
+check('carry-forward advances age by elapsed years', T.ageIncomeAt(benchState, '2025-04').age === 26);
+check('carry-forward keeps income', T.ageIncomeAt(benchState, '2025-04').income === 170000);
+const profState = { ageIncome: {}, profile: { birthMonth: '1998-04', annualIncome: 180000 } };
+check('profile fallback derives age', T.ageIncomeAt(profState, '2026-06').age === 28);
+check('no data → null', T.ageIncomeAt({ ageIncome: {}, profile: {} }, '2026-06') === null);
+const bs = T.benchmarkSeries(benchState, ['2024-03', '2024-04']);
+check('benchmarkSeries aligned + flagged', bs.any === true && bs.paw.length === 2 && Math.abs(bs.paw[0] - 340000) < 0.01);
+
+// ---------- Rocket Money CSV ----------
+const csv =
+'Date,Original Date,Account Type,Account Name,Account Number,Institution Name,Name,Custom Name,Amount,Description,Category,Note,Ignored From,Tax Deductible\n' +
+'2025-01-03,2025-01-03,Credit Card,Alaska Visa,7860,Bank of America,"ALMA, Therapy",,25.00,SQ *ALMA,Therapy,,,\n' +
+'2025-01-03,2025-01-03,Cash,WAY2SAVE,0508,Wells Fargo,Mr. Cooper,,2668.71,NSM DBAMR.COOPER,Mortgage,,,\n' +
+'2025-01-04,2025-01-04,Credit Card,VentureOne,3737,Capital One,"Quote ""Test""",,17.40,TWO DOGS,Dining & Drinks,,,\n' +
+'2025-01-06,2025-01-06,Cash,Checking,8821,U.S. Bank,Paycheck,,-4600.00,DIRECT DEP,Paychecks,,,\n' +
+'2025-01-07,2025-01-07,Credit Card,VentureOne,3737,Capital One,Hidden Thing,,50.00,HIDDEN,Shopping,,everything,\n';
+
+const parsed = RM.parse(csv);
+check('parse count (ignored row skipped)', parsed.txns.length === 4, '=' + parsed.txns.length);
+check('ignored-from row skipped', parsed.skipped === 1);
+check('no flip when expenses positive', parsed.flipped === false);
+check('quoted comma preserved', parsed.txns[0].name === 'ALMA, Therapy');
+check('escaped quotes preserved', parsed.txns[2].name === 'Quote "Test"');
+check('income normalized positive', parsed.txns[3].amount === 4600);
+check('stable ids', parsed.txns[0].id === RM.parse(csv).txns[0].id);
+
+// debit-negative convention flips
+const csvNeg =
+'Date,Name,Amount,Category\n' +
+'2025-01-03,Fred Meyer,-52.73,Groceries\n' +
+'2025-01-04,Dutch Bros,-8.50,Coffee\n' +
+'2025-01-05,Paycheck,4600.00,Paychecks\n';
+const parsedNeg = RM.parse(csvNeg);
+check('debit-negative export flipped', parsedNeg.flipped === true);
+check('expense positive after flip', parsedNeg.txns[0].amount === 52.73);
+check('income stays positive after flip', parsedNeg.txns[2].amount === 4600);
+
+// M/D/YYYY dates
+const csvUS = 'Date,Name,Amount,Category\n1/9/2025,Test,10.00,Fees\n';
+check('US date parsed', RM.parse(csvUS).txns[0].date === '2025-01-09');
+
+// garbage in
+check('non-CSV rejected', !!RM.parse('hello world').error);
+
+console.log(failures ? '\n' + failures + ' failure(s)' : '\nAll tracker tests passed');
+process.exit(failures ? 1 : 0);

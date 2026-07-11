@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Cloud sync test (mock Firebase)</title>
+</head>
+<body>
+    <pre id="out">RUNNING</pre>
+
+    <!-- In-memory mock of the Firebase compat API, installed before cloud.js
+         so FireCloud drives it exactly as it would the real SDK. -->
+    <script>
+    (function () {
+        var docs = {};       // uid -> stored document
+        var authCb = null;
+        var SENTINEL = { __ts: true };
+        window.__mockDocs = docs;
+        function ref(uid) {
+            return {
+                get: function () { return Promise.resolve({ exists: Object.prototype.hasOwnProperty.call(docs, uid), data: function () { return docs[uid]; } }); },
+                set: function (payload) { docs[uid] = payload; return Promise.resolve(); }
+            };
+        }
+        window.firebase = {
+            initializeApp: function () { return {}; },
+            auth: function () {
+                return {
+                    onAuthStateChanged: function (cb) { authCb = cb; },
+                    signInWithPopup: function () { return Promise.resolve(); },
+                    signOut: function () { if (authCb) authCb(null); return Promise.resolve(); }
+                };
+            },
+            firestore: function () {
+                return { collection: function () { return { doc: function (uid) { return ref(uid); } }; } };
+            }
+        };
+        window.firebase.auth.GoogleAuthProvider = function () {};
+        window.firebase.firestore.FieldValue = { serverTimestamp: function () { return SENTINEL; } };
+        window.__signIn = function (uid, email) { if (authCb) authCb({ uid: uid, email: email, displayName: email }); };
+    })();
+    window.FirebaseConfig = { apiKey: 'test-key' };
+    window.FireApp = { toast: function () {} };
+    </script>
+
+    <script src="../js/engine.js"></script>
+    <script src="../js/util.js"></script>
+    <script src="../js/tracker/engine.js"></script>
+    <script src="../js/store.js"></script>
+    <script src="../js/tracker/store.js"></script>
+    <script src="../js/cloud.js"></script>
+
+    <script>
+    window.addEventListener('load', function () {
+        var out = [], fails = 0;
+        function check(name, cond) { out.push((cond ? 'ok:   ' : 'FAIL: ') + name); if (!cond) fails++; }
+        function finish() {
+            document.getElementById('out').textContent =
+                (fails ? 'CLOUD FAIL (' + fails + ')\n' : 'CLOUD PASS\n') + out.join('\n');
+        }
+
+        try {
+            localStorage.clear();
+            FireStore.init();
+            TrackerStore.init();
+
+            check('available with mock + config', FireCloud.available() === true);
+            check('starts signed out', FireCloud.signedIn() === false);
+
+            // Local edits before any sign-in
+            FireStore.setInput('income', 123456);
+            TrackerStore.seedFrom({
+                accounts: [{ id: 'a1', name: 'Savings', group: 'cash' }],
+                snapshots: { '2026-01': { a1: 4321 } },
+                txns: []
+            });
+
+            FireCloud.init();
+            __signIn('user1', 'a@b.com');
+
+            // onSignIn resolves get() on a microtask; let it settle.
+            setTimeout(function () {
+                // Scenario A — first sign-in seeds the empty cloud from local
+                var d1 = window.__mockDocs.user1;
+                check('signed in as user1', FireCloud.signedIn() === true);
+                check('A: cloud doc created', !!d1);
+                check('A: cloud carries local plan', d1 && d1.plan.inputs.income === 123456);
+                check('A: cloud carries local tracker', d1 && d1.tracker.snapshots['2026-01'].a1 === 4321);
+                check('A: doc is versioned', d1 && d1.version === 1);
+
+                // Scenario B — a returning user's cloud doc is the source of truth
+                window.__mockDocs.user2 = {
+                    version: 1,
+                    plan: { inputs: { income: 999000 }, profile: { birthDate: null }, phases: [{ id: 1, age: 30, deferred: 50, free: 50, taxable: 0, isLocked: true }], mcSeed: 7 },
+                    tracker: { accounts: [{ id: 'z9', name: 'Roth', group: 'taxFree' }], snapshots: { '2026-02': { z9: 88000 } }, ageIncome: {}, txns: [], cashMonths: [] }
+                };
+                FireCloud.signOut();
+                check('B: signOut clears user', FireCloud.signedIn() === false);
+                __signIn('user2', 'c@d.com');
+
+                setTimeout(function () {
+                    check('B: adopts cloud plan (income)', FireStore.get().inputs.income === 999000);
+                    check('B: adopts cloud tracker (accounts)', TrackerStore.get().accounts.length === 1 && TrackerStore.get().accounts[0].name === 'Roth');
+                    check('B: adopts cloud tracker (snapshot)', TrackerStore.get().snapshots['2026-02'].z9 === 88000);
+                    check('B: adopt did not overwrite the cloud doc', window.__mockDocs.user2.plan.inputs.income === 999000);
+
+                    // Scenario C — edits while signed in push (debounced) to cloud
+                    FireStore.setInput('income', 555000);
+                    TrackerStore.addAccount('Brokerage', 'afterTax');
+
+                    setTimeout(function () {
+                        check('C: debounced push wrote plan', window.__mockDocs.user2.plan.inputs.income === 555000);
+                        check('C: debounced push wrote tracker', window.__mockDocs.user2.tracker.accounts.length === 2);
+                        check('C: push stamped updatedAt', !!window.__mockDocs.user2.updatedAt);
+
+                        // Scenario D — signed out, edits stay local only
+                        FireCloud.signOut();
+                        var before = JSON.stringify(window.__mockDocs.user2);
+                        FireStore.setInput('income', 111111);
+                        setTimeout(function () {
+                            check('D: no push while signed out', JSON.stringify(window.__mockDocs.user2) === before);
+                            check('D: local still updates', FireStore.get().inputs.income === 111111);
+                            finish();
+                        }, 1800);
+                    }, 1800);
+                }, 60);
+            }, 60);
+        } catch (e) {
+            fails++; out.push('EXCEPTION: ' + e.message + '\n' + e.stack);
+            finish();
+        }
+    });
+    </script>
+</body>
+</html>

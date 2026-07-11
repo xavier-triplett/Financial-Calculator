@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>UI smoke test</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <link rel="stylesheet" href="../css/base.css">
+    <link rel="stylesheet" href="../css/ledger.css">
+    <link rel="stylesheet" href="../css/tracker.css">
+</head>
+<body>
+    <nav id="app-nav"></nav>
+    <div id="ui-root"></div>
+    <div id="toast"></div>
+    <pre id="smoke-result">RUNNING</pre>
+
+    <script src="../js/engine.js"></script>
+    <script src="../js/util.js"></script>
+    <script src="../js/schema.js"></script>
+    <script src="../js/store.js"></script>
+    <script src="../js/forms.js"></script>
+    <script src="../js/tracker/engine.js"></script>
+    <script src="../js/tracker/rocketmoney.js"></script>
+    <script src="../js/tracker/store.js"></script>
+    <script src="../js/tracker/kit.js"></script>
+    <script src="../js/ui/ledger.js"></script>
+    <script src="../js/ui/tracker-observatory.js"></script>
+    <script src="../js/ui/tracker-cashbook.js"></script>
+    <script src="../js/app.js"></script>
+
+    <script>
+    window.addEventListener('load', function () {
+        var out = [];
+        var failures = 0;
+        function check(name, cond) {
+            out.push((cond ? 'ok:   ' : 'FAIL: ') + name);
+            if (!cond) failures++;
+        }
+        function text(sel) { var n = document.querySelector(sel); return n ? n.textContent : ''; }
+
+        try {
+            localStorage.clear();
+            FireStore.init();
+
+            check('ledger mounts', document.querySelector('.lg-shell') !== null);
+            check('bridge stamp populated', text('[data-el="bridgeStamp"]').length > 1);
+            check('coast stamp populated', text('[data-el="coastStamp"]').length > 1);
+            check('mc rate rendered', /%$/.test(text('[data-el="mcRate"]')));
+            check('table has all years', document.querySelectorAll('.lg-table tbody tr').length === 66);
+            check('phase editor rendered', document.querySelectorAll('.ff-phase').length === 1);
+            check('drawdown editor rendered', document.querySelectorAll('.ff-draw').length === 2);
+
+            // Currency formatting: dollar fields grouped, others left plain
+            check('parseNum round-trips currency', FireUtil.parseNum('$1,234.50') === 1234.5);
+            check('parseNum rejects empty', FireUtil.parseNum('') === null && FireUtil.parseNum('$') === null);
+            var incEl = document.querySelector('input[data-key="income"]');
+            check('money field shows grouped value', incEl.value === '120,000');
+            check('money field is a text input', incEl.type === 'text');
+            check('non-money field stays plain number',
+                document.querySelector('input[data-key="currentAge"]').value === '30' &&
+                document.querySelector('input[data-key="currentAge"]').type === 'number');
+            document.querySelector('[data-group="income"]').classList.add('open'); // reveal so it can focus
+            incEl.focus();
+            check('money field bares number on focus', incEl.value === '120000');
+            incEl.blur();
+
+            // Reactivity through the store (as typed inputs would)
+            var before = text('[data-el="nwAtRetire"]');
+            FireStore.setInput('income', 200000);
+            var after = text('[data-el="nwAtRetire"]');
+            check('reacts to input change', before !== after);
+            check('money field regroups from store',
+                document.querySelector('input[data-key="income"]').value === '200,000');
+
+            // Phases: add + remove
+            var countBefore = FireStore.get().phases.length;
+            FireStore.addPhase();
+            check('phase added', FireStore.get().phases.length === countBefore + 1);
+            check('phase editor rerendered', document.querySelectorAll('.ff-phase').length === countBefore + 1);
+            var added = FireStore.get().phases[FireStore.get().phases.length - 1];
+            FireStore.removePhase(added.id);
+            check('phase removed', FireStore.get().phases.length === countBefore);
+
+            // Regression: clicking add/delete focuses the button, which sits
+            // inside the editor — the rebuild must not be skipped for that.
+            var addBtn = document.querySelector('.ff-phase-add');
+            addBtn.focus();
+            addBtn.click();
+            check('add button adds a card while focused',
+                document.querySelectorAll('.ff-phase').length === countBefore + 1);
+            var delBtn = document.querySelector('.ff-phase-del');
+            delBtn.focus();
+            delBtn.click();
+            check('delete button removes the card while focused',
+                document.querySelectorAll('.ff-phase').length === countBefore);
+
+            // Regression: the readonly Brokerage remainder refreshes even
+            // while the edited input keeps focus (Enter instead of Tab).
+            var defInput = document.querySelector('input[data-phase-id][data-field="deferred"]');
+            defInput.focus();
+            defInput.value = 30;
+            defInput.dispatchEvent(new Event('change', { bubbles: true }));
+            var taxInput = document.querySelector('input[data-phase-id][data-field="taxable"]');
+            check('remainder updates while focus held', taxInput.value === '20');
+            defInput.blur();
+            FireStore.updatePhase(FireStore.get().phases[0].id, 'deferred', 50);
+
+            // Reroll changes seed and keeps a valid readout
+            var seed = FireStore.get().mcSeed;
+            FireStore.rerollSeed();
+            check('seed rerolled', FireStore.get().mcSeed !== seed);
+            check('readout still valid', /^\d+%$/.test(text('[data-el="mcRate"]')));
+
+            // Persistence round-trip
+            var saved = JSON.parse(localStorage.getItem('fireData_v3'));
+            check('persisted income', saved.inputs.income === 200000);
+
+            // Unreadable saves are discarded, never migrated
+            localStorage.setItem('fireData_v3', 'not json {{{');
+            FireStore.init();
+            check('garbage save falls back to defaults',
+                FireStore.get().inputs.income === FireEngine.DEFAULTS.income);
+
+            /* ---------------- Tracker ---------------- */
+            function nav(sel) { document.querySelector(sel).click(); }
+
+            // Net Worth tab starts blank; seed via a config like seed.js would provide
+            nav('[data-view="observatory"]');
+            check('net worth tab mounts empty state', document.querySelector('.trk-empty') !== null);
+
+            var seeded = TrackerStore.seedFrom({
+                profile: { birthMonth: '1998-04', annualIncome: 180000 },
+                accounts: [
+                    { id: 'a1', name: 'Savings', group: 'cash' },
+                    { id: 'a2', name: 'Roth', group: 'taxFree' },
+                    { id: 'a3', name: '401k', group: 'taxDeferred' },
+                    { id: 'a4', name: 'House', group: 'property' },
+                    { id: 'a5', name: 'Mortgage', group: 'liability' }
+                ],
+                snapshots: {
+                    '2026-05': { a1: 10000, a2: 60000, a3: 50000, a4: 500000, a5: 400000 },
+                    '2026-06': { a1: 12000, a2: 62000, a3: 52000, a4: 500000, a5: 399000 }
+                },
+                ageIncome: { '2026-05': { age: 28, income: 180000 } },
+                txns: [
+                    { id: 'x1', date: '2026-06-01', name: 'Paycheck', amount: 6000, category: 'Paychecks', account: 'Checking' },
+                    { id: 'x2', date: '2026-06-03', name: 'Grocer', amount: 120, category: 'Groceries', account: 'Card' }
+                ]
+            });
+            check('seedFrom accepts config', seeded === true);
+            check('observatory KPIs render', document.querySelectorAll('.trk-kpi').length === 4);
+            check('months grid renders', document.querySelector('.trk-grid') !== null);
+            check('grid has net worth row', document.querySelector('.trk-nwrow') !== null);
+            check('benchmark chart canvas present', document.querySelector('[data-el="benchChart"]') !== null);
+            check('no CSV import on net worth tab', document.querySelector('.ui-observatory .trk-import') === null);
+
+            // Grid cells render as US currency, and commit their parsed value
+            var firstCell = document.querySelector('.trk-cell');
+            check('grid cell shows US currency', /^\$[\d,]+$/.test(firstCell.value));
+            firstCell.value = '$1,234';
+            firstCell.dispatchEvent(new Event('change', { bubbles: true }));
+            check('grid commits parsed currency',
+                TrackerStore.get().snapshots[firstCell.dataset.month][firstCell.dataset.acct] === 1234);
+
+            // Manual balance edit flows through
+            TrackerStore.setBalance('2026-06', 'a1', 20000);
+            check('edited balance flows to series',
+                Math.round(TrackerEngine.series(TrackerStore.get()).netWorth[1]) === 235000);
+
+            // Bridge (net worth scope): balances → planner buckets only
+            var expectBuckets = TrackerEngine.buckets(TrackerStore.get());
+            var expensesBefore = FireStore.get().inputs.expenses;
+            TrackerKit.applyProposals(TrackerStore.get(), 'networth');
+            check('bridge pushes deferred balance', FireStore.get().inputs.balDeferred === Math.round(expectBuckets.deferred));
+            check('bridge pushes taxable+cash', FireStore.get().inputs.balTaxable === Math.round(expectBuckets.taxable));
+            check('networth bridge leaves expenses alone', FireStore.get().inputs.expenses === expensesBefore);
+
+            // Cashbook: statement, register, manual add/edit/delete
+            nav('[data-view="cashbook"]');
+            check('cashbook spine renders months', document.querySelectorAll('.trk-spine-mo').length === 1);
+            check('cashbook statement has stamp', document.querySelector('.trk-st-stamp') !== null);
+            check('cashbook has txn form', document.querySelector('.trk-txnform') !== null);
+            check('no net worth data on cashbook', document.querySelector('.ui-cashbook .trk-grid') === null);
+
+            var added = TrackerStore.addTxn({ date: '2026-06-10', name: 'Cafe', amount: 18.5, category: 'Dining & Drinks', account: 'Card' });
+            check('manual txn added', added !== null && TrackerStore.get().txns.length === 3);
+            TrackerStore.updateTxn(added.id, { amount: 20 });
+            check('manual txn edited', TrackerStore.get().txns.filter(function (t) { return t.id === added.id; })[0].amount === 20);
+            TrackerStore.removeTxn(added.id);
+            check('manual txn deleted', TrackerStore.get().txns.length === 2);
+
+            var mo = TrackerStore.addCashMonth();
+            check('manual month opens', mo === '2026-07' && document.querySelectorAll('.trk-spine-mo').length === 2);
+
+            // Rocket Money import merges without duplicating
+            var csv = 'Date,Account Name,Institution Name,Name,Amount,Category,Ignored From\n' +
+                '2026-07-01,Checking,U.S. Bank,Paycheck,-6000.00,Paychecks,\n' +
+                '2026-07-02,Checking,U.S. Bank,Mr. Cooper,2718.12,Mortgage,\n' +
+                '2026-07-03,VentureOne,Capital One,Fred Meyer,84.20,Groceries,\n';
+            var parsed = RocketMoney.parse(csv);
+            check('csv parses 3 txns', parsed.txns.length === 3);
+            check('import merges', TrackerStore.importTxns(parsed.txns).added === 3 && TrackerStore.get().txns.length === 5);
+            check('re-import is a no-op', TrackerStore.importTxns(parsed.txns).added === 0);
+
+            // Cashflow bridge scope: expenses/income only, buckets untouched
+            var deferredBefore = FireStore.get().inputs.balDeferred;
+            TrackerKit.applyProposals(TrackerStore.get(), 'cashflow');
+            check('cashflow bridge pushes trailing expenses',
+                FireStore.get().inputs.expenses === Math.round(TrackerEngine.trailing(TrackerStore.get().txns).annualExpenses));
+            check('cashflow bridge leaves buckets alone', FireStore.get().inputs.balDeferred === deferredBefore);
+
+            // Back to the planner, still alive after all the switching
+            nav('[data-view="planner"]');
+            check('planner remounts', document.querySelector('.lg-shell') !== null);
+
+            localStorage.clear();
+        } catch (e) {
+            failures++;
+            out.push('EXCEPTION: ' + e.message + '\n' + e.stack);
+        }
+
+        document.getElementById('smoke-result').textContent =
+            (failures ? 'SMOKE FAIL (' + failures + ')\n' : 'SMOKE PASS\n') + out.join('\n');
+    });
+
+    window.addEventListener('error', function (e) {
+        document.getElementById('smoke-result').textContent = 'SMOKE FAIL (window error)\n' + e.message;
+    });
+    </script>
+</body>
+</html>
