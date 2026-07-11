@@ -239,8 +239,10 @@
         grid.addEventListener('click', function (e) {
             var t = e.target;
             if (t.dataset.addAcct) {
-                var name = prompt('Account name?');
-                if (name) TrackerStore.addAccount(name, t.dataset.addAcct);
+                var group = t.dataset.addAcct;
+                FireApp.prompt('New account name', function (name) {
+                    if (name && name.trim()) TrackerStore.addAccount(name.trim(), group);
+                }, 'Add account', 'e.g. Brokerage');
             } else if (t.dataset.delAcct) {
                 FireApp.confirm('Remove this account and its history?', function () {
                     TrackerStore.removeAccount(t.dataset.delAcct);

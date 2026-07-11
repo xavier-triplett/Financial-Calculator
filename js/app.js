@@ -8,7 +8,7 @@
     var toastEl, toastTimer;
     var startYear = new Date().getFullYear();
 
-    var root, navEl, confirmLayer, confirmMessage, confirmAccept;
+    var root, navEl, confirmLayer, confirmMessage, confirmAccept, confirmInput;
     var pendingConfirm = null, confirmReturnFocus = null;
     var active = null; // { ui, kind } currently mounted
     var pref = { view: 'profile', theme: null };
@@ -59,17 +59,28 @@
         confirmLayer.classList.remove('show');
         confirmLayer.setAttribute('aria-hidden', 'true');
         if (confirmReturnFocus && document.contains(confirmReturnFocus)) confirmReturnFocus.focus();
-        if (accepted) action();
+        if (accepted) action(confirmInput.value);
     }
 
-    function askConfirm(message, onConfirm, actionLabel) {
+    /* opts.input shows a text field; the accepted callback receives its
+     * value. Without it this is the plain destructive confirm. */
+    function askConfirm(message, onConfirm, actionLabel, opts) {
+        opts = opts || {};
         pendingConfirm = onConfirm;
         confirmReturnFocus = document.activeElement;
         confirmMessage.textContent = message;
         confirmAccept.textContent = actionLabel || 'Delete';
+        confirmAccept.classList.toggle('confirm-danger', !opts.input);
+        confirmLayer.classList.toggle('with-input', !!opts.input);
+        confirmInput.value = '';
+        confirmInput.placeholder = opts.placeholder || '';
         confirmLayer.classList.add('show');
         confirmLayer.setAttribute('aria-hidden', 'false');
-        confirmAccept.focus();
+        (opts.input ? confirmInput : confirmAccept).focus();
+    }
+
+    function askPrompt(message, onSubmit, actionLabel, placeholder) {
+        askConfirm(message, onSubmit, actionLabel || 'Save', { input: true, placeholder: placeholder });
     }
 
     /* ---------------- view switching ---------------- */
@@ -178,6 +189,10 @@
         confirmLayer = document.getElementById('confirm-layer');
         confirmMessage = document.getElementById('confirm-message');
         confirmAccept = confirmLayer.querySelector('[data-confirm-accept]');
+        confirmInput = document.getElementById('confirm-input');
+        confirmInput.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') closeConfirm(true);
+        });
 
         loadPref();
         FireStore.init();
@@ -241,6 +256,7 @@
         boot: boot,
         toast: toast,
         confirm: askConfirm,
+        prompt: askPrompt,
         verdicts: verdicts,
         results: function () { return results; },
         startYear: function () { return startYear; },

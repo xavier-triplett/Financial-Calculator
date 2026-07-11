@@ -214,6 +214,17 @@ html[data-theme="dark"] .nav-auth-in:hover { background: #8BE8BC; color: #111714
 }
 #confirm-layer.show #confirm-prompt { transform: translate(-50%, 0); }
 #confirm-message { flex: 1; }
+#confirm-input {
+    display: none;
+    border: 1px solid #59615D; border-radius: 5px;
+    background: rgba(255, 255, 255, .06); color: #E8ECE8;
+    font: 500 12px/1.2 "Public Sans", system-ui, sans-serif;
+    padding: 9px 10px;
+}
+#confirm-input:focus { outline: none; border-color: #929B96; }
+#confirm-layer.with-input #confirm-prompt { flex-direction: column; align-items: stretch; gap: 10px; }
+#confirm-layer.with-input #confirm-input { display: block; }
+#confirm-layer.with-input .confirm-actions { justify-content: flex-end; }
 .confirm-actions { display: flex; gap: 6px; }
 .confirm-actions button {
     border: 1px solid #59615D; border-radius: 5px;
