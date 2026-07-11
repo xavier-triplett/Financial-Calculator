@@ -1,0 +1,133 @@
+/* ============ PROFILE — the shared baseline ============ */
+.ui-profile {
+    --paper: #F1F2EE;
+    --panel: #FFFFFF;
+    --ink: #1A211D;
+    --muted: #66716B;
+    --faint: #9AA39D;
+    --rule: #E2E5E0;
+    --rule-dark: #C9CEC8;
+    --green: #17604A;
+    --red: #A83A31;
+
+    background: var(--paper);
+    color: var(--ink);
+    font: 400 14px/1.5 "Public Sans", system-ui, sans-serif;
+    min-height: 100vh;
+}
+
+html[data-theme="dark"] .ui-profile {
+    --paper: #111714;
+    --panel: #19211D;
+    --ink: #E8ECE8;
+    --muted: #A4AFA8;
+    --faint: #78847D;
+    --rule: #2A342E;
+    --rule-dark: #3B4740;
+    --green: #8BE8BC;
+    --red: #E37C73;
+}
+
+.pf-shell { max-width: 860px; margin: 0 auto; padding: 28px 28px 48px; }
+
+/* ---------- Masthead ---------- */
+.pf-masthead {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    border-bottom: 2px solid var(--ink);
+    padding-bottom: 18px; margin-bottom: 22px;
+    gap: 16px; flex-wrap: wrap;
+}
+.pf-eyebrow {
+    display: block;
+    font: 600 10px/1.4 "Public Sans", sans-serif;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--muted);
+}
+.pf-masthead h1 { font: 600 34px/1.05 "Fraunces", Georgia, serif; letter-spacing: -0.01em; margin: 4px 0; }
+.pf-sub { font-size: 12.5px; color: var(--muted); }
+.pf-reset {
+    border: 1px solid var(--rule-dark); background: transparent; color: var(--muted);
+    font: 500 12px/1 "Public Sans", sans-serif;
+    padding: 8px 14px; border-radius: 3px;
+    transition: color .15s, border-color .15s;
+}
+.pf-reset:hover { color: var(--red); border-color: var(--red); }
+
+/* ---------- Hero: date of birth ⇄ derived age ---------- */
+.pf-hero {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 1px;
+    background: var(--rule-dark); border: 1px solid var(--rule-dark);
+    margin-bottom: 22px;
+}
+.pf-hero-field, .pf-hero-age { background: var(--panel); padding: 20px 22px; }
+.pf-hero-field label { margin-bottom: 8px; }
+.pf-dob {
+    width: 100%;
+    font: 500 15px/1 "IBM Plex Mono", monospace;
+    color: var(--ink);
+    background: transparent;
+    border: none; border-bottom: 1px solid var(--rule-dark);
+    padding: 6px 2px;
+}
+.pf-dob:focus { outline: none; border-bottom-color: var(--green); }
+.pf-hero-note { font-size: 11.5px; color: var(--muted); margin: 10px 0 0; line-height: 1.45; }
+.pf-hero-age { border-left: none; }
+.pf-age {
+    font: 600 52px/1 "Fraunces", Georgia, serif;
+    color: var(--green);
+    margin-top: 8px; font-variant-numeric: lining-nums;
+}
+
+/* ---------- Baseline card ---------- */
+.pf-card { background: var(--panel); border: 1px solid var(--rule-dark); padding: 20px 22px; }
+.pf-card-title {
+    font: 600 11px/1 "Public Sans", sans-serif;
+    letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--ink);
+    border-bottom: 1px solid var(--ink);
+    padding-bottom: 8px; margin-bottom: 10px;
+}
+.pf-help { font-size: 11.5px; color: var(--muted); margin: 0 0 14px; }
+
+/* form groups (shared ff-* builders) */
+.ui-profile .ff-group { border-bottom: 1px solid var(--rule); }
+.ui-profile .ff-group:last-child { border-bottom: none; }
+.ui-profile .ff-group-head {
+    width: 100%; display: flex; align-items: center; gap: 8px;
+    background: none; border: none; padding: 12px 2px;
+    font: 600 13px/1 "Public Sans", sans-serif; color: var(--ink);
+    text-align: left;
+}
+.ui-profile .ff-group-icon { color: var(--faint); font-size: 11px; width: 14px; }
+.ui-profile .ff-group-caret { margin-left: auto; width: 7px; height: 7px; border-right: 1.5px solid var(--faint); border-bottom: 1.5px solid var(--faint); transform: rotate(45deg); transition: transform .15s; }
+.ui-profile .ff-group.open .ff-group-caret { transform: rotate(225deg); }
+.ui-profile .ff-group-body { display: none; padding: 2px 2px 16px; }
+.ui-profile .ff-group.open .ff-group-body { display: block; }
+.ui-profile .ff-group-blurb { font-size: 11.5px; color: var(--muted); margin: 0 0 12px; font-style: italic; font-family: "Fraunces", Georgia, serif; }
+.ui-profile .ff-fields { display: flex; flex-direction: column; gap: 12px; }
+.ui-profile .ff-field { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.ui-profile .ff-label { font-size: 13px; color: var(--muted); display: flex; gap: 5px; align-items: center; }
+.ui-profile .ff-hint {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 13px; height: 13px; border-radius: 50%;
+    border: 1px solid var(--faint); color: var(--faint);
+    font-size: 9px; cursor: pointer;
+}
+.ui-profile .ff-control { display: flex; align-items: center; gap: 4px; }
+.ui-profile .ff-unit { font: 500 11px/1 "IBM Plex Mono", monospace; color: var(--faint); }
+.ui-profile .ff-control input {
+    width: 120px; text-align: right;
+    font: 500 14px/1 "IBM Plex Mono", monospace;
+    border: none; border-bottom: 1px solid var(--rule-dark);
+    background: transparent; color: var(--ink);
+    padding: 5px 2px;
+}
+.ui-profile .ff-control input:focus { outline: none; border-bottom-color: var(--green); }
+
+/* ---------- Responsive ---------- */
+@media (max-width: 620px) {
+    .pf-shell { padding: 18px 14px 40px; }
+    .pf-hero { grid-template-columns: 1fr; }
+    .pf-masthead h1 { font-size: 26px; }
+    .pf-age { font-size: 44px; }
+}
