@@ -49,15 +49,15 @@
                 ]
             },
             {
-                id: 'employer', title: 'Employer match & limits', icon: '&#43;',
-                blurb: 'Free money, and the IRS ceilings on tax-advantaged saving.',
+                id: 'employer', title: 'Employer match & IRS limits', icon: '&#43;',
+                blurb: 'Free money, and the 2026 IRS ceilings on tax-advantaged saving — statutory assumptions, not your data.',
                 fields: [
                     { key: 'employerMatchRate', label: 'Match rate', unit: '%', step: 5, hint: '% of your 401k contribution your employer matches' },
                     { key: 'employerMatchCap', label: 'Match cap', unit: '%', step: 0.5, hint: 'Matched on contributions up to this % of salary' },
-                    { key: 'limit401k', label: '401k employee limit', unit: '$', step: 500, hint: 'Indexed to inflation each year' },
-                    { key: 'limitIRA', label: 'IRA / Roth limit', unit: '$', step: 500 },
-                    { key: 'catchUp401k', label: '401k catch-up (50+)', unit: '$', step: 500 },
-                    { key: 'catchUpIRA', label: 'IRA catch-up (50+)', unit: '$', step: 100 }
+                    { key: 'limit401k', label: '401k employee limit', unit: '$', step: 500, hint: '2026 IRS cap. Indexed to inflation each projection year; update when the IRS changes it.' },
+                    { key: 'limitIRA', label: 'IRA / Roth limit', unit: '$', step: 500, hint: '2026 IRS cap, indexed to inflation in the projection.' },
+                    { key: 'catchUp401k', label: '401k catch-up (50+)', unit: '$', step: 500, hint: '2026 IRS catch-up. Ages 60–63 may qualify for $11,250 under SECURE 2.0.' },
+                    { key: 'catchUpIRA', label: 'IRA catch-up (50+)', unit: '$', step: 100, hint: '2026 IRS catch-up.' }
                 ]
             },
             {

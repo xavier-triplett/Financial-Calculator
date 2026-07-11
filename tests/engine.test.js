@@ -120,7 +120,7 @@ check('taxes tracked', highTax.summary.totalTaxes > withMatch.summary.totalTaxes
 // Contribution limits: someone saving 50% of 400k into deferred should hit the cap
 const capped = E.simulate(Object.assign({}, DEMO, { income: 400000, savingsRate: 50 }), [{ id: 1, age: 30, deferred: 100, free: 0, taxable: 0 }], {});
 const row0 = capped.rows[0];
-check('401k limit enforced year 1', Math.abs(row0.contrib.deferred - 23500) < 1, '=' + row0.contrib.deferred);
+check('401k limit enforced year 1', Math.abs(row0.contrib.deferred - E.DEFAULTS.limit401k) < 1, '=' + row0.contrib.deferred);
 check('overflow spills to taxable', row0.contrib.taxable > 150000, '=' + Math.round(row0.contrib.taxable));
 
 // 3b. Lean mode (Monte Carlo fast path) must match the full run exactly

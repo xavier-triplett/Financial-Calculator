@@ -54,11 +54,12 @@
         employerMatchRate: 50,    // %
         employerMatchCap: 6,      // % of salary
 
-        // IRS contribution limits (today's dollars; indexed to inflation)
-        limit401k: 23500,
-        limitIRA: 7000,
-        catchUp401k: 7500,
-        catchUpIRA: 1000,
+        // IRS contribution limits — 2026 statutory caps, indexed to
+        // inflation in the projection. Editable so they can track the IRS.
+        limit401k: 24500,
+        limitIRA: 7500,
+        catchUp401k: 8000,
+        catchUpIRA: 1100,
         catchUpAge: 50,
 
         // Effective tax rates on withdrawals
