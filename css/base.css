@@ -105,6 +105,19 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
     position: sticky; top: 0; z-index: 900;
 }
 .nav-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+/* Phones: the single nav row (brand + tabs + auth) is wider than the screen
+ * and would force the whole page into horizontal overflow. Wrap the tabs onto
+ * their own full-width row and let that row scroll sideways if it must. */
+@media (max-width: 720px) {
+    #app-nav { flex-wrap: wrap; padding: 8px 14px; gap: 10px; }
+    .nav-tabs {
+        order: 10; width: 100%;
+        overflow-x: auto; -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+    .nav-tabs::-webkit-scrollbar { display: none; }
+    .nav-tab { white-space: nowrap; }
+}
 .nav-theme {
     width: 34px; height: 34px; padding: 0;
     display: grid; place-items: center;
