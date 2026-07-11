@@ -1,6 +1,6 @@
 # The Coast Ledger — Coast FIRE Planner
 
-Use the calculator here: https://xavier-triplett.github.io/FIRE-CALCULATOR/
+Use the calculator here: https://xavier-triplett.github.io/Financial-Calculator/
 
 A zero-build, static retirement planner modeling the **three-bucket Coast FIRE strategy**:
 Tax-Deferred (401k/IRA), Tax-Free (Roth), and After-Tax (brokerage), with a
