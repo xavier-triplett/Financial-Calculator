@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+    <!-- Paper -->
+    <rect width="64" height="64" rx="13" fill="#F1F2EE"/>
+    <!-- Statement rules -->
+    <rect x="10" y="7" width="44" height="2" fill="#1A211D"/>
+    <rect x="10" y="55" width="44" height="1" fill="#C9CEC8"/>
+    <!-- The stamp -->
+    <g transform="rotate(-8 32 33)">
+        <rect x="11" y="12" width="42" height="42" rx="5" fill="none" stroke="#17604A" stroke-width="3.6"/>
+        <rect x="17.5" y="18.5" width="29" height="29" rx="2.5" fill="none" stroke="#17604A" stroke-width="1.6"/>
+        <text x="32" y="40.5" text-anchor="middle"
+              font-family="Fraunces, Georgia, 'Times New Roman', serif"
+              font-weight="700" font-size="20" letter-spacing="0.5" fill="#17604A">CL</text>
+    </g>
+</svg>

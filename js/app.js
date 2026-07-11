@@ -1,0 +1,237 @@
+/* FireApp — boot, computation cache, view switching, toast. */
+(function (global) {
+    'use strict';
+
+    var PREF_KEY = 'uiPref_v3';
+
+    var results = { sim: null, mc: null };
+    var toastEl, toastTimer;
+    var startYear = new Date().getFullYear();
+
+    var root, navEl, confirmLayer, confirmMessage, confirmAccept;
+    var pendingConfirm = null, confirmReturnFocus = null;
+    var active = null; // { ui, kind } currently mounted
+    var pref = { view: 'profile', theme: null };
+
+    function compute() {
+        var state = FireStore.get();
+        results.sim = FireEngine.simulate(state.inputs, state.phases, { startYear: startYear });
+        results.mc = FireEngine.monteCarlo(state.inputs, state.phases, { seed: state.mcSeed, startYear: startYear });
+        return results;
+    }
+
+    /* Plan verdicts, stated once so every part of the UI agrees on the facts. */
+    function verdicts() {
+        var s = results.sim.summary;
+        var inputs = FireStore.get().inputs;
+        var bridge;
+        if (inputs.retireAge >= inputs.standardRetireAge) {
+            bridge = { code: 'na', label: 'N/A' };
+        } else if (s.bridgeFailureAge !== null) {
+            bridge = { code: 'failed', label: 'Empty at ' + s.bridgeFailureAge, age: s.bridgeFailureAge };
+        } else {
+            bridge = { code: 'secure', label: 'Secure' };
+        }
+
+        var coast;
+        if (s.ranOutOfMoneyAge !== null) {
+            coast = { code: 'broke', label: 'Broke at ' + s.ranOutOfMoneyAge, age: s.ranOutOfMoneyAge };
+        } else if (s.standardSuccess) {
+            coast = { code: 'secure', label: 'Secure', coverage: s.standardCoverage };
+        } else {
+            coast = { code: 'partial', label: s.standardCoverage.toFixed(0) + '% funded', coverage: s.standardCoverage };
+        }
+
+        return { bridge: bridge, coast: coast, successRate: results.mc.successRate };
+    }
+
+    function toast(msg) {
+        toastEl.textContent = msg;
+        toastEl.classList.add('show');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(function () { toastEl.classList.remove('show'); }, 2600);
+    }
+
+    function closeConfirm(accepted) {
+        if (!pendingConfirm) return;
+        var action = pendingConfirm;
+        pendingConfirm = null;
+        confirmLayer.classList.remove('show');
+        confirmLayer.setAttribute('aria-hidden', 'true');
+        if (confirmReturnFocus && document.contains(confirmReturnFocus)) confirmReturnFocus.focus();
+        if (accepted) action();
+    }
+
+    function askConfirm(message, onConfirm, actionLabel) {
+        pendingConfirm = onConfirm;
+        confirmReturnFocus = document.activeElement;
+        confirmMessage.textContent = message;
+        confirmAccept.textContent = actionLabel || 'Delete';
+        confirmLayer.classList.add('show');
+        confirmLayer.setAttribute('aria-hidden', 'false');
+        confirmAccept.focus();
+    }
+
+    /* ---------------- view switching ---------------- */
+    function loadPref() {
+        try {
+            var saved = JSON.parse(localStorage.getItem(PREF_KEY));
+            if (saved && saved.view) pref = saved;
+        } catch (e) { /* defaults */ }
+        if (pref.theme !== 'dark' && pref.theme !== 'light') {
+            pref.theme = global.matchMedia && global.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        applyTheme();
+    }
+
+    function applyTheme() {
+        document.documentElement.setAttribute('data-theme', pref.theme);
+        if (global.TrackerKit) {
+            global.TrackerKit.PALETTE.ink = pref.theme === 'dark' ? '#E8ECE8' : '#1A211D';
+            global.TrackerKit.PALETTE.taxFree = pref.theme === 'dark' ? '#8BE8BC' : '#17604A';
+            global.TrackerKit.PALETTE.income = pref.theme === 'dark' ? '#8BE8BC' : '#17604A';
+        }
+    }
+
+    function toggleTheme() {
+        pref.theme = pref.theme === 'dark' ? 'light' : 'dark';
+        applyTheme();
+        savePref();
+        mountActive();
+    }
+
+    function savePref() {
+        try { localStorage.setItem(PREF_KEY, JSON.stringify(pref)); } catch (e) { /* blocked */ }
+    }
+
+    /* Every tab, in nav order: FireUIs (Profile, Planner — read FireStore)
+     * then TrackerUIs (Net Worth, Cashbook — read TrackerStore). */
+    function allTabs() {
+        var fire = (global.FireUIs || []).map(function (u) { return { ui: u, kind: 'fire' }; });
+        var trk = (global.TrackerUIs || []).map(function (u) { return { ui: u, kind: 'tracker' }; });
+        return fire.concat(trk);
+    }
+
+    function currentEntry() {
+        var tabs = allTabs();
+        for (var i = 0; i < tabs.length; i++) if (tabs[i].ui.id === pref.view) return tabs[i];
+        return tabs[0];
+    }
+
+    function refreshActive() {
+        if (!active) return;
+        if (active.kind === 'fire') active.ui.update(FireStore.get(), results);
+        else active.ui.update(TrackerStore.get());
+    }
+
+    function mountActive() {
+        if (active && active.ui.unmount) active.ui.unmount();
+        active = currentEntry();
+        root.className = 'ui-' + active.ui.id;
+        root.innerHTML = '';
+        active.ui.mount(root);
+        refreshActive();
+        renderNav();
+    }
+
+    function setView(view) {
+        if (pref.view === view) return;
+        pref.view = view;
+        savePref();
+        mountActive();
+    }
+
+    function escapeHtml(s) {
+        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+    }
+
+    /* Google sign-in control, only when the cloud layer is configured. */
+    function authHtml() {
+        if (!global.FireCloud || !FireCloud.available()) return '';
+        var user = FireCloud.user();
+        if (user) {
+            var who = user.displayName || user.email || 'Account';
+            return '<span class="nav-user" title="' + escapeHtml(user.email || who) + '">' + escapeHtml(who) + '</span>' +
+                '<button class="nav-auth" type="button" data-auth-signout>Sign out</button>';
+        }
+        return '<button class="nav-auth nav-auth-in" type="button" data-auth-signin title="Save your data to your account">Sign in with Google</button>';
+    }
+
+    function renderNav() {
+        navEl.innerHTML = '<span class="nav-brand">The Coast Ledger</span>' +
+            '<span class="nav-tabs">' + allTabs().map(function (t) {
+                return '<button class="nav-tab' + (t.ui.id === (active ? active.ui.id : pref.view) ? ' active' : '') +
+                    '" data-view="' + t.ui.id + '"' + (t.ui.tag ? ' title="' + t.ui.tag + '"' : '') + '>' + t.ui.name + '</button>';
+            }).join('') + '</span>' +
+            '<span class="nav-right">' + authHtml() +
+                '<button class="nav-theme" type="button" data-theme-toggle aria-label="Switch to ' +
+                    (pref.theme === 'dark' ? 'light' : 'dark') + ' mode" title="Switch to ' +
+                    (pref.theme === 'dark' ? 'light' : 'dark') + ' mode">' +
+                    (pref.theme === 'dark' ? '&#9728;' : '&#9790;') + '</button>' +
+            '</span>';
+    }
+
+    function boot() {
+        root = document.getElementById('ui-root');
+        toastEl = document.getElementById('toast');
+        navEl = document.getElementById('app-nav');
+        confirmLayer = document.getElementById('confirm-layer');
+        confirmMessage = document.getElementById('confirm-message');
+        confirmAccept = confirmLayer.querySelector('[data-confirm-accept]');
+
+        loadPref();
+        FireStore.init();
+        TrackerStore.init();
+        compute();
+
+        navEl.addEventListener('click', function (e) {
+            if (e.target.dataset.view) setView(e.target.dataset.view);
+            if (e.target.closest('[data-theme-toggle]')) toggleTheme();
+            if (e.target.closest('[data-auth-signin]')) FireCloud.signIn();
+            if (e.target.closest('[data-auth-signout]')) FireCloud.signOut();
+        });
+        confirmLayer.addEventListener('click', function (e) {
+            if (e.target.closest('[data-confirm-accept]')) closeConfirm(true);
+            else if (e.target.closest('[data-confirm-cancel]') || e.target === confirmLayer) closeConfirm(false);
+        });
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && pendingConfirm) closeConfirm(false);
+        });
+
+        mountActive();
+
+        FireStore.subscribe(function () {
+            compute();
+            refreshActive(); // tracker skins also re-render: the plan bridge and FI overlays read the plan
+        });
+        TrackerStore.subscribe(function () {
+            refreshActive();
+        });
+
+        // Optional cloud sync (Google sign-in). No-op when unconfigured/offline.
+        if (global.FireCloud && FireCloud.available()) {
+            FireCloud.onChange(function () { renderNav(); });
+            FireCloud.init();
+        }
+    }
+
+    global.FireUIs = global.FireUIs || [];
+    global.TrackerUIs = global.TrackerUIs || [];
+    global.FireApp = {
+        boot: boot,
+        toast: toast,
+        confirm: askConfirm,
+        verdicts: verdicts,
+        results: function () { return results; },
+        startYear: function () { return startYear; },
+        confirmReset: function () {
+            askConfirm('Reset all plan data to defaults?', function () {
+                FireStore.reset();
+                toast('Plan reset to defaults');
+            }, 'Reset');
+        }
+    };
+
+    document.addEventListener('DOMContentLoaded', boot);
+
+})(typeof window !== 'undefined' ? window : globalThis);

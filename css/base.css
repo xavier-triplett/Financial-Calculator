@@ -1,0 +1,200 @@
+/* ============ Base: reset, switcher, toast ============ */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body { min-height: 100vh; -webkit-font-smoothing: antialiased; }
+img, canvas { max-width: 100%; }
+button { font: inherit; cursor: pointer; }
+input { font: inherit; }
+input[type="number"] { appearance: textfield; -moz-appearance: textfield; }
+input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+/* ---------- Immediate field help ---------- */
+.ui-ledger .ff-hint[data-tooltip],
+.ui-profile .ff-hint[data-tooltip] {
+    position: relative; isolation: isolate;
+    width: 16px; height: 16px;
+    border: 1px solid var(--rule-dark);
+    background: color-mix(in srgb, var(--panel) 82%, var(--green));
+    color: var(--green);
+    font: 700 10px/1 "Fraunces", Georgia, serif;
+    cursor: pointer;
+    transition: border-color .12s, background .12s, transform .12s;
+}
+.ui-ledger .ff-hint[data-tooltip]:hover,
+.ui-ledger .ff-hint[data-tooltip]:focus-visible,
+.ui-profile .ff-hint[data-tooltip]:hover,
+.ui-profile .ff-hint[data-tooltip]:focus-visible {
+    border-color: var(--green);
+    background: color-mix(in srgb, var(--panel) 68%, var(--green));
+    transform: translateY(-1px);
+}
+.ui-ledger .ff-hint[data-tooltip]::before,
+.ui-profile .ff-hint[data-tooltip]::before {
+    content: "";
+    position: absolute; z-index: 1001;
+    left: calc(100% + 7px); top: 50%;
+    width: 7px; height: 7px;
+    background: var(--ink);
+    transform: translate(3px, -50%) rotate(45deg);
+    opacity: 0; pointer-events: none;
+}
+.ui-ledger .ff-hint[data-tooltip]::after,
+.ui-profile .ff-hint[data-tooltip]::after {
+    content: attr(data-tooltip);
+    position: absolute; z-index: 1000;
+    left: calc(100% + 10px); top: 50%;
+    width: max-content; max-width: min(270px, 55vw);
+    padding: 9px 11px;
+    border: 1px solid var(--rule-dark); border-radius: 5px;
+    background: var(--ink); color: var(--panel);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .2);
+    font: 500 11px/1.4 "Public Sans", system-ui, sans-serif;
+    letter-spacing: 0; text-align: left; white-space: normal;
+    opacity: 0; pointer-events: none;
+    transform: translate(3px, -50%);
+    transition: opacity .08s ease-out, transform .08s ease-out;
+}
+.ui-ledger .ff-hint[data-tooltip]:hover::before,
+.ui-ledger .ff-hint[data-tooltip]:hover::after,
+.ui-ledger .ff-hint[data-tooltip]:focus-visible::before,
+.ui-ledger .ff-hint[data-tooltip]:focus-visible::after,
+.ui-profile .ff-hint[data-tooltip]:hover::before,
+.ui-profile .ff-hint[data-tooltip]:hover::after,
+.ui-profile .ff-hint[data-tooltip]:focus-visible::before,
+.ui-profile .ff-hint[data-tooltip]:focus-visible::after {
+    opacity: 1;
+    transform: translate(0, -50%);
+}
+.ui-ledger .ff-hint[data-tooltip]:hover::before,
+.ui-ledger .ff-hint[data-tooltip]:focus-visible::before,
+.ui-profile .ff-hint[data-tooltip]:hover::before,
+.ui-profile .ff-hint[data-tooltip]:focus-visible::before {
+    transform: translate(0, -50%) rotate(45deg);
+}
+
+:focus-visible { outline: 2px solid #4C8DFF; outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+/* ---------- App nav (Planner / Tracker switcher) ---------- */
+#app-nav {
+    display: flex; align-items: center; gap: 18px;
+    background: #F1F2EE;
+    border-bottom: 1px solid #C9CEC8;
+    padding: 8px 28px;
+    font: 500 12px/1 "Public Sans", system-ui, sans-serif;
+    position: sticky; top: 0; z-index: 900;
+}
+.nav-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+.nav-theme {
+    width: 34px; height: 34px; padding: 0;
+    display: grid; place-items: center;
+    border: 1px solid #C9CEC8; border-radius: 50%;
+    background: transparent; color: #1A211D;
+    font-size: 16px; line-height: 1;
+}
+.nav-theme:hover { background: #E2E5E0; }
+.nav-user {
+    font: 500 12px/1 "Public Sans", sans-serif; color: #66716B;
+    max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.nav-auth {
+    border: 1px solid #C9CEC8; background: transparent; color: #1A211D;
+    font: 600 11px/1 "Public Sans", sans-serif;
+    padding: 8px 12px; border-radius: 4px;
+}
+.nav-auth:hover { border-color: #1A211D; }
+.nav-auth-in { border-color: #17604A; color: #17604A; }
+.nav-auth-in:hover { background: #17604A; color: #fff; }
+
+html[data-theme="dark"] { color-scheme: dark; background: #111714; }
+html[data-theme="dark"] #app-nav {
+    background: #151C18; border-bottom-color: #36413B;
+}
+html[data-theme="dark"] .nav-brand,
+html[data-theme="dark"] .nav-tab:hover,
+html[data-theme="dark"] .nav-theme { color: #E8ECE8; }
+html[data-theme="dark"] .nav-tab { color: #9AA69F; }
+html[data-theme="dark"] .nav-tab.active { color: #8BE8BC; box-shadow: inset 0 -2px 0 #8BE8BC; }
+html[data-theme="dark"] .nav-theme { border-color: #46524B; }
+html[data-theme="dark"] .nav-theme:hover { background: #26302A; }
+html[data-theme="dark"] .nav-user { color: #A4AFA8; }
+html[data-theme="dark"] .nav-auth { border-color: #46524B; color: #E8ECE8; }
+html[data-theme="dark"] .nav-auth:hover { border-color: #E8ECE8; }
+html[data-theme="dark"] .nav-auth-in { border-color: #8BE8BC; color: #8BE8BC; }
+html[data-theme="dark"] .nav-auth-in:hover { background: #8BE8BC; color: #111714; }
+.nav-brand {
+    font: 600 12px/1 "Fraunces", Georgia, serif;
+    letter-spacing: 0.04em; color: #1A211D;
+}
+.nav-tabs { display: flex; gap: 2px; }
+.nav-tab {
+    border: none; background: none; color: #66716B;
+    font: 600 11px/1 "Public Sans", sans-serif;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    padding: 7px 12px; border-radius: 3px;
+}
+.nav-tab:hover { color: #1A211D; }
+.nav-tab.active { color: #17604A; box-shadow: inset 0 -2px 0 #17604A; border-radius: 0; }
+
+/* ---------- Toast ---------- */
+#toast {
+    position: fixed;
+    left: 50%;
+    bottom: 72px;
+    transform: translateX(-50%) translateY(8px);
+    z-index: 950;
+    background: rgba(16, 20, 18, 0.92);
+    color: #fff;
+    font: 500 13px/1.4 "Public Sans", system-ui, sans-serif;
+    padding: 12px 20px;
+    border-radius: 8px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s, transform 0.3s;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.3);
+}
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ---------- Destructive confirmation ---------- */
+#confirm-layer {
+    position: fixed; inset: 0; z-index: 960;
+    background: rgba(8, 11, 9, 0);
+    opacity: 0; pointer-events: none;
+    transition: background .15s, opacity .15s;
+}
+#confirm-layer.show {
+    background: rgba(8, 11, 9, .18);
+    opacity: 1; pointer-events: auto;
+}
+#confirm-prompt {
+    position: absolute; left: 50%; bottom: 72px;
+    width: min(460px, calc(100vw - 28px));
+    display: flex; align-items: center; gap: 20px;
+    padding: 11px 12px 11px 18px;
+    border: 1px solid rgba(255, 255, 255, .12); border-radius: 8px;
+    background: rgba(16, 20, 18, .97); color: #fff;
+    box-shadow: 0 10px 32px rgba(0, 0, 0, .35);
+    font: 600 13px/1.4 "Public Sans", system-ui, sans-serif;
+    transform: translate(-50%, 8px);
+    transition: transform .15s ease-out;
+}
+#confirm-layer.show #confirm-prompt { transform: translate(-50%, 0); }
+#confirm-message { flex: 1; }
+.confirm-actions { display: flex; gap: 6px; }
+.confirm-actions button {
+    border: 1px solid #59615D; border-radius: 5px;
+    background: transparent; color: #E8ECE8;
+    padding: 7px 10px;
+    font: 600 11px/1 "Public Sans", system-ui, sans-serif;
+}
+.confirm-actions button:hover { border-color: #929B96; background: rgba(255, 255, 255, .08); }
+.confirm-actions .confirm-danger { border-color: #E37C73; color: #FFAAA3; }
+.confirm-actions .confirm-danger:hover { background: #C94F46; border-color: #C94F46; color: #fff; }
+
+@media (max-width: 520px) {
+    #confirm-prompt { align-items: stretch; flex-direction: column; gap: 10px; }
+    .confirm-actions { justify-content: flex-end; }
+}
