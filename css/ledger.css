@@ -158,7 +158,9 @@ html[data-theme="dark"] .ui-ledger .ff-phase-cell input:read-only { background: 
     border: 1px solid var(--faint); color: var(--faint);
     font-size: 9px; cursor: pointer;
 }
-.ui-ledger .ff-hint[data-tooltip]::after { width: 190px; }
+@media (min-width: 721px) {
+    .ui-ledger .ff-hint[data-tooltip]::after { width: 190px; }
+}
 .ui-ledger .ff-control { display: flex; align-items: center; gap: 4px; }
 .ui-ledger .ff-unit { font: 500 11px/1 "IBM Plex Mono", monospace; color: var(--faint); }
 .ui-ledger .ff-control input {
