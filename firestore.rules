@@ -1,0 +1,12 @@
+rules_version = '2';
+
+// Each user's whole app state lives at /users/{uid}. A signed-in user may
+// read and write only their own document — the database refuses cross-account
+// access even if the client asks for it. Everything else is denied by default.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+  }
+}
