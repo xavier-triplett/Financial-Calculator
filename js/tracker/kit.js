@@ -104,8 +104,12 @@
             if (t) {
                 out.push({ key: 'expenses', label: 'Annual expenses (trailing)', from: inputs.expenses, to: Math.round(t.annualExpenses) });
                 if (t.annualIncome > 0) {
-                    out.push({ key: 'income', label: 'Annual income (trailing)', from: inputs.income, to: Math.round(t.annualIncome) });
-                    out.push({ key: 'savingsRate', label: 'Savings rate', from: inputs.savingsRate, to: Math.round(t.savingsRate * 100), pct: true });
+                    // Transaction income is take-home; the planner wants gross,
+                    // so gross it back up with the Profile's effective tax rate.
+                    var keep = 1 - (Number(inputs.incomeTaxRate) || 0) / 100;
+                    var gross = keep > 0 ? t.annualIncome / keep : t.annualIncome;
+                    out.push({ key: 'income', label: 'Annual gross income (trailing)', from: inputs.income, to: Math.round(gross) });
+                    out.push({ key: 'savingsRate', label: 'Savings rate', from: inputs.savingsRate, to: Math.round(Math.max(0, (t.annualIncome - t.annualExpenses) / gross) * 100), pct: true });
                 }
             }
         }

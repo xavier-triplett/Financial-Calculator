@@ -272,6 +272,12 @@
             check('cashflow bridge pushes trailing expenses',
                 FireStore.get().inputs.expenses === Math.round(TrackerEngine.trailing(TrackerStore.get().txns).annualExpenses));
             check('cashflow bridge leaves buckets alone', FireStore.get().inputs.balDeferred === deferredBefore);
+            // Txn income is take-home; the bridge grosses it up with the
+            // Profile's effective income tax (default 25%).
+            var tr = TrackerEngine.trailing(TrackerStore.get().txns);
+            check('cashflow bridge grosses up income', FireStore.get().inputs.income === Math.round(tr.annualIncome / 0.75));
+            check('savings rate is saved over gross', FireStore.get().inputs.savingsRate ===
+                Math.round(Math.max(0, (tr.annualIncome - tr.annualExpenses) / (tr.annualIncome / 0.75)) * 100));
 
             // Expense-only months estimate take-home income: gross annual ÷ 12
             // less the effective income tax (180k × 75% → $11,250/mo)
