@@ -1,0 +1,8 @@
+- Allow deleting specific months on cashbook
+- Move all IRS limits to profile section out of simulation section
+- Graph on projections is misleading as the FI number never gets hit even if three bucket totals add up to more than FI
+- Move withdrawl taxes to profile too (whole section)
+- Move monte carlo inputs (simulations + standard dev) into it's own accordion
+- Allow downloading Rocket Money CSV template/example
+- Allow configuring categories in a new tab and configuring the CSV template import functinality in the app
+- Add support to mark where you money is going into savings eaxh month (don't assume surpluss = saving rate)
