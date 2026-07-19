@@ -211,6 +211,21 @@
         return wrap;
     }
 
+    /* Download the example CSV so an import file can be authored by hand. */
+    function templateButton() {
+        var btn = U.el('button', { class: 'trk-btn', type: 'button', text: 'CSV template',
+            title: 'Download an example CSV in the format the importer expects' });
+        btn.addEventListener('click', function () {
+            var url = URL.createObjectURL(new Blob([RocketMoney.template()], { type: 'text/csv' }));
+            var a = U.el('a', { href: url, download: 'rocket-money-template.csv' });
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+        });
+        return btn;
+    }
+
     /* Empty-state panel; the caller supplies its own on-ramp buttons. */
     function emptyState(title, blurb, actions) {
         var box = U.el('div', { class: 'trk-empty' });
@@ -244,6 +259,7 @@
         applyProposals: applyProposals,
         renderBridge: renderBridge,
         importControl: importControl,
+        templateButton: templateButton,
         emptyState: emptyState,
         seedButton: seedButton
     };

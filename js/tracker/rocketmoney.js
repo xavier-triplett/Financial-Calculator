@@ -133,6 +133,20 @@
         return { txns: txns, skipped: skipped, flipped: flipped };
     }
 
-    global.RocketMoney = { parse: parse, parseCSV: parseCSV };
+    /* Example export in the expected shape — downloadable from the Cashbook
+     * so imports can be hand-authored without a Rocket Money account. */
+    function template() {
+        return [
+            'Date,Original Date,Account Type,Account Name,Account Number,Institution Name,Name,Custom Name,Amount,Description,Category,Note,Ignored From,Tax Deductible',
+            '2026-01-02,2026-01-02,Cash,Checking,1234,Example Bank,Paycheck,,4600.00,EMPLOYER DIRECT DEP,Paychecks,,,',
+            '2026-01-03,2026-01-03,Cash,Checking,1234,Example Bank,Mr. Cooper,,2200.00,MORTGAGE PAYMENT,Mortgage,,,',
+            '2026-01-05,2026-01-05,Credit Card,Rewards Visa,5678,Example Bank,Fred Meyer,,84.52,GROCERY STORE,Groceries,,,',
+            '2026-01-08,2026-01-08,Credit Card,Rewards Visa,5678,Example Bank,"Corner Cafe, The",,18.40,CORNER CAFE,Dining & Drinks,,,',
+            '2026-01-09,2026-01-09,Credit Card,Rewards Visa,5678,Example Bank,Fred Meyer,,-12.00,GROCERY REFUND,Groceries,,,',
+            '2026-01-10,2026-01-10,Credit Card,Rewards Visa,5678,Example Bank,Payment Thank You,,950.00,CARD PAYMENT,Credit Card Payment,,,'
+        ].join('\n') + '\n';
+    }
+
+    global.RocketMoney = { parse: parse, parseCSV: parseCSV, template: template };
 
 })(typeof window !== 'undefined' ? window : globalThis);

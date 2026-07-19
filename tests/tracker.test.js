@@ -166,5 +166,13 @@ check('US date parsed', RM.parse(csvUS).txns[0].date === '2025-01-09');
 // garbage in
 check('non-CSV rejected', !!RM.parse('hello world').error);
 
+// the downloadable template round-trips through the parser
+const tmpl = RM.parse(RM.template());
+check('template parses without error', !tmpl.error);
+check('template rows all imported', tmpl.txns.length === 6 && tmpl.skipped === 0, '=' + tmpl.txns.length + '/' + tmpl.skipped);
+check('template keeps expense-positive convention', tmpl.flipped === false);
+check('template income positive', tmpl.txns[0].amount === 4600 && T.categoryKind(tmpl.txns[0].category) === 'income');
+check('template quoted merchant preserved', tmpl.txns.some(t => t.name === 'Corner Cafe, The'));
+
 console.log(failures ? '\n' + failures + ' failure(s)' : '\nAll tracker tests passed');
 process.exit(failures ? 1 : 0);

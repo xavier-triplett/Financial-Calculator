@@ -37,6 +37,7 @@
         root.innerHTML = template();
         els = { root: root, body: root.querySelector('[data-el="body"]'), actions: root.querySelector('[data-el="actions"]') };
         els.actions.appendChild(K.importControl({ primary: true }));
+        els.actions.appendChild(K.templateButton());
         var addMonth = U.el('button', { class: 'trk-btn', type: 'button', text: '+ Month' });
         addMonth.addEventListener('click', function () { selMonth = TrackerStore.addCashMonth(); });
         els.actions.appendChild(addMonth);
@@ -83,8 +84,8 @@
             var addMonth = U.el('button', { class: 'trk-btn', type: 'button', text: 'Start first month' });
             addMonth.addEventListener('click', function () { selMonth = TrackerStore.addCashMonth(); });
             els.body.appendChild(K.emptyState('A blank cashbook',
-                'Import a Rocket Money CSV, open a month and write it by hand, or seed from your config file.',
-                [K.importControl({ primary: true }), addMonth, K.seedButton()]));
+                'Import a Rocket Money CSV (or one you author from the template), open a month and write it by hand, or seed from your config file.',
+                [K.importControl({ primary: true }), K.templateButton(), addMonth, K.seedButton()]));
             return;
         }
 
