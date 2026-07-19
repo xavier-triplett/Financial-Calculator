@@ -34,7 +34,7 @@
 
             '<section class="pf-card">' +
                 '<div class="pf-card-title">Baseline factors</div>' +
-                '<p class="pf-help">Income, spending, your target ages and the IRS contribution limits. The trackers measure against these; the Planner projects from them.</p>' +
+                '<p class="pf-help">Income, spending, your target ages, withdrawal tax rates and the IRS contribution limits. The trackers measure against these; the Planner projects from them.</p>' +
                 '<div data-el="groups"></div>' +
             '</section>' +
         '</div>';

@@ -26,8 +26,8 @@
          * every tab) vs. the Planner tab (simulation assumptions). Date of
          * birth is rendered by the Profile tab itself — it lives on the
          * store's `profile`, not in the numeric `inputs`. */
-        profileGroups: ['goals', 'baseline', 'irs'],
-        plannerGroups: ['savings', 'buckets', 'employer', 'taxes', 'market'],
+        profileGroups: ['goals', 'baseline', 'taxes', 'irs'],
+        plannerGroups: ['savings', 'buckets', 'employer', 'market'],
 
         groups: [
             {
