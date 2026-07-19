@@ -17,6 +17,7 @@
         layers: icon('<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>'),
         plusCircle: icon('<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>'),
         percent: icon('<line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>'),
+        landmark: icon('<line x1="3" y1="22" x2="21" y2="22"/><line x1="6" y1="18" x2="6" y2="11"/><line x1="10" y1="18" x2="10" y2="11"/><line x1="14" y1="18" x2="14" y2="11"/><line x1="18" y1="18" x2="18" y2="11"/><polygon points="12 2 20 7 4 7"/>'),
         activity: icon('<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>')
     };
 
@@ -25,7 +26,7 @@
          * every tab) vs. the Planner tab (simulation assumptions). Date of
          * birth is rendered by the Profile tab itself — it lives on the
          * store's `profile`, not in the numeric `inputs`. */
-        profileGroups: ['goals', 'baseline'],
+        profileGroups: ['goals', 'baseline', 'irs'],
         plannerGroups: ['savings', 'buckets', 'employer', 'taxes', 'market'],
 
         groups: [
@@ -66,11 +67,17 @@
                 ]
             },
             {
-                id: 'employer', title: 'Employer match & IRS limits', icon: ICONS.plusCircle,
-                blurb: 'Free money, and the 2026 IRS ceilings on tax-advantaged saving — statutory assumptions, not your data.',
+                id: 'employer', title: 'Employer match', icon: ICONS.plusCircle,
+                blurb: 'Free money from your employer.',
                 fields: [
                     { key: 'employerMatchRate', label: 'Match rate', unit: '%', step: 5, hint: '% of your 401k contribution your employer matches' },
-                    { key: 'employerMatchCap', label: 'Match cap', unit: '%', step: 0.5, hint: 'Matched on contributions up to this % of salary' },
+                    { key: 'employerMatchCap', label: 'Match cap', unit: '%', step: 0.5, hint: 'Matched on contributions up to this % of salary' }
+                ]
+            },
+            {
+                id: 'irs', title: 'IRS contribution limits', icon: ICONS.landmark,
+                blurb: 'The 2026 statutory ceilings on tax-advantaged saving — update them when the IRS does.',
+                fields: [
                     { key: 'limit401k', label: '401k employee limit', unit: '$', step: 500, hint: '2026 IRS cap. Indexed to inflation each projection year; update when the IRS changes it.' },
                     { key: 'limitIRA', label: 'IRA / Roth limit', unit: '$', step: 500, hint: '2026 IRS cap, indexed to inflation in the projection.' },
                     { key: 'catchUp401k', label: '401k catch-up (50+)', unit: '$', step: 500, hint: '2026 IRS catch-up for ages 50+. Ages 60–63 use the super catch-up instead.' },

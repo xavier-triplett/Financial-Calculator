@@ -58,7 +58,8 @@
                 '<div class="gd-card-title">How to use the app</div>' +
                 '<ol class="gd-steps">' +
                     '<li><strong>Profile</strong> &mdash; enter the facts: date of birth, gross income, annual expenses, the age you want ' +
-                    'to stop working, and the age your retirement accounts unlock. Every tab reads from here.</li>' +
+                    'to stop working, and the age your retirement accounts unlock. The IRS contribution limits live here too. ' +
+                    'Every tab reads from here.</li>' +
                     '<li><strong>Planner</strong> &mdash; set the assumptions: your savings rate, how each saved dollar splits across the ' +
                     'three buckets, employer match, tax rates on withdrawals, and what you expect from the market. The defaults are ' +
                     'reasonable &mdash; start by only changing what you know.</li>' +
