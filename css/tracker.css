@@ -78,6 +78,8 @@ html[data-theme="dark"] .trk-total td { background: #151C18; }
     font: 500 10.5px/1 "Public Sans", sans-serif; padding: 0 4px;
 }
 .trk-mini:hover { color: var(--green); }
+.trk-mini-del:hover { color: var(--red); }
+.trk-st-headtools { display: flex; align-items: center; gap: 10px; }
 .trk-x { border: none; background: none; color: var(--faint); font-size: 12px; padding: 0 3px; visibility: hidden; }
 th:hover .trk-x, td:hover .trk-x { visibility: visible; }
 .trk-x:hover { color: var(--red); }

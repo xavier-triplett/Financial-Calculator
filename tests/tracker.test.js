@@ -1,7 +1,9 @@
 require('C:/source/FIRE-CALCULATOR/js/tracker/engine.js');
 require('C:/source/FIRE-CALCULATOR/js/tracker/rocketmoney.js');
+require('C:/source/FIRE-CALCULATOR/js/tracker/store.js');
 const T = globalThis.TrackerEngine;
 const RM = globalThis.RocketMoney;
+const S = globalThis.TrackerStore;
 
 let failures = 0;
 function check(name, cond, detail) {
@@ -113,6 +115,20 @@ check('income-only entry keeps profile age', T.ageIncomeAt(mixState, '2026-01').
 check('income-only entry overrides profile income', T.ageIncomeAt(mixState, '2026-01').income === 190000);
 check('later months inherit recorded income', T.ageIncomeAt(mixState, '2026-06').income === 190000);
 check('earlier months keep profile income', T.ageIncomeAt(mixState, '2025-06').income === 180000);
+
+// ---------- store: cashbook month deletion ----------
+S.init();
+S.addTxn({ date: '2025-01-05', name: 'A', amount: 10, category: 'Groceries' });
+S.addTxn({ date: '2025-01-20', name: 'B', amount: 5, category: 'Coffee' });
+S.addTxn({ date: '2025-02-05', name: 'C', amount: 20, category: 'Groceries' });
+S.addCashMonth(); // opens 2025-03
+check('addCashMonth opens next month', S.get().cashMonths.indexOf('2025-03') !== -1);
+S.removeCashMonth('2025-01');
+check('removeCashMonth drops that month\'s txns',
+    S.get().txns.length === 1 && S.get().txns[0].date === '2025-02-05');
+S.removeCashMonth('2025-03');
+check('removeCashMonth drops open month marker', S.get().cashMonths.length === 0);
+check('other months untouched', S.get().txns.length === 1);
 
 // ---------- Rocket Money CSV ----------
 const csv =

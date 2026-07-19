@@ -169,6 +169,13 @@
             return mo;
         },
 
+        /* Delete a cashbook month: its transactions and its open-page marker. */
+        removeCashMonth: function (month) {
+            state.cashMonths = state.cashMonths.filter(function (mo) { return mo !== month; });
+            state.txns = state.txns.filter(function (t) { return E.monthKey(t.date) !== month; });
+            commit();
+        },
+
         addTxn: function (t) {
             if (!t || !/^\d{4}-\d{2}-\d{2}$/.test(t.date || '') || t.amount === null || t.amount === '' || isNaN(Number(t.amount))) return null;
             var txn = {

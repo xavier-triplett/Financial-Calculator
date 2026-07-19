@@ -160,7 +160,10 @@
         var incomeHint = agg.estIncome
             ? ' <span class="ff-hint" tabindex="0" role="img" data-tooltip="No income transactions this month, so this is 1/12 of your estimated take-home: gross annual income (the Net Worth grid&rsquo;s income row or the Profile tab) less the effective income tax set on the Profile tab. Log a money-in transaction to use actuals.">i</span>'
             : '';
-        return '<div class="trk-panel-head"><h2>' + E.monthLabel(selMonth) + '</h2>' + stampHTML + '</div>' +
+        return '<div class="trk-panel-head"><h2>' + E.monthLabel(selMonth) + '</h2>' +
+            '<div class="trk-st-headtools">' + stampHTML +
+                '<button class="trk-mini trk-mini-del" type="button" data-act="del-month" title="Delete this month and its transactions">delete month</button>' +
+            '</div></div>' +
             '<div class="trk-st-section"><div class="trk-st-title">Income' + incomeHint + '</div>' +
                 rows(sections.income) +
                 '<div class="trk-st-row trk-st-total"><span>' + (agg.estIncome ? 'Estimated take-home' : 'Total income') +
@@ -339,6 +342,19 @@
                 editingId = null;
                 update(TrackerStore.get());
             }
+        });
+
+        els.body.querySelector('[data-el="statement"]').addEventListener('click', function (e) {
+            if (e.target.dataset.act !== 'del-month') return;
+            var mo = selMonth;
+            var count = TrackerStore.get().txns.filter(function (t) { return E.monthKey(t.date) === mo; }).length;
+            FireApp.confirm('Delete ' + E.monthLabel(mo) +
+                (count ? ' and its ' + count + ' transaction' + (count === 1 ? '' : 's') : '') + '?', function () {
+                selMonth = null;
+                editingId = null;
+                TrackerStore.removeCashMonth(mo);
+                FireApp.toast(E.monthLabel(mo) + ' deleted');
+            });
         });
 
         els.body.querySelector('[data-el="register"]').addEventListener('click', function (e) {
