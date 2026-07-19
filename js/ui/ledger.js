@@ -157,7 +157,9 @@
             type: 'line',
             data: { labels: [], datasets: [
                 ds('Brokerage', C.taxable, 0.45), ds('Roth', C.free, 0.45), ds('Deferred', C.deferred, 0.45),
-                { label: 'FI number', data: [], borderColor: C.red, borderWidth: 1.5, borderDash: [6, 5], fill: false, pointRadius: 0, tension: 0 }
+                // Own stack group so the threshold line stays at its raw value
+                // instead of stacking on top of the three buckets.
+                { label: 'FI number', data: [], borderColor: C.red, borderWidth: 1.5, borderDash: [6, 5], fill: false, pointRadius: 0, tension: 0, stack: 'fi' }
             ]},
             options: chartOpts(fontMono, gridColor, true)
         });
@@ -179,7 +181,7 @@
             label: label, data: [],
             borderColor: color,
             backgroundColor: hexAlpha(color, alpha),
-            fill: true, pointRadius: 0, tension: 0.3, borderWidth: 1.5
+            fill: true, pointRadius: 0, tension: 0.3, borderWidth: 1.5, stack: 'buckets'
         };
     }
 
