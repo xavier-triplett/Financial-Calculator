@@ -18,7 +18,8 @@
         plusCircle: icon('<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>'),
         percent: icon('<line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>'),
         landmark: icon('<line x1="3" y1="22" x2="21" y2="22"/><line x1="6" y1="18" x2="6" y2="11"/><line x1="10" y1="18" x2="10" y2="11"/><line x1="14" y1="18" x2="14" y2="11"/><line x1="18" y1="18" x2="18" y2="11"/><polygon points="12 2 20 7 4 7"/>'),
-        activity: icon('<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>')
+        activity: icon('<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>'),
+        shuffle: icon('<polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/>')
     };
 
     global.FireSchema = {
@@ -27,7 +28,7 @@
          * birth is rendered by the Profile tab itself — it lives on the
          * store's `profile`, not in the numeric `inputs`. */
         profileGroups: ['goals', 'baseline', 'taxes', 'irs'],
-        plannerGroups: ['savings', 'buckets', 'employer', 'market'],
+        plannerGroups: ['savings', 'buckets', 'employer', 'market', 'montecarlo'],
 
         groups: [
             {
@@ -99,7 +100,13 @@
                 fields: [
                     { key: 'marketReturn', label: 'Market return', unit: '%', step: 0.1 },
                     { key: 'inflation', label: 'Inflation rate', unit: '%', step: 0.1 },
-                    { key: 'swr', label: 'Safe withdrawal rate', unit: '%', step: 0.1 },
+                    { key: 'swr', label: 'Safe withdrawal rate', unit: '%', step: 0.1 }
+                ]
+            },
+            {
+                id: 'montecarlo', title: 'Monte Carlo', icon: ICONS.shuffle,
+                blurb: 'How the resilience check stress-tests your plan against random market futures.',
+                fields: [
                     { key: 'volatility', label: 'Return volatility', unit: '%', step: 1, hint: 'Annual std-dev used by the Monte Carlo simulation' },
                     { key: 'mcSims', label: 'Simulations', step: 100, min: 50, max: 2000, hint: '50–2,000. More runs are steadier but slower.' }
                 ]
