@@ -46,7 +46,11 @@ actually happens:
   so you can see whether you're ahead of or behind the curve for your age.
 - **Cashbook** — one month per page: money in, money out, and a **SURPLUS** or
   **DEFICIT** stamp. You can log transactions by hand or import a Rocket Money CSV
-  export directly.
+  export directly (a downloadable template shows the expected shape).
+
+The **Categories** tab tunes the bookkeeping: override which kind any category
+counts as (income, transfer, fixed, variable, or spending), and point the CSV
+importer at your own column headers if your bank's export names them differently.
 
 Each tracker can push its actuals back into the Planner with one click — real
 balances and your observed savings rate replace your guesses.

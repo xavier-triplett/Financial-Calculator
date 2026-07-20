@@ -145,6 +145,7 @@ js/tracker/kit.js             shared tracker widgets: plan bridge, import, chart
 js/ui/ledger.js               the planner interface
 js/ui/tracker-observatory.js  Net Worth tab — benchmarks, composition, editable grid
 js/ui/tracker-cashbook.js     Cashbook tab — monthly budgeting journal
+js/ui/tracker-settings.js     Categories tab — category kinds + CSV import column mapping
 js/ui/guide.js                Guide tab — plain-language walkthrough + glossary (static)
 css/                          base + profile + ledger + tracker + guide stylesheets
 tests/                        unit tests + browser smoke test

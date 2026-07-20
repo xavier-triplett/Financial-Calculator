@@ -70,7 +70,8 @@
                     '5% more, and watch what it does to the verdicts. The small &#9432; icons explain each field.</li>' +
                     '<li><strong>Track reality</strong> &mdash; record actual account balances each month in <strong>Net Worth</strong>, and ' +
                     'actual income and spending in <strong>Cashbook</strong> (by hand, or import a Rocket Money CSV). Each tracker can push ' +
-                    'its actuals back into the plan, replacing your guesses with the real numbers.</li>' +
+                    'its actuals back into the plan, replacing your guesses with the real numbers. The <strong>Categories</strong> tab ' +
+                    'tunes how transactions are classified and which CSV columns the importer reads.</li>' +
                 '</ol>' +
             '</section>' +
 

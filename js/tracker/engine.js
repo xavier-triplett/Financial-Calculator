@@ -41,11 +41,27 @@
                    'Bills & Utilities', 'Fees', 'Taxes']
     };
 
+    var KINDS = ['income', 'transfer', 'fixed', 'variable', 'spending'];
+
     var KIND_LOOKUP = {};
     for (var k in KIND) KIND[k].forEach(function (c) { KIND_LOOKUP[c.toLowerCase()] = k; });
 
-    function categoryKind(category) {
+    /* User overrides (category → kind), installed by TrackerStore from the
+     * Categories tab. They win over the built-in lists. */
+    var KIND_OVERRIDES = {};
+    function setKindOverrides(map) {
+        KIND_OVERRIDES = {};
+        for (var c in map || {}) {
+            if (KINDS.indexOf(map[c]) !== -1) KIND_OVERRIDES[String(c).toLowerCase()] = map[c];
+        }
+    }
+
+    function defaultKind(category) {
         return KIND_LOOKUP[String(category || '').toLowerCase()] || 'spending';
+    }
+
+    function categoryKind(category) {
+        return KIND_OVERRIDES[String(category || '').toLowerCase()] || defaultKind(category);
     }
 
     /* ------------------------- month helpers ------------------------- */
@@ -250,7 +266,11 @@
     global.TrackerEngine = {
         GROUPS: GROUPS,
         GROUP_BY_ID: GROUP_BY_ID,
+        KINDS: KINDS,
+        KIND: KIND,
         categoryKind: categoryKind,
+        defaultKind: defaultKind,
+        setKindOverrides: setKindOverrides,
         monthKey: monthKey,
         monthLabel: monthLabel,
         nextMonth: nextMonth,

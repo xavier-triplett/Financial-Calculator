@@ -19,7 +19,9 @@
             snapshots: {},
             ageIncome: {},
             txns: [],
-            cashMonths: []
+            cashMonths: [],
+            categoryKinds: {},
+            csvColumns: {}
         };
     }
 
@@ -44,7 +46,11 @@
         try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* storage full/blocked */ }
     }
 
-    function commit() { save(); listeners.forEach(function (fn) { fn(state); }); }
+    function commit() {
+        E.setKindOverrides(state.categoryKinds);
+        save();
+        listeners.forEach(function (fn) { fn(state); });
+    }
 
     function newId(prefix) {
         return prefix + Date.now().toString(36) + (idCounter++).toString(36) + Math.random().toString(36).slice(2, 6);
@@ -56,7 +62,7 @@
     }
 
     global.TrackerStore = {
-        init: function () { state = load(); },
+        init: function () { state = load(); E.setKindOverrides(state.categoryKinds); },
         get: function () { return state; },
         hasNetWorth: function () { return Object.keys(state.snapshots).length > 0; },
         hasCash: function () { return state.txns.length > 0 || state.cashMonths.length > 0; },
@@ -206,6 +212,26 @@
 
         removeTxn: function (id) {
             state.txns = state.txns.filter(function (t) { return t.id !== id; });
+            commit();
+        },
+
+        /* ---------- configuration: category kinds + CSV columns ---------- */
+        /* Override a category's kind. Passing the built-in default (or '')
+         * clears the override so the category follows the built-ins again. */
+        setCategoryKind: function (category, kind) {
+            var cat = String(category || '').trim();
+            if (!cat) return;
+            if (E.KINDS.indexOf(kind) !== -1 && kind !== E.defaultKind(cat)) state.categoryKinds[cat] = kind;
+            else delete state.categoryKinds[cat];
+            commit();
+        },
+
+        /* Point an importer field at a differently-named CSV column.
+         * Blank restores the built-in header aliases. */
+        setCsvColumn: function (field, header) {
+            var h = String(header || '').trim();
+            if (h) state.csvColumns[field] = h;
+            else delete state.csvColumns[field];
             commit();
         },
 

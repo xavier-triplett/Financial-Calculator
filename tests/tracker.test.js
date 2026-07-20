@@ -166,6 +166,44 @@ check('US date parsed', RM.parse(csvUS).txns[0].date === '2025-01-09');
 // garbage in
 check('non-CSV rejected', !!RM.parse('hello world').error);
 
+// ---------- category kind overrides ----------
+T.setKindOverrides({ 'Side Hustle': 'income', 'Groceries': 'fixed', 'Bogus': 'notakind' });
+check('override makes unknown category income', T.categoryKind('side hustle') === 'income');
+check('override rewires a built-in category', T.categoryKind('Groceries') === 'fixed');
+check('invalid kind ignored', T.categoryKind('Bogus') === 'spending');
+check('defaultKind ignores overrides', T.defaultKind('Groceries') === 'variable');
+const ovMo = T.spendByMonth([
+    { date: '2025-03-01', name: 'Etsy', amount: 200, category: 'Side Hustle' },
+    { date: '2025-03-02', name: 'Fred Meyer', amount: 50, category: 'Groceries' }
+])['2025-03'];
+check('aggregates respect overrides', ovMo.income === 200 && ovMo.fixed === 50 && ovMo.variable === 0);
+T.setKindOverrides({});
+check('overrides clear', T.categoryKind('Groceries') === 'variable');
+
+// store setters install overrides and validate input
+S.setCategoryKind('Consulting', 'income');
+check('store override applied to engine', T.categoryKind('Consulting') === 'income');
+S.setCategoryKind('Consulting', 'spending'); // the default for unknowns → cleared
+check('setting the default clears the override', S.get().categoryKinds['Consulting'] === undefined);
+check('cleared override falls back', T.categoryKind('Consulting') === 'spending');
+S.setCsvColumn('amount', 'Value');
+check('csv column stored', S.get().csvColumns.amount === 'Value');
+S.setCsvColumn('amount', ' ');
+check('blank csv column cleared', S.get().csvColumns.amount === undefined);
+
+// ---------- custom CSV columns ----------
+const csvCustom =
+'Posted On,Payee,Value,Bucket\n' +
+'2025-01-03,Fred Meyer,52.73,Groceries\n' +
+'2025-01-06,Paycheck,4600.00,Paychecks\n';
+const noMap = RM.parse(csvCustom);
+check('unmapped custom headers rejected', !!noMap.error);
+const mapped = RM.parse(csvCustom, { columns: { date: 'Posted On', name: 'Payee', amount: 'Value', category: 'Bucket' } });
+check('custom columns parse', !mapped.error && mapped.txns.length === 2, mapped.error || '=' + mapped.txns.length);
+check('custom columns land in fields', mapped.txns[0].name === 'Fred Meyer' && mapped.txns[0].category === 'Groceries' && mapped.txns[0].amount === 52.73);
+check('custom mapping wins over builtin', RM.parse('Date,Name,Amount,Category,Other\n2025-01-03,A,5.00,X,9.99\n',
+    { columns: { amount: 'Other' } }).txns[0].amount === 9.99);
+
 // the downloadable template round-trips through the parser
 const tmpl = RM.parse(RM.template());
 check('template parses without error', !tmpl.error);

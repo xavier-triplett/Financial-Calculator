@@ -306,8 +306,22 @@ html[data-theme="dark"] .trk-btn-primary:hover {
 .trk-badge-fixed { background: rgba(169,114,15,0.1); color: var(--amber); }
 .trk-badge-variable { background: rgba(51,96,140,0.1); color: var(--steel); }
 
+/* ---------- Categories tab ---------- */
+.trk-set-cols { display: grid; grid-template-columns: 3fr 2fr; gap: 22px; align-items: start; }
+.trk-set-blurb { font-size: 12.5px; color: var(--muted); margin: 0 0 14px; max-width: 60ch; }
+.trk-cat-add { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.trk-cat-add .trk-search { flex: 1; min-width: 140px; }
+.trk-set-fields { display: flex; flex-direction: column; gap: 10px; }
+.trk-set-field { display: flex; align-items: center; gap: 10px; }
+.trk-set-field span {
+    flex: 0 0 90px; font: 600 10px/1.3 "Public Sans", sans-serif;
+    letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
+}
+.trk-set-field .trk-search { flex: 1; }
+
 /* ---------- Responsive ---------- */
 @media (max-width: 1150px) {
+    .trk-set-cols { grid-template-columns: 1fr; }
     .trk-book { grid-template-columns: 150px 1fr; }
     .trk-book-side { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
     .trk-obs-grid, .trk-obs-grid2, .trk-band { grid-template-columns: 1fr; }

@@ -37,6 +37,7 @@
     <script src="../js/ui/ledger.js"></script>
     <script src="../js/ui/tracker-observatory.js"></script>
     <script src="../js/ui/tracker-cashbook.js"></script>
+    <script src="../js/ui/tracker-settings.js"></script>
     <script src="../js/app.js"></script>
 
     <script>
@@ -291,6 +292,25 @@
             check('stamp reflects estimated surplus', /Surplus/i.test(text('.trk-st-stamp')));
             document.querySelector('[data-month="2026-06"]').click();
             check('months with real income are untouched', document.querySelector('.trk-est') === null);
+
+            // Categories tab: kind override + CSV column mapping
+            nav('[data-view="categories"]');
+            check('categories tab mounts', document.querySelector('.ui-categories .trk-register') !== null);
+            var kindSel = document.querySelector('select[data-cat="Groceries"]');
+            check('category row rendered', kindSel !== null);
+            kindSel.value = 'fixed';
+            kindSel.dispatchEvent(new Event('change', { bubbles: true }));
+            check('kind override stored', TrackerStore.get().categoryKinds['Groceries'] === 'fixed');
+            check('override reaches the engine', TrackerEngine.categoryKind('Groceries') === 'fixed');
+            check('custom marker shown', /custom/.test(text('.ui-categories .trk-register')));
+            TrackerStore.setCategoryKind('Groceries', 'variable'); // the built-in default
+            check('restoring the default clears the override', TrackerStore.get().categoryKinds['Groceries'] === undefined);
+            var colInput = document.querySelector('input[data-field="amount"]');
+            colInput.value = 'Value';
+            colInput.dispatchEvent(new Event('change', { bubbles: true }));
+            check('csv mapping stored', TrackerStore.get().csvColumns.amount === 'Value');
+            TrackerStore.setCsvColumn('amount', '');
+            check('blank csv mapping cleared', TrackerStore.get().csvColumns.amount === undefined);
 
             // Back to the planner, still alive after all the switching
             nav('[data-view="ledger"]');

@@ -187,7 +187,7 @@
             if (!files || !files.length) return;
             var reader = new FileReader();
             reader.onload = function () {
-                var res = RocketMoney.parse(reader.result);
+                var res = RocketMoney.parse(reader.result, { columns: TrackerStore.get().csvColumns });
                 if (res.error) { FireApp.toast('Import failed: ' + res.error); return; }
                 var merged = TrackerStore.importTxns(res.txns);
                 FireApp.toast('Imported ' + merged.added + ' transactions' +

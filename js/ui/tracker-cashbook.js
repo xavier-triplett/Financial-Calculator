@@ -196,10 +196,19 @@
     }
 
     /* Category control per direction: money out keeps the free-text field
-     * with the expense suggestions; money in offers the income categories. */
-    function catControl(dir, t) {
+     * with the expense suggestions; money in offers the income categories
+     * (built-ins plus anything marked income on the Categories tab). */
+    function incomeCategories(state) {
+        var set = { 'Income': true, 'Other Income': true };
+        state.txns.forEach(function (t) { if (E.categoryKind(t.category) === 'income') set[t.category] = true; });
+        var ck = state.categoryKinds || {};
+        Object.keys(ck).forEach(function (c) { if (ck[c] === 'income') set[c] = true; });
+        return Object.keys(set).sort();
+    }
+
+    function catControl(dir, t, state) {
         if (dir === 'in') {
-            var cats = ['Income', 'Other Income'];
+            var cats = incomeCategories(state);
             if (t && E.categoryKind(t.category) === 'income' && cats.indexOf(t.category) === -1) cats.unshift(t.category);
             return '<select data-f="category">' + cats.map(function (c) {
                 return '<option value="' + escapeAttr(c) + '"' + (t && t.category === c ? ' selected' : '') + '>' + c + '</option>';
@@ -225,7 +234,7 @@
             '</select>' +
             '<input type="text" data-f="name" placeholder="Merchant" value="' + (t ? escapeAttr(t.name) : '') + '">' +
             '<input type="text" inputmode="decimal" data-f="amount" placeholder="Amount" value="' + (t ? t.amount : '') + '">' +
-            '<span class="trk-catwrap" data-el="catwrap">' + catControl(dir, t) + '</span>' +
+            '<span class="trk-catwrap" data-el="catwrap">' + catControl(dir, t, state) + '</span>' +
             '<input type="text" data-f="account" placeholder="Account" value="' + (t ? escapeAttr(t.account || '') : '') + '">' +
             '<button class="trk-btn trk-btn-primary" type="button" data-act="save">' + (t ? 'Save' : 'Add') + '</button>' +
             (t ? '<button class="trk-btn" type="button" data-act="cancel">Cancel</button>' : '');
@@ -320,10 +329,11 @@
 
         els.body.querySelector('[data-el="form"]').addEventListener('change', function (e) {
             if (e.target.dataset.f !== 'dir') return;
-            var t = editingId ? TrackerStore.get().txns.filter(function (t) { return t.id === editingId; })[0] : null;
+            var st = TrackerStore.get();
+            var t = editingId ? st.txns.filter(function (t) { return t.id === editingId; })[0] : null;
             // Keep the txn's category only when it matches the chosen direction
             if (t && (E.categoryKind(t.category) === 'income') !== (e.target.value === 'in')) t = null;
-            els.body.querySelector('[data-el="catwrap"]').innerHTML = catControl(e.target.value, t);
+            els.body.querySelector('[data-el="catwrap"]').innerHTML = catControl(e.target.value, t, st);
         });
 
         els.body.querySelector('[data-el="form"]').addEventListener('click', function (e) {

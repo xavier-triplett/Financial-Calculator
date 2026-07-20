@@ -51,11 +51,22 @@
         ignored:     ['ignoredfrom']
     };
 
-    function headerMap(headerRow) {
+    /* custom: { field: 'Header Name' } from the Categories tab — a custom
+     * header claims its field before the built-in aliases are consulted. */
+    function headerMap(headerRow, custom) {
         var map = {};
+        var customByNorm = {}, owned = {};
+        for (var field in custom || {}) {
+            var cn = norm(custom[field]);
+            if (cn) { customByNorm[cn] = field; owned[field] = true; }
+        }
         headerRow.forEach(function (h, i) {
             var n = norm(h);
+            var f = customByNorm[n];
+            if (f !== undefined && map[f] === undefined) { map[f] = i; return; }
             for (var key in COLS) {
+                // A field with a custom header ignores its built-in aliases
+                if (owned[key]) continue;
                 if (COLS[key].indexOf(n) !== -1 && map[key] === undefined) map[key] = i;
             }
         });
@@ -81,14 +92,15 @@
         return 'rm' + h.toString(36) + s.length.toString(36);
     }
 
-    /* parse(text) → { txns, skipped, flipped }
+    /* parse(text, opts) → { txns, skipped, flipped }
+     * opts.columns remaps importer fields to custom CSV headers.
      * Normalizes signs so expenses are positive and income positive
      * (Rocket Money exports vary: some ship debits negative). */
-    function parse(text) {
+    function parse(text, opts) {
         var rows = parseCSV(text);
         if (!rows.length) return { txns: [], skipped: 0, flipped: false, error: 'Empty file' };
 
-        var map = headerMap(rows[0]);
+        var map = headerMap(rows[0], opts && opts.columns);
         if (map.amount === undefined || (map.date === undefined && map.origDate === undefined)) {
             return { txns: [], skipped: 0, flipped: false, error: 'Not a Rocket Money export — needs Date and Amount columns' };
         }
@@ -147,6 +159,6 @@
         ].join('\n') + '\n';
     }
 
-    global.RocketMoney = { parse: parse, parseCSV: parseCSV, template: template };
+    global.RocketMoney = { parse: parse, parseCSV: parseCSV, template: template, COLS: COLS };
 
 })(typeof window !== 'undefined' ? window : globalThis);
