@@ -168,18 +168,48 @@
         return '<button class="nav-auth nav-auth-in" type="button" data-auth-signin title="Save your data to your account">Sign in with Google</button>';
     }
 
+    var navMenuOpen = false;
+
+    function tabButtonsHtml() {
+        return allTabs().map(function (t) {
+            return '<button class="nav-tab' + (t.ui.id === (active ? active.ui.id : pref.view) ? ' active' : '') +
+                '" data-view="' + t.ui.id + '"' + (t.ui.tag ? ' title="' + t.ui.tag + '"' : '') + '>' + t.ui.name + '</button>';
+        }).join('');
+    }
+
     function renderNav() {
+        var burger = navMenuOpen
+            ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>'
+            : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>';
         navEl.innerHTML = '<span class="nav-brand">The Coast Ledger</span>' +
-            '<span class="nav-tabs">' + allTabs().map(function (t) {
-                return '<button class="nav-tab' + (t.ui.id === (active ? active.ui.id : pref.view) ? ' active' : '') +
-                    '" data-view="' + t.ui.id + '"' + (t.ui.tag ? ' title="' + t.ui.tag + '"' : '') + '>' + t.ui.name + '</button>';
-            }).join('') + '</span>' +
+            '<span class="nav-tabs">' + tabButtonsHtml() + '</span>' +
             '<span class="nav-right">' + authHtml() +
                 '<button class="nav-theme" type="button" data-theme-toggle aria-label="Switch to ' +
                     (pref.theme === 'dark' ? 'light' : 'dark') + ' mode" title="Switch to ' +
                     (pref.theme === 'dark' ? 'light' : 'dark') + ' mode">' +
                     (pref.theme === 'dark' ? '&#9728;' : '&#9790;') + '</button>' +
-            '</span>';
+                '<button class="nav-burger" type="button" data-nav-burger aria-label="Menu" aria-expanded="' + navMenuOpen + '">' + burger + '</button>' +
+            '</span>' +
+            '<div class="nav-menu"' + (navMenuOpen ? '' : ' hidden') + '>' + tabButtonsHtml() + '</div>';
+        updateNavCollapse();
+    }
+
+    /* Collapse the tab row into the hamburger whenever it can't fit without
+     * scrolling. Measured, not a breakpoint: the row overflows the nav on
+     * mid widths (single-row layout) or scrolls inside itself on phones
+     * (full-width row) — either way the tabs aren't all reachable at once. */
+    function updateNavCollapse() {
+        navEl.classList.remove('nav-collapsed');
+        var tabs = navEl.querySelector('.nav-tabs');
+        var overflowing = navEl.scrollWidth > navEl.clientWidth + 1 ||
+            (tabs && tabs.scrollWidth > tabs.clientWidth + 1);
+        if (overflowing) {
+            navEl.classList.add('nav-collapsed');
+        } else if (navMenuOpen) {
+            navMenuOpen = false;
+            var menu = navEl.querySelector('.nav-menu');
+            if (menu) menu.hidden = true;
+        }
     }
 
     function boot() {
@@ -200,10 +230,22 @@
         compute();
 
         navEl.addEventListener('click', function (e) {
-            if (e.target.dataset.view) setView(e.target.dataset.view);
+            if (e.target.dataset.view) {
+                navMenuOpen = false;
+                // setView no-ops on the current tab; still close the menu
+                if (pref.view === e.target.dataset.view) renderNav();
+                else setView(e.target.dataset.view);
+            }
+            if (e.target.closest('[data-nav-burger]')) { navMenuOpen = !navMenuOpen; renderNav(); }
             if (e.target.closest('[data-theme-toggle]')) toggleTheme();
             if (e.target.closest('[data-auth-signin]')) FireCloud.signIn();
             if (e.target.closest('[data-auth-signout]')) FireCloud.signOut();
+        });
+        window.addEventListener('resize', updateNavCollapse);
+        document.addEventListener('click', function (e) {
+            // composedPath, not closest: the nav re-renders on burger clicks,
+            // so by the time this runs the click target may be detached.
+            if (navMenuOpen && e.composedPath().indexOf(navEl) === -1) { navMenuOpen = false; renderNav(); }
         });
         confirmLayer.addEventListener('click', function (e) {
             if (e.target.closest('[data-confirm-accept]')) closeConfirm(true);
@@ -211,6 +253,7 @@
         });
         document.addEventListener('keydown', function (e) {
             if (e.key === 'Escape' && pendingConfirm) closeConfirm(false);
+            else if (e.key === 'Escape' && navMenuOpen) { navMenuOpen = false; renderNav(); }
         });
 
         /* Info hints: tap toggles the tooltip. Explicit focus()/blur()

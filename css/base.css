@@ -138,6 +138,31 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
     font-size: 16px; line-height: 1;
 }
 .nav-theme:hover { background: #E2E5E0; }
+
+/* ---------- Collapsed nav: hamburger + dropdown ---------- */
+/* JS adds .nav-collapsed when the tab row can't fit without scrolling. */
+.nav-burger {
+    display: none; width: 34px; height: 34px; padding: 0;
+    place-items: center;
+    border: 1px solid #C9CEC8; border-radius: 4px;
+    background: transparent; color: #1A211D;
+}
+.nav-burger:hover { background: #E2E5E0; }
+#app-nav.nav-collapsed .nav-tabs { display: none; }
+#app-nav.nav-collapsed .nav-burger { display: grid; }
+.nav-menu { display: none; }
+#app-nav.nav-collapsed .nav-menu:not([hidden]) {
+    display: flex; flex-direction: column; gap: 2px;
+    position: absolute; top: 100%; left: 0; right: 0;
+    background: #F1F2EE; border-bottom: 1px solid #C9CEC8;
+    padding: 8px 14px 12px;
+    box-shadow: 0 14px 28px rgba(0, 0, 0, 0.14);
+}
+.nav-menu .nav-tab { text-align: left; width: 100%; padding: 12px 10px; font-size: 12px; border-radius: 4px; }
+.nav-menu .nav-tab.active {
+    box-shadow: inset 3px 0 0 #17604A; border-radius: 0 4px 4px 0;
+    background: rgba(23, 96, 74, 0.06);
+}
 .nav-user {
     font: 500 12px/1 "Public Sans", sans-serif; color: #66716B;
     max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -162,6 +187,16 @@ html[data-theme="dark"] .nav-tab { color: #9AA69F; }
 html[data-theme="dark"] .nav-tab.active { color: #8BE8BC; box-shadow: inset 0 -2px 0 #8BE8BC; }
 html[data-theme="dark"] .nav-theme { border-color: #46524B; }
 html[data-theme="dark"] .nav-theme:hover { background: #26302A; }
+html[data-theme="dark"] .nav-burger { border-color: #46524B; color: #E8ECE8; }
+html[data-theme="dark"] .nav-burger:hover { background: #26302A; }
+html[data-theme="dark"] #app-nav.nav-collapsed .nav-menu:not([hidden]) {
+    background: #151C18; border-bottom-color: #36413B;
+    box-shadow: 0 14px 28px rgba(0, 0, 0, 0.45);
+}
+html[data-theme="dark"] .nav-menu .nav-tab.active {
+    box-shadow: inset 3px 0 0 #8BE8BC;
+    background: rgba(139, 232, 188, 0.08);
+}
 html[data-theme="dark"] .nav-user { color: #A4AFA8; }
 html[data-theme="dark"] .nav-auth { border-color: #46524B; color: #E8ECE8; }
 html[data-theme="dark"] .nav-auth:hover { border-color: #E8ECE8; }

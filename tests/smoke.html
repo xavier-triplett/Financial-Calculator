@@ -325,6 +325,30 @@
             nav('[data-view="ledger"]');
             check('planner remounts', document.querySelector('.lg-shell') !== null);
 
+            // Nav collapses to a hamburger when the tab row can't fit
+            var navBar = document.getElementById('app-nav');
+            var wasCollapsed = navBar.classList.contains('nav-collapsed');
+            navBar.style.maxWidth = '360px';
+            window.dispatchEvent(new Event('resize'));
+            check('nav collapses when tabs overflow', navBar.classList.contains('nav-collapsed'));
+            check('burger shown when collapsed',
+                getComputedStyle(navBar.querySelector('[data-nav-burger]')).display !== 'none');
+            check('tab row hidden when collapsed',
+                getComputedStyle(navBar.querySelector('.nav-tabs')).display === 'none');
+            check('menu closed until opened', navBar.querySelector('.nav-menu').hidden === true);
+            navBar.querySelector('[data-nav-burger]').click();
+            check('burger opens the menu', document.querySelector('#app-nav .nav-menu').hidden === false);
+            check('menu is visible', getComputedStyle(document.querySelector('#app-nav .nav-menu')).display !== 'none');
+            // (the smoke page loads no profile.js, so pick the Net Worth tab)
+            document.querySelector('#app-nav .nav-menu [data-view="observatory"]').click();
+            check('menu tab switches view', document.querySelector('.ui-observatory') !== null);
+            check('menu closes after choosing', document.querySelector('#app-nav .nav-menu').hidden === true);
+            document.getElementById('app-nav').style.maxWidth = '';
+            window.dispatchEvent(new Event('resize'));
+            check('nav restores when space returns',
+                document.getElementById('app-nav').classList.contains('nav-collapsed') === wasCollapsed);
+            nav('[data-view="ledger"]');
+
             localStorage.clear();
         } catch (e) {
             failures++;
