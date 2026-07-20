@@ -71,6 +71,15 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
  * (fixed boxes never widen the page). The arrow pseudo-element becomes an
  * invisible 36px tap pad — the 13px chips are untappable on their own. */
 @media (max-width: 720px) {
+    /* The hover/focus lift must not run here: a transformed (even
+     * mid-transition) chip becomes the containing block for the fixed
+     * sheet below, collapsing it to the chip's 16px width. */
+    .ff-hint[data-tooltip]:hover,
+    .ff-hint[data-tooltip]:focus,
+    .ff-hint[data-tooltip]:focus-visible {
+        transform: none;
+        transition: border-color .12s, background .12s;
+    }
     .ff-hint[data-tooltip]::before,
     .ff-hint[data-tooltip]:hover::before,
     .ff-hint[data-tooltip]:focus::before {
@@ -85,6 +94,9 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
         position: fixed;
         left: 12px; right: 12px; bottom: 12px; top: auto;
         width: auto; max-width: none;
+        max-height: 45vh; overflow-y: auto;
+        font-size: 12px; line-height: 1.55;
+        padding: 12px 14px;
         transform: none;
     }
 }
