@@ -166,6 +166,33 @@ check('US date parsed', RM.parse(csvUS).txns[0].date === '2025-01-09');
 // garbage in
 check('non-CSV rejected', !!RM.parse('hello world').error);
 
+// ---------- savings contributions (marked, not assumed) ----------
+check('Savings is a saving kind', T.categoryKind('Savings') === 'saving');
+check('Retirement Contributions is saving', T.categoryKind('Retirement Contributions') === 'saving');
+check('Credit Card Payment still transfer', T.categoryKind('Credit Card Payment') === 'transfer');
+const savTxns = [
+    { date: '2025-05-01', name: 'Paycheck', amount: 5000, category: 'Paychecks' },
+    { date: '2025-05-02', name: 'Vanguard', amount: 1200, category: 'Investments' },
+    { date: '2025-05-03', name: 'Ally', amount: 300, category: 'Savings' },
+    { date: '2025-05-04', name: 'Fred Meyer', amount: 500, category: 'Groceries' },
+    { date: '2025-05-05', name: 'CC Payment', amount: 900, category: 'Credit Card Payment' }
+];
+const savMo = T.spendByMonth(savTxns)['2025-05'];
+check('saving aggregated separately', savMo.saving === 1500);
+check('saving not counted as expense', savMo.expenses === 500);
+check('surplus unchanged by saving', savMo.saved === 4500);
+const savTrail = T.trailing(savTxns, 12);
+check('trailing reports marked saving', savTrail.annualSaving === 18000 && savTrail.savedIsMarked === true);
+check('marked rate = saving/income', Math.abs(savTrail.savingsRate - 1500 / 5000) < 1e-9, '=' + savTrail.savingsRate);
+const noMark = T.trailing([
+    { date: '2025-05-01', name: 'Paycheck', amount: 5000, category: 'Paychecks' },
+    { date: '2025-05-04', name: 'Fred Meyer', amount: 500, category: 'Groceries' }
+], 12);
+check('unmarked falls back to surplus rate', noMark.savedIsMarked === false && Math.abs(noMark.savingsRate - 0.9) < 1e-9);
+const savRows = T.categoryRows(savMo);
+check('saving section rows', savRows.saving.length === 2 && savRows.saving[0].category === 'Investments');
+check('savings excluded from top merchants', T.topMerchants(savTxns, '2025-05', 5)[0].name === 'Fred Meyer');
+
 // ---------- category kind overrides ----------
 T.setKindOverrides({ 'Side Hustle': 'income', 'Groceries': 'fixed', 'Bogus': 'notakind' });
 check('override makes unknown category income', T.categoryKind('side hustle') === 'income');

@@ -16,7 +16,7 @@
     var editingId = null;
     var datePicker = null;
 
-    var ZERO_AGG = { income: 0, fixed: 0, variable: 0, spending: 0, expenses: 0, saved: 0, byCategory: {}, count: 0 };
+    var ZERO_AGG = { income: 0, saving: 0, fixed: 0, variable: 0, spending: 0, expenses: 0, saved: 0, byCategory: {}, count: 0 };
 
     function template() {
         return '' +
@@ -171,14 +171,24 @@
                 '</span><span class="trk-st-dots"></span>' +
                 '<span class="num pos">' + U.money(agg.income) +
                 (agg.estIncome ? ' <em class="trk-est">est.</em>' : '') + '</span></div></div>' +
+            section('Savings contributions', sections.saving, agg.saving) +
             section('Fixed expenses', sections.fixed, agg.fixed) +
             section('Variable expenses', sections.variable, agg.variable) +
             section('Spending', sections.spending, agg.spending) +
             '<div class="trk-st-verdict">' +
-                '<span>Set aside this month</span>' +
+                '<span>Surplus this month</span>' +
                 '<strong class="' + (saved >= 0 ? 'pos' : 'neg') + '">' + (saved >= 0 ? '+' : '') + U.money(saved) +
                 (rate !== null ? ' <em>(' + rate.toFixed(0) + '% of income)</em>' : '') + '</strong>' +
-            '</div>';
+            '</div>' +
+            (agg.saving > 0
+                ? '<div class="trk-st-verdict trk-st-saving">' +
+                    '<span>Marked as savings' +
+                        ' <span class="ff-hint" tabindex="0" role="img" data-tooltip="Transactions in savings-kind categories (Savings, Investments, Retirement Contributions, or any category you mark as Savings on the Categories tab). The plan bridge prefers this over assuming the whole surplus was saved.">i</span>' +
+                    '</span>' +
+                    '<strong class="pos">' + U.money(agg.saving) +
+                    (agg.income > 0 ? ' <em>(' + ((agg.saving / agg.income) * 100).toFixed(0) + '% of income)</em>' : '') + '</strong>' +
+                '</div>'
+                : '');
     }
 
     /* ---------------- manual add / edit ---------------- */
@@ -191,7 +201,8 @@
         });
         ['Groceries', 'Dining & Drinks', 'Mortgage', 'Rent', 'Internet', 'Insurance Payments', 'Car Payments',
          'Auto & Transport', 'Gas Bill', 'Water & Light', 'Garbage', 'Subscriptions', 'Shopping',
-         'Entertainment & Rec.', 'Travel & Vacation'].forEach(function (c) { set[c] = true; });
+         'Entertainment & Rec.', 'Travel & Vacation',
+         'Savings', 'Investments', 'Retirement Contributions'].forEach(function (c) { set[c] = true; });
         return Object.keys(set).sort();
     }
 
@@ -289,7 +300,7 @@
                 datasets: [
                     { label: 'In', data: aggs.map(function (a) { return a.income; }), backgroundColor: K.alpha(K.PALETTE.income, 0.7) },
                     { label: 'Out', data: aggs.map(function (a) { return a.expenses; }), backgroundColor: K.alpha(K.PALETTE.spending, 0.65) },
-                    { label: 'Set aside', type: 'line', data: aggs.map(function (a) { return a.saved; }),
+                    { label: 'Surplus', type: 'line', data: aggs.map(function (a) { return a.saved; }),
                       borderColor: K.PALETTE.ink, borderWidth: 1.8, pointRadius: 2, tension: 0.3, fill: false }
                 ]
             },

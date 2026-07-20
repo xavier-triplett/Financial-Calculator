@@ -244,6 +244,8 @@ th:hover .trk-x, td:hover .trk-x { visibility: visible; }
 }
 .trk-st-verdict strong { font: 600 22px/1.1 "Fraunces", Georgia, serif; }
 .trk-st-verdict em { font: 500 12px/1 "IBM Plex Mono", monospace; color: var(--muted); font-style: normal; }
+.trk-st-saving { border-top: 1px solid var(--rule-dark); margin-top: 10px; padding-top: 10px; font-size: 13px; }
+.trk-st-saving strong { font-size: 17px; }
 
 /* the stamp, tracker edition */
 .trk-st-stamp {
@@ -299,6 +301,7 @@ th:hover .trk-x, td:hover .trk-x { visibility: visible; }
     white-space: nowrap;
 }
 .trk-badge-income { background: color-mix(in srgb, transparent 88%, var(--green)); color: var(--green); }
+.trk-badge-saving { background: color-mix(in srgb, transparent 90%, var(--green)); color: var(--green); border: 1px dashed color-mix(in srgb, transparent 50%, var(--green)); }
 
 html[data-theme="dark"] .trk-btn-primary:hover {
     color: #111714;

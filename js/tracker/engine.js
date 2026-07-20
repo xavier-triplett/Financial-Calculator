@@ -31,17 +31,20 @@
     GROUPS.forEach(function (g) { GROUP_BY_ID[g.id] = g; });
 
     /* Category kinds — mirror the Cashflow sheet's Fixed / Variable /
-     * Spending sections. Anything unlisted is discretionary Spending. */
+     * Spending sections, plus Saving for money deliberately set aside
+     * (contributions to savings or investments — not consumption, and not a
+     * neutral transfer either). Anything unlisted is discretionary Spending. */
     var KIND = {
         income:   ['Income', 'Paycheck', 'Paychecks', 'Other Income', 'Interest', 'Dividends & Capital Gains'],
-        transfer: ['Transfer', 'Credit Card Payment', 'Payment', 'Investments', 'Savings', 'Buy', 'Sell',
-                   'Internal Transfers', 'Retirement Contributions', 'Deposit', 'Withdrawal', 'Cash & ATM'],
+        transfer: ['Transfer', 'Credit Card Payment', 'Payment', 'Buy', 'Sell',
+                   'Internal Transfers', 'Deposit', 'Withdrawal', 'Cash & ATM'],
+        saving:   ['Savings', 'Investments', 'Retirement Contributions', 'Savings Contribution'],
         fixed:    ['Mortgage', 'Rent', 'Insurance Payments', 'Insurance', 'Internet', 'Car Payments', 'Phone'],
         variable: ['Auto & Transport', 'Groceries', 'Gas Bill', 'Water & Light', 'Garbage', 'Utilities',
                    'Bills & Utilities', 'Fees', 'Taxes']
     };
 
-    var KINDS = ['income', 'transfer', 'fixed', 'variable', 'spending'];
+    var KINDS = ['income', 'transfer', 'saving', 'fixed', 'variable', 'spending'];
 
     var KIND_LOOKUP = {};
     for (var k in KIND) KIND[k].forEach(function (c) { KIND_LOOKUP[c.toLowerCase()] = k; });
@@ -137,15 +140,17 @@
     }
 
     /* ------------------------- expenses ------------------------- */
-    /* spendByMonth(txns) → { 'YYYY-MM': { income, fixed, variable, spending,
-     *   expenses, saved, byCategory:{cat:amt}, count } } */
+    /* spendByMonth(txns) → { 'YYYY-MM': { income, saving, fixed, variable,
+     *   spending, expenses, saved, byCategory:{cat:amt}, count } }
+     * `saved` is the surplus (income − expenses); `saving` is what was
+     * explicitly marked as a savings contribution. */
     function spendByMonth(txns) {
         var out = {};
         (txns || []).forEach(function (t) {
             var mo = monthKey(t.date);
             if (!mo) return;
             var agg = out[mo];
-            if (!agg) agg = out[mo] = { income: 0, fixed: 0, variable: 0, spending: 0, expenses: 0, saved: 0, byCategory: {}, count: 0 };
+            if (!agg) agg = out[mo] = { income: 0, saving: 0, fixed: 0, variable: 0, spending: 0, expenses: 0, saved: 0, byCategory: {}, count: 0 };
             var kind = categoryKind(t.category);
             if (kind === 'transfer') return;
             var amt = Number(t.amount) || 0;
@@ -153,6 +158,7 @@
             var cat = t.category || 'Uncategorized';
             agg.byCategory[cat] = (agg.byCategory[cat] || 0) + amt;
             if (kind === 'income') { agg.income += amt; return; }
+            if (kind === 'saving') { agg.saving += amt; return; }
             agg[kind] += amt;
             agg.expenses += amt;
         });
@@ -165,9 +171,10 @@
     }
 
     /* categoryRows(agg) → Cashflow-statement rows for one month's aggregate,
-     * grouped Income / Fixed / Variable / Spending, largest first inside each. */
+     * grouped Income / Saving / Fixed / Variable / Spending, largest first
+     * inside each. */
     function categoryRows(agg) {
-        var sections = { income: [], fixed: [], variable: [], spending: [] };
+        var sections = { income: [], saving: [], fixed: [], variable: [], spending: [] };
         for (var cat in agg.byCategory) {
             var kind = categoryKind(cat);
             if (sections[kind]) sections[kind].push({ category: cat, amount: agg.byCategory[cat] });
@@ -181,7 +188,7 @@
         (txns || []).forEach(function (t) {
             if (month && monthKey(t.date) !== month) return;
             var kind = categoryKind(t.category);
-            if (kind === 'income' || kind === 'transfer') return;
+            if (kind === 'income' || kind === 'transfer' || kind === 'saving') return;
             var name = t.name || '?';
             sums[name] = (sums[name] || 0) + (Number(t.amount) || 0);
         });
@@ -191,22 +198,27 @@
             .slice(0, n || 8);
     }
 
-    /* trailing(txns, span) → annualized income / expenses / savings rate over
-     * the last `span` transaction months (default 12). */
+    /* trailing(txns, span) → annualized income / expenses / savings over the
+     * last `span` transaction months (default 12). When any transactions are
+     * marked as savings contributions, the rate uses those actuals instead of
+     * assuming the whole surplus was saved. */
     function trailing(txns, span) {
         span = span || 12;
         var byMo = spendByMonth(txns);
         var months = Object.keys(byMo).sort().slice(-span);
         if (!months.length) return null;
-        var income = 0, expenses = 0;
-        months.forEach(function (mo) { income += byMo[mo].income; expenses += byMo[mo].expenses; });
+        var income = 0, expenses = 0, saving = 0;
+        months.forEach(function (mo) { income += byMo[mo].income; expenses += byMo[mo].expenses; saving += byMo[mo].saving; });
         var scale = 12 / months.length;
-        var annualIncome = income * scale, annualExpenses = expenses * scale;
+        var annualIncome = income * scale, annualExpenses = expenses * scale, annualSaving = saving * scale;
+        var savedAnnual = annualSaving > 0 ? annualSaving : annualIncome - annualExpenses;
         return {
             months: months.length,
             annualIncome: annualIncome,
             annualExpenses: annualExpenses,
-            savingsRate: annualIncome > 0 ? Math.max(0, (annualIncome - annualExpenses) / annualIncome) : null
+            annualSaving: annualSaving,
+            savedIsMarked: annualSaving > 0,
+            savingsRate: annualIncome > 0 ? Math.max(0, savedAnnual / annualIncome) : null
         };
     }
 

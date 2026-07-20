@@ -109,7 +109,10 @@
                     var keep = 1 - (Number(inputs.incomeTaxRate) || 0) / 100;
                     var gross = keep > 0 ? t.annualIncome / keep : t.annualIncome;
                     out.push({ key: 'income', label: 'Annual gross income (trailing)', from: inputs.income, to: Math.round(gross) });
-                    out.push({ key: 'savingsRate', label: 'Savings rate', from: inputs.savingsRate, to: Math.round(Math.max(0, (t.annualIncome - t.annualExpenses) / gross) * 100), pct: true });
+                    // Marked savings contributions beat the surplus assumption
+                    var savedAnnual = t.savedIsMarked ? t.annualSaving : t.annualIncome - t.annualExpenses;
+                    out.push({ key: 'savingsRate', label: t.savedIsMarked ? 'Savings rate (marked)' : 'Savings rate (surplus)',
+                        from: inputs.savingsRate, to: Math.round(Math.max(0, savedAnnual / gross) * 100), pct: true });
                 }
             }
         }

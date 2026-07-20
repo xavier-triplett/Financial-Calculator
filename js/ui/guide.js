@@ -89,7 +89,9 @@
                 '<div class="gd-card-title">Glossary</div>' +
                 '<dl class="gd-gloss">' +
                     dt('Net worth', 'Everything you own (cash, investments, property) minus everything you owe (loans, cards). The single number the trackers watch.') +
-                    dt('Savings rate', 'The share of your gross income you put away rather than spend. The most powerful dial in the whole plan.') +
+                    dt('Savings rate', 'The share of your gross income you put away rather than spend. The most powerful dial in the whole plan. ' +
+                        'In the Cashbook, transactions in savings-kind categories count as deliberate contributions &mdash; when you mark them, ' +
+                        'the observed rate uses those actuals instead of assuming every surplus dollar was saved.') +
                     dt('Compounding', 'Growth on top of growth: returns earned by past returns. The reason money saved at 25 counts several times more than money saved at 45.') +
                     dt('401k', 'A retirement account offered through an employer. Contributions come out of your paycheck pre-tax, and employers often add matching money.') +
                     dt('IRA', 'An Individual Retirement Account you open yourself &mdash; same tax-deferred idea as a 401k, with its own (lower) contribution limit.') +

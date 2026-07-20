@@ -13,6 +13,7 @@
     var KIND_LABELS = {
         income: 'Income',
         transfer: 'Transfer (excluded)',
+        saving: 'Savings contribution',
         fixed: 'Fixed expense',
         variable: 'Variable expense',
         spending: 'Spending'
@@ -88,8 +89,9 @@
                     '<div class="trk-panel-head"><h2>Category kinds</h2>' +
                         '<span class="trk-panel-note">how each category counts in the statement</span></div>' +
                     '<p class="trk-set-blurb">Income adds, expenses subtract, and transfers are excluded so money moving ' +
-                        'between your own accounts never reads as spending. Unlisted categories count as discretionary ' +
-                        'spending; override any category here.</p>' +
+                        'between your own accounts never reads as spending. Savings contributions count as money deliberately ' +
+                        'set aside &mdash; the observed savings rate uses them instead of assuming the whole surplus was saved. ' +
+                        'Unlisted categories count as discretionary spending; override any category here.</p>' +
                     '<div class="trk-cat-add">' +
                         '<input class="trk-search" type="text" placeholder="Category name" data-el="newCat">' +
                         '<select class="trk-select" data-el="newKind">' + kindOptions('', 'spending') + '</select>' +

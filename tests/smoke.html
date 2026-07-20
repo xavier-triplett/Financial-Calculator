@@ -293,6 +293,15 @@
             document.querySelector('[data-month="2026-06"]').click();
             check('months with real income are untouched', document.querySelector('.trk-est') === null);
 
+            // Marked savings contributions get their own section + verdict line
+            var savTxn = TrackerStore.addTxn({ date: '2026-06-15', name: 'Vanguard', amount: 1000, category: 'Investments', account: 'Brokerage' });
+            check('savings section renders', /Savings contributions/.test(text('.trk-page')));
+            check('marked savings verdict line shows', /Marked as savings/.test(text('.trk-page')));
+            var trM = TrackerEngine.trailing(TrackerStore.get().txns);
+            check('trailing prefers marked savings', trM.savedIsMarked === true && trM.annualSaving > 0);
+            TrackerStore.removeTxn(savTxn.id);
+            check('no marked line without contributions', !/Marked as savings/.test(text('.trk-page')));
+
             // Categories tab: kind override + CSV column mapping
             nav('[data-view="categories"]');
             check('categories tab mounts', document.querySelector('.ui-categories .trk-register') !== null);
