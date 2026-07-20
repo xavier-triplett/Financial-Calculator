@@ -20,6 +20,8 @@ underwriter's stamp that reads SECURE or DEPLETED at a glance.
   (401k / IRA, inflation-indexed, with age-50 catch-up; overflow spills into the brokerage)
 - Withdrawal tax modeling: effective income-tax rate on deferred draws,
   capital-gains rate on brokerage draws, Roth tax-free
+- Cash on hand held outside the market: counts toward net worth but is
+  never grown by returns and never drawn by the simulation
 - Monte Carlo simulation: seeded, reproducible randomized-return runs with a
   survival probability and a 10th–90th percentile net-worth corridor
 

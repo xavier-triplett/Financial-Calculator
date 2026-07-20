@@ -33,6 +33,9 @@
         balDeferred: 0,
         balFree: 0,
         balTaxable: 0,
+        // Cash on hand: counts toward net worth but sits outside the market —
+        // never grown by returns and never drawn by the simulation.
+        balCash: 0,
 
         // Market assumptions
         marketReturn: 7,          // %
@@ -151,6 +154,7 @@
         var curDeferred = d.balDeferred;
         var curFree = d.balFree;
         var curTaxable = d.balTaxable;
+        var cash = d.balCash; // inert: no growth, no draws
         var curIncome = d.income;
         var curExpenses = d.expenses;
         var curSavingsRate = pct(d.savingsRate);
@@ -309,7 +313,8 @@
             if (curFree < 0) curFree = 0;
             if (curTaxable < 0) curTaxable = 0;
 
-            var totalNW = curDeferred + curFree + curTaxable;
+            var portfolio = curDeferred + curFree + curTaxable;
+            var totalNW = portfolio + cash;
 
             if (age === d.retireAge) {
                 netWorthAtRetirement = totalNW;
@@ -335,6 +340,7 @@
                     deferred: curDeferred,
                     free: curFree,
                     taxable: curTaxable,
+                    cash: cash,
                     total: totalNW,
                     expenses: curExpenses,
                     isRetired: isRetired,
@@ -342,7 +348,7 @@
                     savingsRate: isRetired ? 0 : curSavingsRate,
                     contrib: contrib,
                     wd: { gross: wdGross, net: wdNet, taxes: wdTaxes, taxable: wdT, deferred: wdD, free: wdF },
-                    broke: isRetired && totalNW <= 0
+                    broke: isRetired && portfolio <= 0
                 });
             }
 
@@ -350,7 +356,7 @@
         }
 
         var fiNumber = swr > 0 ? expensesAtRetirement / swr : 0;
-        var endingNetWorth = curDeferred + curFree + curTaxable;
+        var endingNetWorth = curDeferred + curFree + curTaxable + cash;
 
         return {
             rows: rows,

@@ -73,7 +73,7 @@
             return '<tr>' +
                 '<td>' + escapeHtml(cat) + (custom ? ' <em class="trk-est">custom</em>' : '') + '</td>' +
                 '<td><span class="trk-badge trk-badge-' + kind + '">' + KIND_LABELS[kind] + '</span></td>' +
-                '<td><select class="trk-select" data-cat="' + escapeHtml(cat) + '">' + kindOptions(cat, kind) + '</select></td>' +
+                '<td><select class="trk-select" aria-label="Classification for ' + escapeHtml(cat) + '" data-cat="' + escapeHtml(cat) + '">' + kindOptions(cat, kind) + '</select></td>' +
             '</tr>';
         }).join('');
     }
@@ -93,8 +93,10 @@
                         'set aside &mdash; the observed savings rate uses them instead of assuming the whole surplus was saved. ' +
                         'Unlisted categories count as discretionary spending; override any category here.</p>' +
                     '<div class="trk-cat-add">' +
-                        '<input class="trk-search" type="text" placeholder="Category name" data-el="newCat">' +
-                        '<select class="trk-select" data-el="newKind">' + kindOptions('', 'spending') + '</select>' +
+                        '<label class="trk-cat-field"><span>Category name</span>' +
+                            '<input class="trk-search" type="text" placeholder="e.g. Childcare" data-el="newCat"></label>' +
+                        '<label class="trk-cat-field"><span>Counts as</span>' +
+                            '<select class="trk-select" data-el="newKind">' + kindOptions('', 'spending') + '</select></label>' +
                         '<button class="trk-btn trk-btn-primary" type="button" data-act="addCat">Set kind</button>' +
                     '</div>' +
                     '<div class="trk-regwrap"><table class="trk-register">' +

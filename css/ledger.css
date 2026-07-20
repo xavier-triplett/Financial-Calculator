@@ -10,6 +10,7 @@
     --green: #17604A;
     --amber: #A9720F;
     --steel: #33608C;
+    --teal: #3E7C74;
     --red: #A83A31;
 
     background: var(--paper);
@@ -29,6 +30,7 @@ html[data-theme="dark"] .ui-ledger {
     --green: #8BE8BC;
     --amber: #E0AD55;
     --steel: #7FAAD5;
+    --teal: #74C7B8;
     --red: #E37C73;
 }
 html[data-theme="dark"] .ui-ledger .ff-phase.locked,
@@ -175,6 +177,7 @@ html[data-theme="dark"] .ui-ledger .ff-phase-cell input:read-only { background: 
 .ui-ledger .ff-bucket-deferred .ff-label-text { box-shadow: inset 3px 0 0 var(--amber); padding-left: 7px; }
 .ui-ledger .ff-bucket-free .ff-label-text { box-shadow: inset 3px 0 0 var(--green); padding-left: 7px; }
 .ui-ledger .ff-bucket-taxable .ff-label-text { box-shadow: inset 3px 0 0 var(--steel); padding-left: 7px; }
+.ui-ledger .ff-bucket-cash .ff-label-text { box-shadow: inset 3px 0 0 var(--teal); padding-left: 7px; }
 
 /* phases */
 .ui-ledger .ff-phase { border: 1px solid var(--rule); padding: 10px 12px; margin-bottom: 8px; }
@@ -287,6 +290,7 @@ html[data-theme="dark"] .ui-ledger .ff-phase-cell input:read-only { background: 
 .lg-table .c-def { color: var(--amber); }
 .lg-table .c-free { color: var(--green); }
 .lg-table .c-tax { color: var(--steel); }
+.lg-table .c-cash { color: var(--teal); }
 .lg-table tr.st-broke td { background: rgba(168, 58, 49, 0.07); }
 .lg-table tr.st-bridge td { background: rgba(51, 96, 140, 0.045); }
 .lg-table tr.st-retired td { background: color-mix(in srgb, var(--panel) 94%, var(--green)); }

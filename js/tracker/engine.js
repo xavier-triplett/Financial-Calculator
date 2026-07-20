@@ -15,10 +15,10 @@
     'use strict';
 
     /* Account groups — mirror the Net Worth sheet sections. `bucket` maps a
-     * group onto the FIRE planner's three-bucket model; cash rides with the
-     * brokerage since both are spendable bridge money. */
+     * group onto the FIRE planner's buckets; cash stays its own thing — net
+     * worth that the planner neither grows nor draws. */
     var GROUPS = [
-        { id: 'cash',        label: 'Cash',                  side: 'asset',     investable: true, bucket: 'taxable' },
+        { id: 'cash',        label: 'Cash',                  side: 'asset',     investable: true, bucket: 'cash' },
         { id: 'taxFree',     label: 'Tax-Free investments',  side: 'asset',     investable: true, bucket: 'free' },
         { id: 'taxDeferred', label: 'Tax-Deferred',          side: 'asset',     investable: true, bucket: 'deferred' },
         { id: 'afterTax',    label: 'After-Tax',             side: 'asset',     investable: true, bucket: 'taxable' },
@@ -124,12 +124,13 @@
         return { months: months, byGroup: byGroup, assets: assets, liabilities: liabilities, netWorth: netWorth, investable: investable };
     }
 
-    /* buckets(state) → latest snapshot mapped onto the planner's buckets. */
+    /* buckets(state) → latest snapshot mapped onto the planner's buckets
+     * (plus cash, which the planner holds outside the market). */
     function buckets(state) {
         var s = series(state);
         var n = s.months.length;
         if (!n) return null;
-        var out = { deferred: 0, free: 0, taxable: 0 };
+        var out = { deferred: 0, free: 0, taxable: 0, cash: 0 };
         GROUPS.forEach(function (g) {
             if (g.bucket) out[g.bucket] += s.byGroup[g.id][n - 1];
         });

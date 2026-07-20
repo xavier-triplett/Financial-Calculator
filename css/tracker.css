@@ -1,6 +1,6 @@
 /* ============ TRACKER — shared chrome + three skins ============ */
 /* Same paper, same hairlines, same serif verdicts as the Ledger. */
-.ui-observatory, .ui-cashbook {
+.ui-observatory, .ui-cashbook, .ui-categories {
     --paper: #F1F2EE;
     --panel: #FFFFFF;
     --ink: #1A211D;
@@ -20,7 +20,8 @@
 }
 
 html[data-theme="dark"] .ui-observatory,
-html[data-theme="dark"] .ui-cashbook {
+html[data-theme="dark"] .ui-cashbook,
+html[data-theme="dark"] .ui-categories {
     --paper: #111714;
     --panel: #19211D;
     --ink: #E8ECE8;
@@ -310,17 +311,37 @@ html[data-theme="dark"] .trk-btn-primary:hover {
 .trk-badge-variable { background: rgba(51,96,140,0.1); color: var(--steel); }
 
 /* ---------- Categories tab ---------- */
-.trk-set-cols { display: grid; grid-template-columns: 3fr 2fr; gap: 22px; align-items: start; }
+.trk-set-cols { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 22px; align-items: start; }
+.trk-set-cols > .trk-panel { min-width: 0; }
 .trk-set-blurb { font-size: 12.5px; color: var(--muted); margin: 0 0 14px; max-width: 60ch; }
-.trk-cat-add { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
-.trk-cat-add .trk-search { flex: 1; min-width: 140px; }
-.trk-set-fields { display: flex; flex-direction: column; gap: 10px; }
-.trk-set-field { display: flex; align-items: center; gap: 10px; }
-.trk-set-field span {
-    flex: 0 0 90px; font: 600 10px/1.3 "Public Sans", sans-serif;
+.trk-cat-add {
+    display: grid; grid-template-columns: minmax(140px, 1fr) minmax(190px, auto) auto;
+    align-items: end; gap: 10px;
+    margin-bottom: 16px; padding: 12px;
+    border: 1px dashed var(--rule-dark);
+    background: color-mix(in srgb, transparent 96%, var(--ink));
+}
+.trk-cat-field { display: grid; gap: 6px; min-width: 0; }
+.trk-cat-field > span {
+    font: 600 10px/1.2 "Public Sans", sans-serif;
     letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
 }
-.trk-set-field .trk-search { flex: 1; }
+.trk-cat-field .trk-search, .trk-cat-field .trk-select { width: 100%; min-width: 0; }
+.trk-set-cols .trk-regwrap { max-height: none; overflow: visible; }
+.trk-set-cols .trk-register { table-layout: fixed; }
+.trk-set-cols .trk-register th { position: static; }
+.trk-set-cols .trk-register th:nth-child(1) { width: 31%; }
+.trk-set-cols .trk-register th:nth-child(2) { width: 28%; }
+.trk-set-cols .trk-register th:nth-child(3) { width: 41%; }
+.trk-set-cols .trk-register td:first-child { font-weight: 500; overflow-wrap: anywhere; }
+.trk-set-cols .trk-register .trk-select { width: 100%; min-width: 0; }
+.trk-set-fields { display: flex; flex-direction: column; gap: 10px; }
+.trk-set-field { display: grid; grid-template-columns: 90px minmax(0, 1fr); align-items: center; gap: 10px; }
+.trk-set-field span {
+    font: 600 10px/1.3 "Public Sans", sans-serif;
+    letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
+}
+.trk-set-field .trk-search { width: 100%; min-width: 0; }
 
 /* ---------- Responsive ---------- */
 @media (max-width: 1150px) {
@@ -341,6 +362,24 @@ html[data-theme="dark"] .trk-btn-primary:hover {
     .trk-chart { height: 240px; }
     .trk-chart-tall { height: 280px; }
     .trk-chart-sm { height: 200px; }
+    .trk-set-cols .trk-panel { padding: 16px; }
+    .trk-cat-add { grid-template-columns: minmax(0, 1fr); }
+    .trk-cat-add .trk-btn { width: 100%; }
+    .trk-set-cols .trk-regwrap { overflow: visible; }
+    .trk-set-cols .trk-register { display: block; }
+    .trk-set-cols .trk-register thead { display: none; }
+    .trk-set-cols .trk-register tbody { display: grid; gap: 8px; }
+    .trk-set-cols .trk-register tr {
+        display: grid; grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center; gap: 7px 10px;
+        padding: 10px 0; border-bottom: 1px solid var(--rule);
+    }
+    .trk-set-cols .trk-register td { padding: 0; border: 0; min-width: 0; }
+    .trk-set-cols .trk-register td:first-child { font-size: 13px; }
+    .trk-set-cols .trk-register td:nth-child(2) { justify-self: end; }
+    .trk-set-cols .trk-register td:nth-child(3) { grid-column: 1 / -1; }
+    .trk-set-cols .trk-register .trk-select { width: 100%; }
+    .trk-set-field { grid-template-columns: 76px minmax(0, 1fr); }
     /* No hover on touch screens — keep row controls visible and tappable. */
     .trk-x { visibility: visible; font-size: 14px; padding: 4px 8px; }
     .trk-mini { padding: 5px 8px; }

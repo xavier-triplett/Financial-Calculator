@@ -97,7 +97,8 @@
             if (b) {
                 out.push({ key: 'balDeferred', label: 'Tax-deferred balance', from: inputs.balDeferred, to: Math.round(b.deferred) });
                 out.push({ key: 'balFree', label: 'Tax-free balance', from: inputs.balFree, to: Math.round(b.free) });
-                out.push({ key: 'balTaxable', label: 'After-tax + cash', from: inputs.balTaxable, to: Math.round(b.taxable) });
+                out.push({ key: 'balTaxable', label: 'After-tax balance', from: inputs.balTaxable, to: Math.round(b.taxable) });
+                out.push({ key: 'balCash', label: 'Cash on hand', from: inputs.balCash, to: Math.round(b.cash) });
             }
         } else {
             var t = E.trailing(state.txns);

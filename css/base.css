@@ -27,7 +27,9 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
     transition: border-color .12s, background .12s, transform .12s;
 }
 .ff-hint[data-tooltip]:hover,
+.ff-hint[data-tooltip]:focus,
 .ff-hint[data-tooltip]:focus-visible {
+    z-index: 1000;
     border-color: var(--green);
     background: color-mix(in srgb, var(--panel) 68%, var(--green));
     transform: translateY(-1px);

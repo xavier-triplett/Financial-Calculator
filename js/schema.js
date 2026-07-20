@@ -64,7 +64,8 @@
                 fields: [
                     { key: 'balDeferred', label: 'Tax-deferred (401k / IRA)', unit: '$', step: 1000, bucket: 'deferred' },
                     { key: 'balFree', label: 'Tax-free (Roth)', unit: '$', step: 1000, bucket: 'free' },
-                    { key: 'balTaxable', label: 'After-tax (brokerage)', unit: '$', step: 1000, bucket: 'taxable' }
+                    { key: 'balTaxable', label: 'After-tax (brokerage)', unit: '$', step: 1000, bucket: 'taxable' },
+                    { key: 'balCash', label: 'Cash on hand', unit: '$', step: 500, bucket: 'cash', hint: 'Counts toward net worth but sits outside the market — the projection never grows it and never draws it down.' }
                 ]
             },
             {

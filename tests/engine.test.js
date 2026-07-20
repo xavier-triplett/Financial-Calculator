@@ -134,6 +134,21 @@ check('regular catch-up resumes at 64',
     Math.abs(at60.rows[4].contrib.deferred - (E.DEFAULTS.limit401k + E.DEFAULTS.catchUp401k) * Math.pow(1.03, 4)) < 1,
     '=' + at60.rows[4].contrib.deferred);
 
+// 3c. Cash on hand is inert net worth: never grown, never drawn
+{
+    const noCash = E.simulate(DEMO, phases, {});
+    const withCash = E.simulate(Object.assign({}, DEMO, { balCash: 50000 }), phases, {});
+    check('cash defaults to zero', E.DEFAULTS.balCash === 0);
+    check('cash lifts every year by exactly itself (no growth, no draws)',
+        withCash.rows.every((r, i) => Math.abs(r.total - noCash.rows[i].total - 50000) < 1e-6));
+    check('cash constant in rows', withCash.rows.every(r => r.cash === 50000));
+    check('cash in NW at retirement',
+        Math.abs(withCash.summary.netWorthAtRetirement - noCash.summary.netWorthAtRetirement - 50000) < 1e-6);
+    check('cash in estate', Math.abs(withCash.summary.endingNetWorth - noCash.summary.endingNetWorth - 50000) < 1e-6);
+    check('cash cannot rescue a broke plan', withCash.summary.ranOutOfMoneyAge === noCash.summary.ranOutOfMoneyAge);
+    check('cash does not change coverage', withCash.summary.standardCoverage === noCash.summary.standardCoverage);
+}
+
 // 3b. Lean mode (Monte Carlo fast path) must match the full run exactly
 {
     const years = 95 - 30 + 1;

@@ -11,6 +11,7 @@
         deferred: '#A9720F',
         free: '#17604A',
         taxable: '#33608C',
+        cash: '#3E7C74',
         red: '#A83A31',
         ink: '#1A211D'
     };
@@ -101,7 +102,7 @@
                         '<div class="lg-tablewrap"><table class="lg-table">' +
                             '<thead><tr>' +
                                 '<th>Age</th><th>Year</th><th class="num c-def">Deferred</th><th class="num c-free">Roth</th>' +
-                                '<th class="num c-tax">Brokerage</th><th class="num">Total</th><th class="num">Save&nbsp;%</th>' +
+                                '<th class="num c-tax">Brokerage</th><th class="num c-cash">Cash</th><th class="num">Total</th><th class="num">Save&nbsp;%</th>' +
                                 '<th class="num">Contribution</th><th class="num">Draw</th><th class="num">Tax</th>' +
                                 '<th>Status</th>' +
                             '</tr></thead>' +
@@ -130,6 +131,7 @@
         C.free = dark ? '#8BE8BC' : '#17604A';
         C.deferred = dark ? '#E0AD55' : '#A9720F';
         C.taxable = dark ? '#7FAAD5' : '#33608C';
+        C.cash = dark ? '#74C7B8' : '#3E7C74';
         C.red = dark ? '#E37C73' : '#A83A31';
         root.innerHTML = template();
         cacheEls(root);
@@ -156,9 +158,9 @@
         charts.wealth = new Chart(els.wealthChart.getContext('2d'), {
             type: 'line',
             data: { labels: [], datasets: [
-                ds('Brokerage', C.taxable, 0.45), ds('Roth', C.free, 0.45), ds('Deferred', C.deferred, 0.45),
+                ds('Cash', C.cash, 0.4), ds('Brokerage', C.taxable, 0.45), ds('Roth', C.free, 0.45), ds('Deferred', C.deferred, 0.45),
                 // Own stack group so the threshold line stays at its raw value
-                // instead of stacking on top of the three buckets.
+                // instead of stacking on top of the buckets.
                 { label: 'FI number', data: [], borderColor: C.red, borderWidth: 1.5, borderDash: [6, 5], fill: false, pointRadius: 0, tension: 0, stack: 'fi' }
             ]},
             options: chartOpts(fontMono, gridColor, true)
@@ -273,10 +275,11 @@
         var swr = FireStore.get().inputs.swr / 100;
 
         charts.wealth.data.labels = labels;
-        charts.wealth.data.datasets[0].data = rows.map(function (r) { return r.taxable; });
-        charts.wealth.data.datasets[1].data = rows.map(function (r) { return r.free; });
-        charts.wealth.data.datasets[2].data = rows.map(function (r) { return r.deferred; });
-        charts.wealth.data.datasets[3].data = rows.map(function (r) { return swr > 0 ? r.expenses / swr : 0; });
+        charts.wealth.data.datasets[0].data = rows.map(function (r) { return r.cash; });
+        charts.wealth.data.datasets[1].data = rows.map(function (r) { return r.taxable; });
+        charts.wealth.data.datasets[2].data = rows.map(function (r) { return r.free; });
+        charts.wealth.data.datasets[3].data = rows.map(function (r) { return r.deferred; });
+        charts.wealth.data.datasets[4].data = rows.map(function (r) { return swr > 0 ? r.expenses / swr : 0; });
         charts.wealth.update('none');
 
         var b = results.mc.bands;
@@ -307,6 +310,7 @@
                 '<td class="num c-def">' + U.compact(r.deferred) + '</td>' +
                 '<td class="num c-free">' + U.compact(r.free) + '</td>' +
                 '<td class="num c-tax">' + U.compact(r.taxable) + '</td>' +
+                '<td class="num c-cash dim">' + U.compact(r.cash) + '</td>' +
                 '<td class="num strong">' + U.compact(r.total) + '</td>' +
                 '<td class="num dim">' + (r.isRetired ? '—' : (r.savingsRate * 100).toFixed(1) + '%') + '</td>' +
                 '<td class="num">' + contrib + '</td>' +

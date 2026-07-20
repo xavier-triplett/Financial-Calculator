@@ -68,7 +68,7 @@
             check('defaults hold no personal data',
                 FireStore.get().inputs.income === 0 && FireStore.get().inputs.expenses === 0 &&
                 FireStore.get().inputs.balDeferred === 0 && FireStore.get().inputs.balFree === 0 &&
-                FireStore.get().inputs.balTaxable === 0);
+                FireStore.get().inputs.balTaxable === 0 && FireStore.get().inputs.balCash === 0);
             FireStore.setInput('balDeferred', 150000);
             var defEl = document.querySelector('input[data-key="balDeferred"]');
             check('money field shows grouped value', defEl.value === '150,000');
@@ -224,7 +224,8 @@
             var expensesBefore = FireStore.get().inputs.expenses;
             TrackerKit.applyProposals(TrackerStore.get(), 'networth');
             check('bridge pushes deferred balance', FireStore.get().inputs.balDeferred === Math.round(expectBuckets.deferred));
-            check('bridge pushes taxable+cash', FireStore.get().inputs.balTaxable === Math.round(expectBuckets.taxable));
+            check('bridge pushes after-tax without cash', FireStore.get().inputs.balTaxable === Math.round(expectBuckets.taxable));
+            check('bridge pushes cash separately', FireStore.get().inputs.balCash === Math.round(expectBuckets.cash) && expectBuckets.cash > 0);
             check('networth bridge leaves expenses alone', FireStore.get().inputs.expenses === expensesBefore);
 
             // Cashbook: statement, register, manual add/edit/delete

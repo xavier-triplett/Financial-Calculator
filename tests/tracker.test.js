@@ -50,7 +50,8 @@ const b = T.buckets(state);
 check('buckets use latest month', b.month === '2025-02');
 check('bucket deferred', b.deferred === 4100);
 check('bucket free', b.free === 5200);
-check('bucket taxable = afterTax + cash', b.taxable === 3200, '=' + b.taxable);
+check('bucket taxable = afterTax only', b.taxable === 2100, '=' + b.taxable);
+check('bucket cash stays separate', b.cash === 1100, '=' + b.cash);
 
 // ---------- expenses ----------
 const txns = [
