@@ -150,5 +150,6 @@ js/ui/tracker-cashbook.js     Cashbook tab — monthly budgeting journal
 js/ui/tracker-settings.js     Categories tab — category kinds + CSV import column mapping
 js/ui/guide.js                Guide tab — plain-language walkthrough + glossary (static)
 css/                          base + profile + ledger + tracker + guide stylesheets
+css/fonts.css, css/fonts/     vendored fonts (Fraunces, Public Sans, IBM Plex Mono; OFL)
 tests/                        unit tests + browser smoke test
 ```
