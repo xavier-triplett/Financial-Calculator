@@ -120,7 +120,13 @@
         available: function () { return available; },
         signedIn: function () { return !!currentUser; },
         user: function () { return currentUser; },
-        onChange: function (fn) { authListeners.push(fn); return fn; },
+        onChange: function (fn) {
+            authListeners.push(fn);
+            return function () {
+                var i = authListeners.indexOf(fn);
+                if (i >= 0) authListeners.splice(i, 1);
+            };
+        },
 
         init: function () {
             if (!available) return;
