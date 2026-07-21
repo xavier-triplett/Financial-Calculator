@@ -297,6 +297,8 @@
     global.TrackerUIs = global.TrackerUIs || [];
     global.FireApp = {
         boot: boot,
+        // Remount the active tab, e.g. after a late-arriving seed config
+        refresh: function () { if (root) mountActive(); },
         toast: toast,
         confirm: askConfirm,
         prompt: askPrompt,

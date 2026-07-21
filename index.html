@@ -55,8 +55,22 @@
     <script src="js/tracker/store.js"></script>
     <script src="js/tracker/kit.js"></script>
 
-    <!-- Optional personal seed (git-ignored; see seed.example.js) -->
-    <script src="seed.js"></script>
+    <!-- Optional personal seed (git-ignored; see seed.example.js). Fetched
+         first so the public site, which has no seed.js, never 404s. On
+         file:// fetch is unavailable, so fall back to a plain script tag. -->
+    <script>
+    (function () {
+        if (location.protocol === 'file:') {
+            document.write('<script src="seed.js"><\/script>');
+            return;
+        }
+        fetch('seed.js').then(function (r) { return r.ok ? r.text() : null; }).then(function (src) {
+            if (!src) return;
+            new Function(src)();
+            if (window.FireApp && FireApp.refresh) FireApp.refresh();
+        }).catch(function () { /* no seed */ });
+    })();
+    </script>
 
     <!-- Firebase (vendored compat SDK) + cloud sync. Config is public by
          design; access is governed by Auth + Firestore rules. -->
