@@ -7,14 +7,8 @@
     var charts = { wealth: null, mc: null };
     var els = {};
 
-    var C = {
-        deferred: '#A9720F',
-        free: '#17604A',
-        taxable: '#33608C',
-        cash: '#3E7C74',
-        red: '#A83A31',
-        ink: '#1A211D'
-    };
+    // Filled on mount from TrackerKit's theme-aware palette
+    var C = {};
 
     function template() {
         return '' +
@@ -126,13 +120,13 @@
     }
 
     function mount(root) {
-        var dark = document.documentElement.getAttribute('data-theme') === 'dark';
-        C.ink = dark ? '#E8ECE8' : '#1A211D';
-        C.free = dark ? '#8BE8BC' : '#17604A';
-        C.deferred = dark ? '#E0AD55' : '#A9720F';
-        C.taxable = dark ? '#7FAAD5' : '#33608C';
-        C.cash = dark ? '#74C7B8' : '#3E7C74';
-        C.red = dark ? '#E37C73' : '#A83A31';
+        var P = global.TrackerKit.PALETTE;
+        C.ink = P.ink;
+        C.free = P.taxFree;
+        C.deferred = P.taxDeferred;
+        C.taxable = P.afterTax;
+        C.cash = P.cash;
+        C.red = P.liability;
         root.innerHTML = template();
         cacheEls(root);
 

@@ -101,11 +101,7 @@
 
     function applyTheme() {
         document.documentElement.setAttribute('data-theme', pref.theme);
-        if (global.TrackerKit) {
-            global.TrackerKit.PALETTE.ink = pref.theme === 'dark' ? '#E8ECE8' : '#1A211D';
-            global.TrackerKit.PALETTE.taxFree = pref.theme === 'dark' ? '#8BE8BC' : '#17604A';
-            global.TrackerKit.PALETTE.income = pref.theme === 'dark' ? '#8BE8BC' : '#17604A';
-        }
+        if (global.TrackerKit) global.TrackerKit.setTheme(pref.theme);
     }
 
     function toggleTheme() {

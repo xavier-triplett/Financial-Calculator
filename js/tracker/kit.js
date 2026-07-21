@@ -7,20 +7,26 @@
     var U = global.FireUtil;
     var E = global.TrackerEngine;
 
-    var PALETTE = {
-        cash: '#3E7C74',
-        taxFree: '#17604A',
-        taxDeferred: '#A9720F',
-        afterTax: '#33608C',
-        property: '#6B4F7A',
-        vehicle: '#7A6B4F',
-        liability: '#A83A31',
-        ink: '#1A211D',
-        income: '#17604A',
-        fixed: '#A9720F',
-        variable: '#33608C',
-        spending: '#A83A31'
+    /* One light/dark pair per series color, shared by every chart in the app
+     * (the ledger reads these too). setTheme swaps the active PALETTE. */
+    var THEMES = {
+        light: {
+            cash: '#3E7C74', taxFree: '#17604A', taxDeferred: '#A9720F', afterTax: '#33608C',
+            property: '#6B4F7A', vehicle: '#7A6B4F', liability: '#A83A31', ink: '#1A211D',
+            income: '#17604A', fixed: '#A9720F', variable: '#33608C', spending: '#A83A31'
+        },
+        dark: {
+            cash: '#74C7B8', taxFree: '#8BE8BC', taxDeferred: '#E0AD55', afterTax: '#7FAAD5',
+            property: '#B99BC9', vehicle: '#C9B99B', liability: '#E37C73', ink: '#E8ECE8',
+            income: '#8BE8BC', fixed: '#E0AD55', variable: '#7FAAD5', spending: '#E37C73'
+        }
     };
+
+    var PALETTE = Object.assign({}, THEMES.light);
+
+    function setTheme(theme) {
+        Object.assign(PALETTE, THEMES[theme] || THEMES.light);
+    }
 
     function alpha(hex, a) {
         var r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
@@ -254,6 +260,7 @@
 
     global.TrackerKit = {
         PALETTE: PALETTE,
+        setTheme: setTheme,
         alpha: alpha,
         chartFont: chartFont,
         chartOpts: chartOpts,
