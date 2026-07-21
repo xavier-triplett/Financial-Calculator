@@ -142,7 +142,7 @@
 
         function rows(list) {
             return list.map(function (r) {
-                return '<div class="trk-st-row"><span>' + r.category + '</span>' +
+                return '<div class="trk-st-row"><span>' + escapeAttr(r.category) + '</span>' +
                     '<span class="trk-st-dots"></span><span class="num">' + U.money(r.amount) + '</span></div>';
             }).join('');
         }
@@ -222,7 +222,7 @@
             var cats = incomeCategories(state);
             if (t && E.categoryKind(t.category) === 'income' && cats.indexOf(t.category) === -1) cats.unshift(t.category);
             return '<select data-f="category">' + cats.map(function (c) {
-                return '<option value="' + escapeAttr(c) + '"' + (t && t.category === c ? ' selected' : '') + '>' + c + '</option>';
+                return '<option value="' + escapeAttr(c) + '"' + (t && t.category === c ? ' selected' : '') + '>' + escapeAttr(c) + '</option>';
             }).join('') + '</select>';
         }
         return '<input type="text" data-f="category" list="trk-cats" placeholder="Category" value="' +
@@ -397,7 +397,7 @@
     function catOptions(agg) {
         var cats = Object.keys(agg.byCategory).sort();
         return '<option value="">All categories</option>' + cats.map(function (c) {
-            return '<option value="' + escapeAttr(c) + '"' + (c === filter.cat ? ' selected' : '') + '>' + c + '</option>';
+            return '<option value="' + escapeAttr(c) + '"' + (c === filter.cat ? ' selected' : '') + '>' + escapeAttr(c) + '</option>';
         }).join('');
     }
 
