@@ -22,6 +22,7 @@
     var currentUser = null;
     var authListeners = [];
     var adopting = false;   // suppress write-back while adopting a pulled doc
+    var pulling = false;    // suppress pushes until the sign-in pull settles
     var pushTimer = null;
     var wired = false;
 
@@ -50,7 +51,7 @@
     }
 
     function schedulePush() {
-        if (!currentUser || adopting) return;
+        if (!currentUser || adopting || pulling) return;
         clearTimeout(pushTimer);
         pushTimer = setTimeout(pushNow, PUSH_DEBOUNCE);
     }
@@ -64,9 +65,12 @@
 
     function onSignIn(user) {
         currentUser = user;
+        pulling = true; // a push before the pull settles could clobber the account doc
         notifyAuth(); // reflect the signed-in identity immediately
         docRef().get().then(function (snap) {
+            if (currentUser !== user) return; // signed out or switched mid-pull
             var data = snap.exists ? snap.data() : null;
+            pulling = false;
             if (data && data.plan) {
                 adopt(data);
                 toast('Signed in — your saved data loaded');
@@ -75,6 +79,8 @@
                 toast('Signed in — this device’s data is now saved to your account');
             }
         }).catch(function (e) {
+            if (currentUser !== user) return;
+            pulling = false;
             console.warn('[FireCloud] pull failed', e);
             toast('Signed in, but loading your data failed — working locally');
         });
@@ -82,6 +88,7 @@
 
     function onSignOut() {
         currentUser = null;
+        pulling = false;
         clearTimeout(pushTimer);
         notifyAuth();
     }
