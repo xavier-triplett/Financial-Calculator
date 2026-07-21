@@ -26,10 +26,14 @@
     }
 
     /* Accept an untrusted object only if it carries the core tracker shape;
-     * otherwise start blank. Shared by localStorage load and cloud adopt. */
+     * otherwise start blank. Shared by localStorage load and cloud adopt.
+     * Accounts with unknown groups would be invisible everywhere, so drop
+     * them rather than carry orphan data. */
     function adopt(saved) {
         if (saved && saved.accounts && saved.snapshots && saved.txns) {
-            return Object.assign(empty(), saved);
+            var st = Object.assign(empty(), saved);
+            st.accounts = st.accounts.filter(function (a) { return a && E.GROUP_BY_ID[a.group]; });
+            return st;
         }
         return empty();
     }

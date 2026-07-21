@@ -47,8 +47,24 @@
             }
         }
         if (saved.profile && saved.profile.birthDate) st.profile.birthDate = String(saved.profile.birthDate);
-        if (saved.phases && saved.phases.length) st.phases = saved.phases;
-        if (saved.mcSeed) st.mcSeed = saved.mcSeed;
+        if (saved.phases && saved.phases.length) {
+            var phases = [];
+            for (var i = 0; i < saved.phases.length; i++) {
+                var p = saved.phases[i];
+                if (!p || typeof p !== 'object' || !isFinite(Number(p.age))) continue;
+                phases.push({
+                    id: isFinite(Number(p.id)) ? Number(p.id) : phases.length + 1,
+                    age: Number(p.age),
+                    deferred: Number(p.deferred) || 0,
+                    free: Number(p.free) || 0,
+                    taxable: Number(p.taxable) || 0,
+                    isLocked: !!p.isLocked
+                });
+            }
+            if (phases.length) st.phases = phases;
+        }
+        var seed = Number(saved.mcSeed);
+        if (isFinite(seed) && seed) st.mcSeed = seed;
         applyBirthDate(st);
         return st;
     }

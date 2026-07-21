@@ -166,6 +166,17 @@
             check('garbage save falls back to defaults',
                 FireStore.get().inputs.income === FireEngine.DEFAULTS.income);
 
+            // Malformed phases are coerced or dropped, never adopted verbatim
+            localStorage.setItem('fireData_v3', JSON.stringify({
+                inputs: {},
+                phases: [{ id: 1, age: 'junk', deferred: 50 }, { id: 2, age: '40', deferred: '30', free: 10 }]
+            }));
+            FireStore.init();
+            check('bad phase dropped, string fields coerced',
+                FireStore.get().phases.length === 1 && FireStore.get().phases[0].age === 40 &&
+                FireStore.get().phases[0].deferred === 30 && FireStore.get().phases[0].isLocked === false);
+            FireStore.reset();
+
             /* ---------------- Tracker ---------------- */
             function nav(sel) { document.querySelector(sel).click(); }
 

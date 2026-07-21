@@ -131,6 +131,16 @@ S.removeCashMonth('2025-03');
 check('removeCashMonth drops open month marker', S.get().cashMonths.length === 0);
 check('other months untouched', S.get().txns.length === 1);
 
+// ---------- adopt sanitization ----------
+S.replace({
+    accounts: [{ id: 'ok', name: 'Savings', group: 'cash' }, { id: 'bad', name: 'Mystery', group: 'nope' }],
+    snapshots: { '2026-01': { ok: 100, bad: 999 } },
+    txns: []
+});
+check('adopt drops unknown account groups', S.get().accounts.length === 1 && S.get().accounts[0].id === 'ok');
+check('series ignores the orphan balance', T.series(S.get()).netWorth[0] === 100);
+S.replace(null); // back to a blank slate (reset() needs the browser's localStorage)
+
 // ---------- Rocket Money CSV ----------
 const csv =
 'Date,Original Date,Account Type,Account Name,Account Number,Institution Name,Name,Custom Name,Amount,Description,Category,Note,Ignored From,Tax Deductible\n' +
