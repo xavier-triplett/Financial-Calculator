@@ -136,6 +136,12 @@
             defInput.blur();
             FireStore.updatePhase(FireStore.get().phases[0].id, 'deferred', 50);
 
+            // Splits clamp so deferred + free can never claim more than 100%
+            FireStore.updatePhase(FireStore.get().phases[0].id, 'deferred', 80);
+            check('over-100 split clamps to the remainder',
+                FireStore.get().phases[0].deferred === 50 && FireStore.get().phases[0].taxable === 0);
+            FireStore.updatePhase(FireStore.get().phases[0].id, 'deferred', 50);
+
             // Text-prompt dialog (replaces window.prompt for account names)
             var promptGot = null;
             FireApp.prompt('Name?', function (v) { promptGot = v; }, 'Add');

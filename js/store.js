@@ -124,10 +124,18 @@
         updatePhase: function (id, field, value) {
             var phase = state.phases.filter(function (p) { return p.id === id; })[0];
             if (!phase) return;
-            phase[field] = parseInt(value, 10) || 0;
+            var v = parseInt(value, 10) || 0;
             if (field === 'deferred' || field === 'free') {
+                // Clamp so the pair never claims more than 100%; the
+                // brokerage share is always the true remainder.
+                if (v < 0) v = 0;
+                var other = field === 'deferred' ? phase.free : phase.deferred;
+                if (v > 100 - other) v = Math.max(0, 100 - other);
+                phase[field] = v;
                 var rem = 100 - phase.deferred - phase.free;
                 phase.taxable = rem < 0 ? 0 : rem;
+            } else {
+                phase[field] = v;
             }
             commit();
         },
