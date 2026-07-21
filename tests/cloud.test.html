@@ -39,7 +39,11 @@
         window.__signIn = function (uid, email) { if (authCb) authCb({ uid: uid, email: email, displayName: email }); };
     })();
     window.FirebaseConfig = { apiKey: 'test-key' };
-    window.FireApp = { toast: function () {} };
+    window.__confirms = 0;
+    window.FireApp = {
+        toast: function () {},
+        confirm: function (msg, onConfirm) { window.__confirms++; onConfirm(); }
+    };
     </script>
 
     <script src="../js/engine.js"></script>
@@ -86,6 +90,7 @@
                 check('A: cloud carries local plan', d1 && d1.plan.inputs.income === 123456);
                 check('A: cloud carries local tracker', d1 && d1.tracker.snapshots['2026-01'].a1 === 4321);
                 check('A: doc is versioned', d1 && d1.version === 1);
+                check('A: seeding asked for consent', window.__confirms === 1);
 
                 // Scenario B — a returning user's cloud doc is the source of truth
                 window.__mockDocs.user2 = {
@@ -102,6 +107,7 @@
                     check('B: adopts cloud tracker (accounts)', TrackerStore.get().accounts.length === 1 && TrackerStore.get().accounts[0].name === 'Roth');
                     check('B: adopts cloud tracker (snapshot)', TrackerStore.get().snapshots['2026-02'].z9 === 88000);
                     check('B: adopt did not overwrite the cloud doc', window.__mockDocs.user2.plan.inputs.income === 999000);
+                    check('B: returning account never prompts', window.__confirms === 1);
 
                     // Scenario C — edits while signed in push (debounced) to cloud
                     FireStore.setInput('income', 555000);

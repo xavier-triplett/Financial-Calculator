@@ -9,7 +9,7 @@
     var startYear = new Date().getFullYear();
 
     var root, navEl, confirmLayer, confirmMessage, confirmAccept, confirmInput;
-    var pendingConfirm = null, confirmReturnFocus = null;
+    var pendingConfirm = null, pendingCancel = null, confirmReturnFocus = null;
     var active = null; // { ui, kind } currently mounted
     var pref = { view: 'profile', theme: null };
 
@@ -54,19 +54,23 @@
 
     function closeConfirm(accepted) {
         if (!pendingConfirm) return;
-        var action = pendingConfirm;
+        var action = pendingConfirm, onCancel = pendingCancel;
         pendingConfirm = null;
+        pendingCancel = null;
         confirmLayer.classList.remove('show');
         confirmLayer.setAttribute('aria-hidden', 'true');
         if (confirmReturnFocus && document.contains(confirmReturnFocus)) confirmReturnFocus.focus();
         if (accepted) action(confirmInput.value);
+        else if (onCancel) onCancel();
     }
 
     /* opts.input shows a text field; the accepted callback receives its
-     * value. Without it this is the plain destructive confirm. */
+     * value. Without it this is the plain destructive confirm.
+     * opts.onCancel runs when the dialog is dismissed instead. */
     function askConfirm(message, onConfirm, actionLabel, opts) {
         opts = opts || {};
         pendingConfirm = onConfirm;
+        pendingCancel = opts.onCancel || null;
         confirmReturnFocus = document.activeElement;
         confirmMessage.textContent = message;
         confirmAccept.textContent = actionLabel || 'Delete';

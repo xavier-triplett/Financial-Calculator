@@ -79,6 +79,14 @@
          * document). Caches to localStorage and notifies so the UI redraws. */
         replace: function (obj) { state = adopt(obj); commit(); },
 
+        /* True while the plan still matches the shipped defaults (the
+         * Monte Carlo seed alone does not count as data). */
+        isDefault: function () {
+            var d = defaults();
+            return JSON.stringify([state.inputs, state.profile, state.phases]) ===
+                JSON.stringify([d.inputs, d.profile, d.phases]);
+        },
+
         setInput: function (key, value) {
             var v = Number(value);
             if (isNaN(v)) return;

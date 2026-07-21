@@ -70,13 +70,29 @@
         docRef().get().then(function (snap) {
             if (currentUser !== user) return; // signed out or switched mid-pull
             var data = snap.exists ? snap.data() : null;
-            pulling = false;
             if (data && data.plan) {
+                pulling = false;
                 adopt(data);
                 toast('Signed in — your saved data loaded');
-            } else {
+                return;
+            }
+            var seed = function () {
+                pulling = false;
                 pushNow();
                 toast('Signed in — this device’s data is now saved to your account');
+            };
+            // A fresh account inherits this device's data only with consent,
+            // so a shared machine's leftovers never leak into a new account.
+            var hasLocal = !FireStore.isDefault() || !TrackerStore.isEmpty();
+            if (hasLocal && global.FireApp && FireApp.confirm) {
+                FireApp.confirm('This device already holds data. Save it to this new account?', seed, 'Save it', {
+                    onCancel: function () {
+                        toast('Nothing was saved — clear this device’s data first for a blank account');
+                        auth.signOut();
+                    }
+                });
+            } else {
+                seed();
             }
         }).catch(function (e) {
             if (currentUser !== user) return;
