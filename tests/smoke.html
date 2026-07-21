@@ -65,6 +65,9 @@
             // Currency formatting: dollar fields grouped, others left plain
             check('parseNum round-trips currency', FireUtil.parseNum('$1,234.50') === 1234.5);
             check('parseNum rejects empty', FireUtil.parseNum('') === null && FireUtil.parseNum('$') === null);
+            check('compact strips trailing zeros',
+                FireUtil.compact(3500000) === '$3.5M' && FireUtil.compact(2000000) === '$2M' &&
+                FireUtil.compact(1250000) === '$1.25M' && FireUtil.compact(840000) === '$840k');
             check('defaults hold no personal data',
                 FireStore.get().inputs.income === 0 && FireStore.get().inputs.expenses === 0 &&
                 FireStore.get().inputs.balDeferred === 0 && FireStore.get().inputs.balFree === 0 &&

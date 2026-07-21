@@ -11,7 +11,8 @@
     function compact(n) {
         var neg = n < 0 ? '-' : '';
         n = Math.abs(n);
-        if (n >= 1e6) return neg + '$' + (n / 1e6).toFixed(n >= 1e7 ? 1 : 2).replace(/\.0+$/, '') + 'M';
+        // parseFloat drops trailing zeros: "3.50" -> 3.5, "2.00" -> 2
+        if (n >= 1e6) return neg + '$' + parseFloat((n / 1e6).toFixed(n >= 1e7 ? 1 : 2)) + 'M';
         if (n >= 1e3) return neg + '$' + Math.round(n / 1e3) + 'k';
         return neg + '$' + Math.round(n);
     }
