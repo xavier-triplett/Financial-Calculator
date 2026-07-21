@@ -316,14 +316,16 @@
             var portfolio = curDeferred + curFree + curTaxable;
             var totalNW = portfolio + cash;
 
-            if (age === d.retireAge) {
+            // Someone already past an age gets measured at the first
+            // simulated year instead of never.
+            if (age === d.retireAge || (age === d.currentAge && d.currentAge > d.retireAge)) {
                 netWorthAtRetirement = totalNW;
                 expensesAtRetirement = curExpenses / (1 + inflation);
             }
 
             // Traditional readiness check at the standard access age:
             // can tax-advantaged money alone cover expenses (net of SS) at SWR?
-            if (age === d.standardRetireAge) {
+            if (age === d.standardRetireAge || (age === d.currentAge && d.currentAge > d.standardRetireAge)) {
                 var safeAmount = (curDeferred + curFree) * swr;
                 var expenseNeed = curExpenses / (1 + inflation);
                 if (expenseNeed < 1) expenseNeed = 1;

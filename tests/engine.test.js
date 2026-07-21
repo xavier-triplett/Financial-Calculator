@@ -149,6 +149,18 @@ check('regular catch-up resumes at 64',
     check('cash does not change coverage', withCash.summary.standardCoverage === noCash.summary.standardCoverage);
 }
 
+// 3d. Already past both target ages: readiness is measured at the first
+// simulated year instead of never firing
+{
+    const late = E.simulate(
+        Object.assign({}, DEMO, { currentAge: 65, retireAge: 50, standardRetireAge: 60, balDeferred: 1500000, balFree: 500000 }),
+        [{ id: 1, age: 65, deferred: 50, free: 50, taxable: 0 }], {});
+    check('past-standard-age coverage computed', late.summary.standardCoverage > 0, '=' + late.summary.standardCoverage);
+    check('past-standard-age well-funded plan reads secure', late.summary.standardSuccess === true);
+    check('past-retire-age NW recorded', late.summary.netWorthAtRetirement > 0);
+    check('past-retire-age FI number set', late.summary.fiNumber > 0);
+}
+
 // 3b. Lean mode (Monte Carlo fast path) must match the full run exactly
 {
     const years = 95 - 30 + 1;
