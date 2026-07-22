@@ -25,10 +25,9 @@ Thumbs.db
 # Test/coverage
 coverage/
 
-# Personal financial data
+# Local personal data
 seed.js
 
 # AI
 .claude/settings.local.json
 .codex/config.toml
-

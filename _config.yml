@@ -1,9 +1,11 @@
 exclude:
   - tests
   - .github
+  - .firebaserc
   - AGENTS.md
   - CLAUDE.md
-  - TODO.md
   - TECHNICAL.md
+  - firebase.json
   - firestore.rules
-  - seed.example.js
+  - package-lock.json
+  - package.json

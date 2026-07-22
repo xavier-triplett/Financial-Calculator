@@ -1,167 +1,265 @@
 # The Coast Ledger — Technical Details
 
-> Looking for how to *use* the app? See the [README](README.md), or the in-app **Guide** tab.
+For product usage, see the [README](README.md) or the in-app **Guide**.
 
 Live site: https://xavier-triplett.github.io/Financial-Calculator/
 
-A zero-build, static retirement planner modeling the **three-bucket Coast FIRE strategy**:
-Tax-Deferred (401k/IRA), Tax-Free (Roth), and After-Tax (brokerage), with a
-"bridge" from early retirement to the standard penalty-free access age.
-Presented as a private-wealth statement — ruled tables, serif verdicts, and an
-underwriter's stamp that reads SECURE or DEPLETED at a glance.
+The Coast Ledger is a zero-build static web application. The production path uses plain
+HTML, CSS, and browser JavaScript; Node dependencies exist only for tests and Firebase
+tooling. Calculation and tracker modules attach small APIs to `globalThis`, which lets the
+same source files run in a browser and in Node tests.
 
-## The model
+## Retirement model
 
-- Saving phases: split each saved dollar across buckets, staged by age
-- Savings-rate ramp with an annual increase and cap
-- Drawdown strategy: per-bucket withdrawal split for the bridge years and the standard years,
-  with automatic equal-split rescue when a preferred bucket runs dry
-- Employer 401k match (rate + salary cap) and IRS contribution limits
-  (401k / IRA, inflation-indexed, with age-50 catch-up; overflow spills into the brokerage)
-- Withdrawal tax modeling: effective income-tax rate on deferred draws,
-  an effective rate on the full amount of brokerage draws, Roth tax-free,
-  plus a configurable early-withdrawal penalty (default 10%) on deferred
-  draws before the penalty-free access age
-- Feasibility check: if planned saving plus spending ever exceeds take-home
-  pay (gross income less the Profile's effective income tax), the Planner
-  flags the first infeasible age
-- Cash on hand held outside the market: counts toward net worth but is
-  never grown by returns and never drawn by the simulation
-- Monte Carlo simulation: seeded, reproducible lognormal-return runs
-  calibrated so the median path compounds at the market-return assumption,
-  with a survival probability and a 10th–90th percentile net-worth corridor
+`js/engine.js` is the pure calculation core. It normalizes all inputs before simulating
+one row per age from the current age through 95.
 
-Plans persist in `localStorage`. Saved data carries no compatibility guarantees —
-if the format changes, old saves are simply discarded and the plan starts from defaults.
+### Working years
 
-The coast number is the inflation-adjusted FI target at the account-unlock age,
-discounted back to today at the configured market return.
+- A starting savings rate can increase each year up to its configured cap.
+- Requested saving is capped at the money actually available after the effective income
+  tax and current expenses. The result records the savings rate used and flags the first
+  age at which the requested plan was infeasible.
+- Saving phases split contributions among tax-deferred, Roth, and brokerage buckets. A
+  phase begins at its stated age, and normalized phase percentages always total 100%.
+- Traditional and Roth workplace contributions share the workplace-plan limit, then
+  traditional and Roth IRA contributions share the IRA limit. Tax-advantaged overflow is
+  redirected to brokerage.
+- The 2026 workplace and IRA limits are indexed with the model's inflation assumption.
+  The model applies the regular age-50 catch-ups and the larger workplace-plan catch-up
+  for ages 60–63.
+- Employer match is based on both traditional and Roth workplace contributions, capped
+  by a percentage of salary, and deposited in the tax-deferred bucket.
 
-The Beginner / Expert control is progressive disclosure over this same model.
-It does not fork or rewrite plan data; hidden expert assumptions remain active.
+Income grows by the configured income-growth rate and expenses grow with inflation.
+Invested buckets receive the fixed or sampled market return. Cash counts in net worth but
+does not grow and is never used for simulated withdrawals.
 
-## The trackers
+### Retirement years
 
-Alongside the planner sit two independent trackers — actuals to the planner's
-assumptions — switched from the top nav:
+The early-retirement bridge begins at `retireAge`; the standard phase begins at
+`standardRetireAge`. Each phase has a preferred withdrawal split across brokerage,
+tax-deferred, and Roth assets. If a preferred bucket cannot supply its share, the model
+reallocates the shortfall across buckets that still hold money.
 
-- **Net Worth (The Observatory)** — net worth only, no transactions. The
-  headline chart plots net worth against the **PAW / AAW / UAW** accumulator
-  benchmarks (AAW = age × income ÷ 10; PAW = 2×; UAW = ½×), driven by
-  recorded per-month age & income or a birth-month + income profile.
-  Composition gets its own chart, and every month's balances are edited by
-  hand in a ruled accounts × months grid (Cash / Tax-Free / Tax-Deferred /
-  After-Tax / Property / Vehicles / Liabilities). No CSV import here.
-- **Cashbook** — monthly budgeting only, blind to net worth. One month per
-  page: an income / fixed / variable / spending statement with a SURPLUS or
-  DEFICIT stamp, and the raw transaction register. Months can be opened by
-  hand and transactions added, edited, or deleted inline. **Rocket Money CSV
-  import lives here exclusively**: export from Rocket Money (Transactions →
-  Export; the file arrives by email) and drop it on the Import button —
-  re-imports dedupe, "Ignored From" rows are skipped, and either sign
-  convention is normalized. Rocket Money has no public API, so CSV is the
-  supported path.
+Withdrawal rates are effective simplifications:
 
-**Plan bridge**: each tracker pushes only its own domain into the planner —
-the Net Worth tab carries bucket balances (and shows FI progress); the
-Cashbook carries trailing income, expenses, and the observed savings rate.
+- Brokerage tax is applied to the whole brokerage withdrawal, not only its gain.
+- Tax-deferred withdrawals are grossed up for the configured effective tax rate.
+- Before the standard access age, tax-deferred withdrawals also pay the configured early
+  penalty.
+- Roth draws are modeled as tax- and penalty-free contribution withdrawals.
 
-**Blank slate + seed**: both tabs start empty. Copy `seed.example.js` to
-`seed.js` (git-ignored — it holds real financial data) and a "Seed from
-config" button appears to load accounts, balance history, age/income
-benchmarks, and starting transactions in one click.
+The bridge fails when brokerage is exhausted during the bridge and retirement assets are
+needed to fill the shortfall. The full plan fails when the investable portfolio cannot
+meet spending. Inert cash can keep reported net worth above zero, but it cannot rescue an
+exhausted portfolio.
 
-Tracker data persists in `localStorage` under its own key, with the same
-no-compatibility-guarantees rule as plans.
+### FI and Coast measures
+
+The FI target is annual spending divided by the safe-withdrawal rate. The Coast number
+inflates current spending to the account-access age, calculates the FI target at that
+age, and discounts it back to today using the configured market return.
+
+The headline Coast-number progress comparison uses today's Roth balance plus today's
+tax-deferred balance reduced by the configured deferred-withdrawal tax rate. Brokerage
+and cash are intentionally excluded. Retirement-readiness snapshots are taken before the
+first retirement cash flow at the relevant age.
+
+### Monte Carlo
+
+Monte Carlo runs 50–2,000 lean simulations with seeded, reproducible random returns. It
+samples lognormal gross returns calibrated so their **arithmetic mean** and arithmetic
+standard deviation equal the configured market-return and volatility assumptions. The
+typical compounded path can therefore be lower than the arithmetic mean.
+
+The result includes survival through age 95, 10th/25th/50th/75th/90th percentile
+net-worth paths, and 10th/50th/90th percentile ending balances. Re-roll changes the seed;
+otherwise an unchanged plan produces unchanged results.
+
+## State and validation
+
+`js/store.js` owns plan state under `fireData_v3`. `js/tracker/store.js` owns tracker state
+under `trackerData_v2`. Both use `localStorage`, validate data at load/replace boundaries,
+and notify subscribers after a successful in-memory update. The tracker surfaces a
+warning if persistence fails so an in-memory edit is not mistaken for a durable save.
+
+Input numbers are clamped to engine limits, integer-only values are rounded, drawdown and
+saving splits are normalized, duplicate or invalid phases are repaired, and malformed
+stored tracker records are discarded field by field. Stored formats have no migration or
+backward-compatibility promise; incompatible data may reset to defaults.
+
+Beginner and Expert are presentation modes over this same state. Hidden Expert settings
+remain active, and switching modes does not rewrite the plan.
+
+## Trackers
+
+The tracker domains are intentionally independent:
+
+- **Net Worth** stores accounts, monthly balance snapshots, and optional age/income
+  history. It calculates assets, liabilities, investable assets, account composition, and
+  PAW/AAW/UAW benchmarks (`AAW = age × income ÷ 10`, `PAW = 2 × AAW`,
+  `UAW = AAW ÷ 2`). Its bridge to the Planner sends only the latest mapped account
+  balances.
+- **Cashbook** stores transactions and explicitly opened months. Categories resolve to
+  income, transfer, saving, fixed, variable, or spending, with user overrides. Its bridge
+  always proposes trailing annual expenses. With positive income and at least three
+  months of history, it also proposes a savings rate and estimates gross income by
+  treating transaction income as take-home pay and applying the Profile's effective
+  income-tax rate.
+
+Trailing Cashbook figures use a contiguous calendar window ending in the latest covered
+month, including empty covered months instead of annualizing only active months. In each
+month, explicitly marked saving is used when present; otherwise income minus expenses is
+used. This supports histories that mix marked and inferred saving without dropping either
+kind.
+
+Rocket Money import accepts quoted CSV fields, validates dates and amounts, skips rows
+marked ignored, supports custom header mappings, and reports rejected rows. It only flips
+a debit-negative expense convention when the income/expense evidence is unambiguous;
+ambiguous expense signs are preserved, while income is always normalized positive.
+Import identity is occurrence-aware, so exact duplicate purchases in one source file are
+retained while re-importing that file remains idempotent.
+
+## Cloud sync
+
+Cloud sync is optional. Signed-out operation remains local-only. Firebase Authentication
+uses Google sign-in, and Firestore stores each user's data below `/users/{uid}`:
+
+```text
+/users/{uid}                         schema-v2 manifest
+/users/{uid}/state/plan              plan payload and revision
+/users/{uid}/state/tracker           tracker metadata, digest, chunk count, revision
+/users/{uid}/trackerChunks/cNNNN     ordered tracker JSON chunks
+```
+
+Plan and tracker revisions advance independently in Firestore transactions. Tracker
+metadata and all new chunks are written atomically; obsolete trailing chunks are deleted
+only as part of the same revision advance. The client validates exact document shapes,
+chunk order/count, size limits, and a digest before adopting remote tracker data.
+
+`firestore.rules` requires authentication, restricts every read and write to the matching
+UID, enforces schema v2 and monotonically increasing revisions, validates timestamps and
+field shapes, and rejects unrecognized paths. Rule tests exercise these invariants in the
+Firestore emulator.
+
+The client keeps per-user sync revision/hash metadata in `localStorage`. Changes are
+debounced, dirty state survives reloads, and temporary failures retry with bounded
+backoff. A remote revision mismatch becomes an explicit conflict; the user must choose
+the current cloud copy or the current local copy. The app does not use silent
+last-writer-wins conflict resolution.
+
+On a new cloud account, non-empty local data is uploaded only after confirmation. On an
+existing account, unchanged local state adopts the cloud data. Invalid or incomplete
+cloud state is never applied locally.
+
+Anonymous and signed-in local snapshots are isolated under separate keys. Account
+switches restore only the destination account's snapshot, and sign-out restores the
+anonymous snapshot. If unsynced account data cannot be preserved locally, the switch or
+sign-out is stopped instead of discarding it.
+
+The public Firebase configuration in `js/firebase-config.js` identifies the project; it
+is not a credential. Authentication and Security Rules enforce access. The compat SDK is
+vendored under `js/vendor/` and loaded lazily during browser idle time or immediately when
+sign-in begins. If configuration or SDK loading is unavailable, the application remains
+local-only.
+
+### Firebase setup
+
+1. In the [Firebase console](https://console.firebase.google.com), enable Google under
+   **Authentication** and create a Firestore database.
+2. Add each deployed host under **Authentication → Settings → Authorized domains**.
+   Add `127.0.0.1` as well if local sign-in will use the loopback command below.
+3. Deploy the repository rules:
+
+   ```powershell
+   npx firebase deploy --only firestore:rules
+   ```
+
+Never leave the database in Firestore test mode.
+
+## Offline and browser security
+
+All fonts and signed-out core runtime libraries are vendored. Google sign-in additionally
+loads its resolver from `apis.google.com`. On HTTPS, `sw.js` installs a versioned cache
+containing the application shell and core assets. Same-origin requests go to the network
+first so a deployment is not pinned behind stale cached code, then fall back to the cache
+offline. Successful responses refresh the cache. Service workers register on HTTPS and
+loopback development origins, but not on `file:` or arbitrary plain-HTTP origins.
+
+`index.html` applies a restrictive Content Security Policy and referrer policy. Scripts
+are external, the Firebase network allowlist is explicit, object embedding is disabled,
+and the small early security script synchronously hides framed rendering.
+
+The UI uses labeled controls, keyboard-operable disclosure buttons and hints, visible
+focus states, text summaries for canvas charts, and a modal that traps focus while open
+and restores it on close. These are implementation safeguards, not a claim of formal
+accessibility certification.
 
 ## Running locally
 
-No build step. Open `index.html` directly, or serve the folder:
+The application has no production build step. Open `index.html` directly for local-only
+use, or serve the repository on loopback:
 
+```powershell
+python -m http.server 8000 --bind 127.0.0.1
 ```
-python -m http.server 8000
+
+Then open `http://127.0.0.1:8000/`. Firebase sign-in requires an authorized `http(s)://`
+origin, so it is unavailable from `file:`. The service worker registers on this trusted
+loopback origin to support local testing as well as on production HTTPS.
+
+## Tests and CI
+
+Install test tooling with `npm ci`. The complete suite requires Node, Chrome/Chromium,
+and Java for the Firestore emulator:
+
+```powershell
+npm test
 ```
 
-Cloud sign-in (below) needs an `http(s)://` origin, so use the served URL
-rather than opening the file directly when testing it.
+The scripts can also run separately:
 
-## Cloud sync (optional Google sign-in)
+- `npm run test:unit` checks syntax plus engine, plan-store, and tracker behavior.
+- `npm run test:browser` runs the UI smoke suite, mocked cloud lifecycle suite, and
+  vendored Firebase/config load check in isolated headless-Chrome profiles. It also
+  serves and boots the production `index.html` over a loopback HTTP server and fails on
+  missing required assets. A secure-context browser test installs the service worker,
+  removes a stale release cache, verifies network-first behavior, and loads the cached
+  application shell with the server offline. Fixture pages use in-memory storage and
+  disable themselves outside local or `file:` origins.
+- `npm run test:rules` runs authenticated-isolation, schema, revision, chunk, and cleanup
+  tests against the Firestore emulator.
 
-Signed out, the app is exactly as before — everything lives in `localStorage`
-on the one device. Signing in with Google saves the whole state (plan +
-tracker) to Firestore so it survives a cache clear and follows you across
-devices.
+GitHub Actions runs verification for pushes and pull requests. A successful push to
+`main` builds the static site with GitHub Pages and deploys it after tests pass.
 
-- **Identity:** Firebase Authentication with Google — the app never sees or
-  stores a password.
-- **Storage:** one document per user at `/users/{uid}` holding the app state,
-  encrypted at rest and in transit by Google.
-- **Isolation:** `firestore.rules` lets a signed-in user read/write only their
-  own document; everything else is denied.
-- **Model:** on sign-in, an existing account document is the source of truth
-  and is adopted locally; a first sign-in seeds the account from local data.
-  While signed in, edits are debounced and pushed up. `localStorage` remains
-  the offline cache underneath.
+## Repository layout
 
-The Firebase web config in `js/firebase-config.js` is **not a secret** — it
-only names the project; access is governed by Auth + the Security Rules. It is
-safe to commit and serve publicly. The SDK is vendored in `js/vendor/` so the
-app still loads offline (sync simply resumes when back online). If the config
-or SDK is absent, the cloud layer disables itself and the app runs local-only.
-
-### One-time Firebase project setup
-
-1. In the [Firebase console](https://console.firebase.google.com), enable
-   **Authentication → Google**, and create a **Firestore** database.
-2. Deploy the rules in `firestore.rules` (paste them into the console's
-   Firestore **Rules** tab, or run `firebase deploy --only firestore:rules`).
-   Do this even if you started Firestore in "test mode" — test mode allows
-   anyone to read/write and expires after 30 days.
-3. Under **Authentication → Settings → Authorized domains**, add your host
-   (`localhost` is added automatically; add `xavier-triplett.github.io` for the
-   published site).
-
-## Tests
-
-- `node tests/engine.test.js` — engine unit tests, including dollar-exact parity
-  with the original app's algorithm when the newer features are neutralized
-- `node tests/tracker.test.js` — tracker core: net-worth series, cashflow
-  grouping, savings metrics, Rocket Money CSV parsing edge cases
-- `tests/smoke.html` — full UI smoke test in a real browser (open it, read the verdict at the top), e.g.:
-
-  ```
-  chrome --headless=new --dump-dom --virtual-time-budget=12000 tests/smoke.html | grep -A 30 smoke-result
-  ```
-- `tests/firebase-load.test.html` — confirms the vendored Firebase SDK and the
-  real config initialize in a browser (`FBLOAD PASS`).
-- `tests/cloud.test.html` — drives the sign-in → seed / adopt / debounced-push
-  sync flow against an in-memory mock Firebase (`CLOUD PASS`).
-
-## Layout
-
-```
-index.html                    shell page
-favicon.svg                   the stamp, as an icon
-seed.example.js               seed config template (copy to git-ignored seed.js)
-js/engine.js                  pure calculation core (browser + Node)
-js/store.js                   plan state + localStorage persistence
-js/schema.js                  input field definitions
-js/forms.js                   form builders (field groups, phases, drawdown)
-js/app.js                     boot + tab switching + recompute-on-change
-js/cloud.js                   optional Google sign-in + Firestore sync (guarded)
-js/firebase-config.js         Firebase web config (public by design)
-firestore.rules               per-user Firestore Security Rules
-js/vendor/                    vendored Chart.js, Flatpickr, Firebase compat SDK
-js/tracker/engine.js          tracker calculation core + benchmarks (browser + Node)
-js/tracker/rocketmoney.js     Rocket Money CSV parser (browser + Node)
-js/tracker/store.js           tracker state + persistence + seeding
-js/tracker/kit.js             shared tracker widgets: plan bridge, import, chart theme
-js/ui/ledger.js               the planner interface
-js/ui/tracker-observatory.js  Net Worth tab — benchmarks, composition, editable grid
-js/ui/tracker-cashbook.js     Cashbook tab — monthly budgeting journal
-js/ui/tracker-settings.js     Categories tab — category kinds + CSV import column mapping
-js/ui/guide.js                Guide tab — plain-language walkthrough + glossary (static)
-css/                          base + profile + ledger + tracker + guide stylesheets
-css/fonts.css, css/fonts/     vendored fonts (Fraunces, Public Sans, IBM Plex Mono; OFL)
-tests/                        unit tests + browser smoke test
+```text
+index.html                         application shell and security policy
+sw.js                              offline application cache
+favicon.svg                        site icon
+js/engine.js                       retirement calculation and Monte Carlo
+js/store.js                        normalized plan state and persistence
+js/schema.js                       input and disclosure definitions
+js/forms.js                        reusable form and phase editors
+js/app.js                          boot, navigation, modal, recomputation, sync status
+js/security.js                     early framed-page guard
+js/cloud.js                        revision-safe optional cloud sync
+js/firebase-config.js              public Firebase project configuration
+js/firebase-loader.js              lazy vendored Firebase SDK loader
+js/tracker/engine.js               tracker calculations and benchmarks
+js/tracker/rocketmoney.js          CSV parser and import normalization
+js/tracker/store.js                validated tracker state and persistence
+js/tracker/kit.js                  tracker charts, import, and Planner bridge helpers
+js/ui/                             Profile, Planner, trackers, Categories, and Guide
+js/vendor/                         Chart.js, Flatpickr, Firebase compat bundles
+css/                               application styles and vendored fonts
+firestore.rules                    per-user schema and concurrency enforcement
+firebase.json, .firebaserc         Firebase emulator/deploy configuration
+tests/                             Node, browser, cloud, and Firestore rules tests
+.github/workflows/ci.yml           verification and GitHub Pages deployment
+package.json                       test scripts and development dependencies
+THIRD_PARTY_NOTICES.md             bundled dependency and font notices
 ```
