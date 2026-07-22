@@ -69,6 +69,10 @@
         // Effective tax rates on withdrawals
         taxDeferredRate: 15,      // % — ordinary income on 401k/IRA draws
         taxTaxableRate: 10,       // % — capital gains on brokerage draws
+        // Extra charge on tax-deferred draws before standardRetireAge
+        // (the IRS rate is 10%; set 0 for Rule of 55 / 72(t) plans).
+        // Roth draws are modeled penalty-free, as contribution withdrawals.
+        earlyPenaltyRate: 10,     // %
 
         // Monte Carlo
         volatility: 15,           // % annual std-dev of returns
@@ -144,6 +148,10 @@
         var taxT = Math.min(0.99, pct(d.taxTaxableRate));
         var keepD = 1 - taxD;                 // net kept per gross dollar drawn
         var keepT = 1 - taxT;
+        // Deferred draws before the access age also pay the early penalty
+        var taxDB = Math.min(0.99, taxD + pct(d.earlyPenaltyRate));
+        var keepDB = 1 - taxDB;
+        var keepIncome = 1 - pct(d.incomeTaxRate); // take-home share of gross
 
         var drawTB = pct(d.drawTaxableBridge), drawDB = pct(d.drawDeferredBridge), drawFB = pct(d.drawFreeBridge);
         var drawTS = pct(d.drawTaxableStd), drawDS = pct(d.drawDeferredStd), drawFS = pct(d.drawFreeStd);
@@ -163,6 +171,7 @@
 
         var rows = lean ? null : [];
         var bridgeFailureAge = null;
+        var firstInfeasibleAge = null;
         var ranOutOfMoneyAge = null;
         var standardSuccess = false;
         var standardCoverage = 0;
@@ -227,6 +236,12 @@
                 totalMatch += match;
                 totalContributed += cD + cF + cT;
 
+                // Feasibility: gross splits into taxes, savings and spending,
+                // so savings + expenses must fit inside income after tax.
+                if (firstInfeasibleAge === null && totalSavings + curExpenses > curIncome * keepIncome + 1) {
+                    firstInfeasibleAge = age;
+                }
+
                 // Ramp savings rate
                 if (curSavingsRate < maxSavingsRate) {
                     curSavingsRate += savingsRateStep;
@@ -245,15 +260,18 @@
                 } else if (netNeed > 0) {
                     // Preferred split. Rates are effective taxes, so a net
                     // dollar of spending costs gross = net / (1 - rate).
+                    // Deferred draws before the access age pay the early
+                    // penalty on top of the effective tax.
+                    var keepDNow = isStandardAge ? keepD : keepDB;
                     var gotNet = 0;
 
                     g = netNeed * (isStandardAge ? drawTS : drawTB) / keepT;
                     if (g > curTaxable) g = curTaxable;
                     curTaxable -= g; wdT += g; gotNet += g * keepT;
 
-                    g = netNeed * (isStandardAge ? drawDS : drawDB) / keepD;
+                    g = netNeed * (isStandardAge ? drawDS : drawDB) / keepDNow;
                     if (g > curDeferred) g = curDeferred;
-                    curDeferred -= g; wdD += g; gotNet += g * keepD;
+                    curDeferred -= g; wdD += g; gotNet += g * keepDNow;
 
                     g = netNeed * (isStandardAge ? drawFS : drawFB);
                     if (g > curFree) g = curFree;
@@ -278,9 +296,9 @@
                             curTaxable -= g; wdT += g; shortfall -= g * keepT;
                         }
                         if (curDeferred > 0.01) {
-                            g = chunk / keepD;
+                            g = chunk / keepDNow;
                             if (g > curDeferred) g = curDeferred;
-                            curDeferred -= g; wdD += g; shortfall -= g * keepD;
+                            curDeferred -= g; wdD += g; shortfall -= g * keepDNow;
                         }
                         if (curFree > 0.01) {
                             g = chunk;
@@ -301,7 +319,7 @@
                     }
 
                     wdGross = wdT + wdD + wdF;
-                    wdTaxes = wdT * taxT + wdD * taxD;
+                    wdTaxes = wdT * taxT + wdD * (1 - keepDNow);
                     wdNet = wdGross - wdTaxes;
                     totalTaxes += wdTaxes;
                 }
@@ -323,10 +341,11 @@
                 expensesAtRetirement = curExpenses / (1 + inflation);
             }
 
-            // Traditional readiness check at the standard access age:
-            // can tax-advantaged money alone cover expenses (net of SS) at SWR?
+            // Traditional readiness check at the standard access age: can
+            // tax-advantaged money alone cover expenses at SWR? Deferred is
+            // weighted by its withdrawal tax so 100% means 100% after tax.
             if (age === d.standardRetireAge || (age === d.currentAge && d.currentAge > d.standardRetireAge)) {
-                var safeAmount = (curDeferred + curFree) * swr;
+                var safeAmount = (curDeferred * keepD + curFree) * swr;
                 var expenseNeed = curExpenses / (1 + inflation);
                 if (expenseNeed < 1) expenseNeed = 1;
                 standardCoverage = (safeAmount / expenseNeed) * 100;
@@ -367,6 +386,7 @@
                 netWorthAtRetirement: netWorthAtRetirement,
                 expensesAtRetirement: expensesAtRetirement,
                 bridgeFailureAge: bridgeFailureAge,
+                firstInfeasibleAge: firstInfeasibleAge,
                 ranOutOfMoneyAge: ranOutOfMoneyAge,
                 standardSuccess: standardSuccess,
                 standardCoverage: standardCoverage,
@@ -408,10 +428,18 @@
 
         var simOpts = { returns: returnsArr, lean: true, totalsOut: null, startYear: options.startYear };
 
+        // Lognormal draws calibrated so the MEDIAN path compounds at exactly
+        // marketReturn: without this, i.i.d. arithmetic draws make the median
+        // simulation trail the flat projection by ~vol^2/2 per year (volatility
+        // drag), a gap the user cannot tell apart from bad luck. Also keeps
+        // every draw above -100%.
+        if (mean < -0.99) mean = -0.99;
+        var lnMean = Math.log(1 + mean);
+        var lnVol = vol / (1 + mean);
+
         for (var i = 0; i < sims; i++) {
             for (var j = 0; j < years; j++) {
-                var draw = mean + vol * normal();
-                returnsArr[j] = draw > -0.9 ? draw : -0.9;
+                returnsArr[j] = Math.exp(lnMean + lnVol * normal()) - 1;
             }
             simOpts.totalsOut = matrix.subarray(i * years, (i + 1) * years);
             var result = simulate(inputs, phases, simOpts);

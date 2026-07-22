@@ -36,7 +36,7 @@
                 blurb: 'When you want out.',
                 fields: [
                     { key: 'retireAge', label: 'Early retirement age', step: 1, min: 25, max: 80 },
-                    { key: 'standardRetireAge', label: 'Penalty-free deferred access age', step: 1, min: 50, max: 75, hint: 'Usually 59½ (modeled as 60). Enter 55 only if your employer plan qualifies for the Rule of 55.' }
+                    { key: 'standardRetireAge', label: 'Penalty-free deferred access age', step: 1, min: 50, max: 75, hint: 'Usually 59½ (modeled as 60). Enter 55 only if your employer plan qualifies for the Rule of 55, and note that rule covers only that employer\'s 401k, not IRAs or Roth IRAs, while this age unlocks every account in the model.' }
                 ]
             },
             {
@@ -92,7 +92,8 @@
                 blurb: 'Effective rates applied when you draw money out.',
                 fields: [
                     { key: 'taxDeferredRate', label: 'Tax-deferred draws', unit: '%', step: 1, hint: 'Effective income tax on 401k / IRA withdrawals' },
-                    { key: 'taxTaxableRate', label: 'Brokerage draws', unit: '%', step: 1, hint: 'Effective capital-gains rate. Roth draws are tax-free.' }
+                    { key: 'taxTaxableRate', label: 'Brokerage draws', unit: '%', step: 1, hint: 'Applied to the whole withdrawal, not just the gain. If about half of a typical draw is gains taxed at 15%, enter 7-8%. Roth draws are tax-free.' },
+                    { key: 'earlyPenaltyRate', label: 'Early-withdrawal penalty', unit: '%', step: 1, min: 0, max: 50, hint: 'Extra charge on tax-deferred draws before the penalty-free access age (the IRS rate is 10%). Set 0 for Rule of 55 or 72(t)/SEPP plans. Roth draws are modeled penalty-free, as contribution withdrawals.' }
                 ]
             },
             {

@@ -22,6 +22,7 @@ check('zero defaults: dollar fields are zero',
 check('zero defaults: full age span', blank.rows.length === 95 - 30 + 1);
 check('zero defaults: FI number is zero', blank.summary.fiNumber === 0);
 check('zero defaults: never marked broke', blank.summary.ranOutOfMoneyAge === null && blank.summary.bridgeFailureAge === null);
+check('zero defaults: nothing infeasible', blank.summary.firstInfeasibleAge === null);
 check('zero defaults: no NaN in totals', blank.rows.every(r => Number.isFinite(r.total)));
 check('zero defaults: MC succeeds trivially', E.monteCarlo({}, null, { seed: 1 }).successRate === 1);
 
@@ -95,7 +96,7 @@ function legacySim(d, phases) {
 const legacyInputs = Object.assign({}, DEMO, {
     employerMatchRate: 0, employerMatchCap: 0,
     limit401k: 1e9, limitIRA: 1e9, catchUp401k: 0, catchUpIRA: 0,
-    taxDeferredRate: 0, taxTaxableRate: 0
+    taxDeferredRate: 0, taxTaxableRate: 0, earlyPenaltyRate: 0
 });
 const phases = [{ id: 1, age: 30, deferred: 50, free: 50, taxable: 0 }];
 const mine = E.simulate(legacyInputs, phases, { startYear: 2026 });
@@ -133,6 +134,28 @@ check('super catch-up applies at 60',
 check('regular catch-up resumes at 64',
     Math.abs(at60.rows[4].contrib.deferred - (E.DEFAULTS.limit401k + E.DEFAULTS.catchUp401k) * Math.pow(1.03, 4)) < 1,
     '=' + at60.rows[4].contrib.deferred);
+
+// 3e. Early-withdrawal penalty on pre-access-age deferred draws
+{
+    const draws = { drawTaxableBridge: 0, drawDeferredBridge: 100, drawFreeBridge: 0 };
+    const pen = E.simulate(Object.assign({}, DEMO, draws), phases, {});
+    const noPen = E.simulate(Object.assign({}, DEMO, draws, { earlyPenaltyRate: 0 }), phases, {});
+    check('early penalty raises bridge taxes', pen.summary.totalTaxes > noPen.summary.totalTaxes);
+    check('early penalty lowers ending NW', pen.summary.endingNetWorth < noPen.summary.endingNetWorth);
+    const firstBridge = pen.rows.find(r => r.phase === 'bridge' && r.wd.deferred > 0 && r.wd.taxable === 0);
+    check('bridge deferred draw taxed at rate + penalty',
+        firstBridge && Math.abs(firstBridge.wd.taxes / firstBridge.wd.deferred - 0.25) < 1e-9,
+        firstBridge && String(firstBridge.wd.taxes / firstBridge.wd.deferred));
+    const post = pen.rows.find(r => r.phase === 'standard' && r.wd.deferred > 0);
+    check('standard-age deferred draw pays no penalty',
+        post && post.wd.taxes < post.wd.deferred * 0.25);
+}
+
+// 3f. Feasibility: savings + expenses must fit inside income after tax
+check('DEMO plan flags infeasible saving at 31', base.summary.firstInfeasibleAge === 31,
+    '=' + base.summary.firstInfeasibleAge);
+check('modest plan stays feasible',
+    E.simulate(Object.assign({}, DEMO, { expenses: 30000 }), phases, {}).summary.firstInfeasibleAge === null);
 
 // 3c. Cash on hand is inert net worth: never grown, never drawn
 {
@@ -179,6 +202,17 @@ check('regular catch-up resumes at 64',
 }
 
 // 4. Monte Carlo
+// Median calibration: with no cashflows, the median simulated estate should
+// track the deterministic compound path (lognormal draws, median = mean input)
+{
+    const growOnly = Object.assign({}, E.DEFAULTS, { retireAge: 96, standardRetireAge: 96, balDeferred: 100000 });
+    const det = E.simulate(growOnly, null, {}).summary.endingNetWorth;
+    const mcGrow = E.monteCarlo(growOnly, null, { seed: 7 });
+    check('MC median tracks deterministic growth',
+        mcGrow.endBalance.p50 > det * 0.85 && mcGrow.endBalance.p50 < det * 1.15,
+        'p50=' + Math.round(mcGrow.endBalance.p50) + ' det=' + Math.round(det));
+}
+
 const mc = E.monteCarlo(DEMO, phases, { seed: 42 });
 check('MC success rate in (0,1]', mc.successRate > 0 && mc.successRate <= 1, '=' + mc.successRate);
 check('MC bands ordered p10<=p50<=p90', mc.bands.p10.every((v, i) => v <= mc.bands.p50[i] + 1 && mc.bands.p50[i] <= mc.bands.p90[i] + 1));

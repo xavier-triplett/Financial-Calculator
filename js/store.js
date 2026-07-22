@@ -48,16 +48,29 @@
         }
         if (saved.profile && saved.profile.birthDate) st.profile.birthDate = String(saved.profile.birthDate);
         if (saved.phases && saved.phases.length) {
-            var phases = [];
+            // Fallback ids start above every explicit id so they can't collide
+            var maxId = 0;
+            saved.phases.forEach(function (p) {
+                var n = Number(p && p.id);
+                if (isFinite(n) && n > maxId) maxId = n;
+            });
+            var phases = [], seenIds = {};
             for (var i = 0; i < saved.phases.length; i++) {
                 var p = saved.phases[i];
                 if (!p || typeof p !== 'object' || !isFinite(Number(p.age))) continue;
+                var pid = Number(p.id);
+                if (!isFinite(pid) || seenIds[pid]) pid = ++maxId;
+                seenIds[pid] = true;
+                // Splits clamp to the same invariant updatePhase enforces:
+                // deferred + free within 100, taxable the remainder
+                var def = Math.min(100, Math.max(0, Number(p.deferred) || 0));
+                var fre = Math.min(100 - def, Math.max(0, Number(p.free) || 0));
                 phases.push({
-                    id: isFinite(Number(p.id)) ? Number(p.id) : phases.length + 1,
+                    id: pid,
                     age: Number(p.age),
-                    deferred: Number(p.deferred) || 0,
-                    free: Number(p.free) || 0,
-                    taxable: Number(p.taxable) || 0,
+                    deferred: def,
+                    free: fre,
+                    taxable: 100 - def - fre,
                     isLocked: !!p.isLocked
                 });
             }
@@ -151,7 +164,7 @@
                 var rem = 100 - phase.deferred - phase.free;
                 phase.taxable = rem < 0 ? 0 : rem;
             } else {
-                phase[field] = v;
+                phase[field] = field === 'age' ? Math.max(0, v) : v;
             }
             commit();
         },
