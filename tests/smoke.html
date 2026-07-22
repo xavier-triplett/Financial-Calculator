@@ -89,6 +89,13 @@
             FireStore.setInput('income', 200000);
             var after = text('[data-el="nwAtRetire"]');
             check('reacts to input change', before !== after);
+
+            // Feasibility warning: savings + spending must fit take-home pay
+            check('feasibility warning hidden when plan fits',
+                document.querySelector('[data-el="infeasible"]').hidden === true);
+            FireStore.setInput('expenses', 160000); // 150k take-home < 50k savings + 160k spending
+            check('feasibility warning appears', document.querySelector('[data-el="infeasible"]').hidden === false);
+            FireStore.setInput('expenses', 0);
             FireStore.setInput('balDeferred', 175000);
             check('money field regroups from store',
                 document.querySelector('input[data-key="balDeferred"]').value === '175,000');
@@ -178,6 +185,14 @@
             check('bad phase dropped, string fields coerced',
                 FireStore.get().phases.length === 1 && FireStore.get().phases[0].age === 40 &&
                 FireStore.get().phases[0].deferred === 30 && FireStore.get().phases[0].isLocked === false);
+            localStorage.setItem('fireData_v3', JSON.stringify({
+                inputs: {},
+                phases: [{ id: 1, age: 30, deferred: 80, free: 80, taxable: 40 }]
+            }));
+            FireStore.init();
+            check('adopted phase splits clamp to 100',
+                FireStore.get().phases[0].deferred === 80 && FireStore.get().phases[0].free === 20 &&
+                FireStore.get().phases[0].taxable === 0);
             FireStore.reset();
 
             /* ---------------- Tracker ---------------- */
@@ -203,7 +218,11 @@
                 ageIncome: { '2026-05': { age: 28, income: 180000 } },
                 txns: [
                     { id: 'x1', date: '2026-06-01', name: 'Paycheck', amount: 6000, category: 'Paychecks', account: 'Checking' },
-                    { id: 'x2', date: '2026-06-03', name: 'Grocer', amount: 120, category: 'Groceries', account: 'Card' }
+                    { id: 'x2', date: '2026-06-03', name: 'Grocer', amount: 120, category: 'Groceries', account: 'Card' },
+                    { id: 'x3', date: '2026-04-01', name: 'Paycheck', amount: 6000, category: 'Paychecks', account: 'Checking' },
+                    { id: 'x4', date: '2026-04-06', name: 'Grocer', amount: 100, category: 'Groceries', account: 'Card' },
+                    { id: 'x5', date: '2026-05-01', name: 'Paycheck', amount: 6000, category: 'Paychecks', account: 'Checking' },
+                    { id: 'x6', date: '2026-05-06', name: 'Grocer', amount: 110, category: 'Groceries', account: 'Card' }
                 ]
             });
             check('seedFrom accepts config', seeded === true);
@@ -250,7 +269,7 @@
 
             // Cashbook: statement, register, manual add/edit/delete
             nav('[data-view="cashbook"]');
-            check('cashbook spine renders months', document.querySelectorAll('.trk-spine-mo').length === 1);
+            check('cashbook spine renders months', document.querySelectorAll('.trk-spine-mo').length === 3);
             check('cashbook statement has stamp', document.querySelector('.trk-st-stamp') !== null);
             check('cashbook has txn form', document.querySelector('.trk-txnform') !== null);
             check('statement lists income by category', /Paychecks/.test(text('.trk-st-section')));
@@ -269,14 +288,14 @@
             check('no net worth data on cashbook', document.querySelector('.ui-cashbook .trk-grid') === null);
 
             var added = TrackerStore.addTxn({ date: '2026-06-10', name: 'Cafe', amount: 18.5, category: 'Dining & Drinks', account: 'Card' });
-            check('manual txn added', added !== null && TrackerStore.get().txns.length === 3);
+            check('manual txn added', added !== null && TrackerStore.get().txns.length === 7);
             TrackerStore.updateTxn(added.id, { amount: 20 });
             check('manual txn edited', TrackerStore.get().txns.filter(function (t) { return t.id === added.id; })[0].amount === 20);
             TrackerStore.removeTxn(added.id);
-            check('manual txn deleted', TrackerStore.get().txns.length === 2);
+            check('manual txn deleted', TrackerStore.get().txns.length === 6);
 
             var mo = TrackerStore.addCashMonth();
-            check('manual month opens', mo === '2026-07' && document.querySelectorAll('.trk-spine-mo').length === 2);
+            check('manual month opens', mo === '2026-07' && document.querySelectorAll('.trk-spine-mo').length === 4);
 
             // Rocket Money import merges without duplicating
             var csv = 'Date,Account Name,Institution Name,Name,Amount,Category,Ignored From\n' +
@@ -285,7 +304,7 @@
                 '2026-07-03,VentureOne,Capital One,Fred Meyer,84.20,Groceries,\n';
             var parsed = RocketMoney.parse(csv);
             check('csv parses 3 txns', parsed.txns.length === 3);
-            check('import merges', TrackerStore.importTxns(parsed.txns).added === 3 && TrackerStore.get().txns.length === 5);
+            check('import merges', TrackerStore.importTxns(parsed.txns).added === 3 && TrackerStore.get().txns.length === 9);
             check('re-import is a no-op', TrackerStore.importTxns(parsed.txns).added === 0);
 
             // Cashflow bridge scope: expenses/income only, buckets untouched
@@ -312,7 +331,9 @@
                 document.querySelector('.trk-st-title .ff-hint') !== null);
             check('stamp reflects estimated surplus', /Surplus/i.test(text('.trk-st-stamp')));
             document.querySelector('[data-month="2026-06"]').click();
-            check('months with real income are untouched', document.querySelector('.trk-est') === null);
+            // (the spine still marks the estimated August; the statement must not)
+            check('months with real income are untouched',
+                document.querySelector('[data-el="statement"] .trk-est') === null);
 
             // Marked savings contributions get their own section + verdict line
             var savTxn = TrackerStore.addTxn({ date: '2026-06-15', name: 'Vanguard', amount: 1000, category: 'Investments', account: 'Brokerage' });
