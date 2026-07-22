@@ -55,6 +55,8 @@
                 '</article>' +
             '</section>' +
 
+            '<p class="lg-infeasible" data-el="infeasible" hidden></p>' +
+
             '<div class="lg-columns">' +
                 '<aside class="lg-controls">' +
                     '<div class="lg-panel-title">Plan inputs</div>' +
@@ -228,10 +230,21 @@
             els.bridgeNote.textContent = 'You retire at or after the standard access age.';
         } else if (v.bridge.code === 'failed') {
             stamp(els.bridgeStamp, 'failed', 'Depleted ' + v.bridge.age);
-            els.bridgeNote.textContent = 'The brokerage runs dry at ' + v.bridge.age + '; retirement accounts are tapped early.';
+            els.bridgeNote.textContent = 'The brokerage runs dry at ' + v.bridge.age + '; retirement accounts are tapped early (deferred draws pay the early-withdrawal penalty).';
         } else {
             stamp(els.bridgeStamp, 'secure', 'Secure');
-            els.bridgeNote.textContent = 'The brokerage carries you to ' + inp.standardRetireAge + ' without touching retirement accounts.';
+            els.bridgeNote.textContent = (inp.drawDeferredBridge + inp.drawFreeBridge > 0)
+                ? 'Your drawdown mix funds the bridge; deferred draws before ' + inp.standardRetireAge + ' pay the early-withdrawal penalty.'
+                : 'The brokerage carries you to ' + inp.standardRetireAge + ' without touching retirement accounts.';
+        }
+
+        if (s.firstInfeasibleAge !== null) {
+            els.infeasible.hidden = false;
+            els.infeasible.textContent = 'Feasibility: from age ' + s.firstInfeasibleAge +
+                ', planned saving plus spending exceeds take-home pay (gross income less the effective income tax on the Profile tab). ' +
+                'The projection still shows those dollars being saved; lower the savings rate or spending to make the plan achievable.';
+        } else {
+            els.infeasible.hidden = true;
         }
 
         if (v.coast.code === 'broke') {

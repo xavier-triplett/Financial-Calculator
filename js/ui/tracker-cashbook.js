@@ -39,7 +39,11 @@
         els.actions.appendChild(K.importControl({ primary: true }));
         els.actions.appendChild(K.templateButton());
         var addMonth = U.el('button', { class: 'trk-btn', type: 'button', text: '+ Month' });
-        addMonth.addEventListener('click', function () { selMonth = TrackerStore.addCashMonth(); });
+        addMonth.addEventListener('click', function () {
+            // The commit re-renders before this assignment; render once more
+            selMonth = TrackerStore.addCashMonth();
+            update(TrackerStore.get());
+        });
         els.actions.appendChild(addMonth);
         var clear = U.el('button', { class: 'trk-btn trk-btn-danger', type: 'button', text: 'Clear data' });
         clear.addEventListener('click', function () {
@@ -54,9 +58,14 @@
         editingId = null;
     }
 
+    /* Raw transaction months, not aggregate months: a month holding only
+     * transfers has no spendByMonth entry but its rows must stay reachable. */
     function monthsOf(state) {
         var set = {};
-        E.txnMonths(state.txns).forEach(function (mo) { set[mo] = true; });
+        state.txns.forEach(function (t) {
+            var mo = E.monthKey(t.date);
+            if (mo) set[mo] = true;
+        });
         state.cashMonths.forEach(function (mo) { set[mo] = true; });
         return Object.keys(set).sort();
     }
@@ -77,12 +86,20 @@
     }
 
     function update(state) {
+        // Never rebuild under the user's fingers: a store commit while an
+        // input here is focused (e.g. a background cloud adopt) would wipe
+        // a half-typed form or search. The next commit catches up.
+        var a = document.activeElement;
+        if (a && (a.tagName === 'INPUT' || a.tagName === 'SELECT') && els.body && els.body.contains(a)) return;
         destroyCharts();
         if (datePicker) { datePicker.destroy(); datePicker = null; }
         if (!TrackerStore.hasCash()) {
             els.body.innerHTML = '';
             var addMonth = U.el('button', { class: 'trk-btn', type: 'button', text: 'Start first month' });
-            addMonth.addEventListener('click', function () { selMonth = TrackerStore.addCashMonth(); });
+            addMonth.addEventListener('click', function () {
+                selMonth = TrackerStore.addCashMonth();
+                update(TrackerStore.get());
+            });
             els.body.appendChild(K.emptyState('A blank cashbook',
                 'Import a Rocket Money CSV (or one you author from the template), open a month and write it by hand, or seed from your config file.',
                 [K.importControl({ primary: true }), K.templateButton(), addMonth, K.seedButton()]));
@@ -93,6 +110,9 @@
         var months = monthsOf(state);
         if (!selMonth || months.indexOf(selMonth) === -1) selMonth = months[months.length - 1];
         var agg = withEstIncome(state, selMonth, byMo[selMonth]) || ZERO_AGG;
+        // A filter for a category no longer in this month would silently show
+        // nothing while the select displays "All categories"
+        if (filter.cat && !agg.byCategory[filter.cat]) filter.cat = '';
 
         els.body.innerHTML =
             '<div class="trk-book">' +
@@ -130,7 +150,7 @@
             return '<button class="trk-spine-mo' + (mo === selMonth ? ' active' : '') + '" data-month="' + mo + '">' +
                 '<span class="trk-spine-label">' + E.monthLabel(mo) + '</span>' +
                 '<span class="trk-spine-saved ' + (saved >= 0 ? 'pos' : 'neg') + '">' +
-                    (agg ? (saved >= 0 ? '+' : '') + U.compact(saved) : 'empty') + '</span>' +
+                    (agg ? (saved >= 0 ? '+' : '') + U.compact(saved) + (agg.estIncome ? ' <em class="trk-est">est.</em>' : '') : 'empty') + '</span>' +
             '</button>';
         }).reverse().join('');
     }
@@ -159,7 +179,7 @@
                 (saved >= 0 ? 'Surplus' : 'Deficit') + '</div>';
 
         var incomeHint = agg.estIncome
-            ? ' <span class="ff-hint" tabindex="0" role="img" data-tooltip="No income transactions this month, so this is 1/12 of your estimated take-home: gross annual income (the Net Worth grid&rsquo;s income row or the Profile tab) less the effective income tax set on the Profile tab. Log a money-in transaction to use actuals.">i</span>'
+            ? ' <span class="ff-hint" tabindex="0" role="img" data-tooltip="No income transactions this month, so this is 1/12 of your estimated take-home: gross annual income (the Net Worth grid&rsquo;s income row or the Profile tab) less the effective income tax set on the Profile tab. Logging even one money-in transaction switches the whole month to actuals only.">i</span>'
             : '';
         return '<div class="trk-panel-head"><h2>' + E.monthLabel(selMonth) + '</h2>' +
             '<div class="trk-st-headtools">' + stampHTML +
@@ -267,7 +287,7 @@
             if (filter.cat && t.category !== filter.cat) return false;
             if (q && (t.name || '').toLowerCase().indexOf(q) === -1) return false;
             return true;
-        }).sort(function (a, b) { return a.date < b.date ? 1 : -1; });
+        }).sort(function (a, b) { return a.date < b.date ? 1 : a.date > b.date ? -1 : 0; });
 
         if (!list.length) { host.innerHTML = '<p class="trk-kpi-note">No transactions match.</p>'; return; }
 
@@ -276,13 +296,16 @@
             '</tr></thead><tbody>';
         list.forEach(function (t) {
             var kind = E.categoryKind(t.category);
+            // Income: green with a +, unless negative (a reversal, shown red).
+            // Expenses: negative amounts are refunds, shown green.
+            var amtCls = kind === 'income' ? (t.amount >= 0 ? 'pos' : 'neg') : (t.amount < 0 ? 'pos' : '');
             html += '<tr>' +
                 '<td class="num dim">' + t.date.slice(5) + '</td>' +
                 '<td>' + escapeAttr(t.name) + '</td>' +
                 '<td><span class="trk-badge trk-badge-' + kind + '">' + escapeAttr(t.category) + '</span></td>' +
                 '<td class="dim">' + escapeAttr(t.account || '') + '</td>' +
-                '<td class="num ' + (kind === 'income' ? 'pos' : (t.amount < 0 ? 'pos' : '')) + '">' +
-                    (kind === 'income' ? '+' : '') + U.money(t.amount) + '</td>' +
+                '<td class="num ' + amtCls + '">' +
+                    (kind === 'income' && t.amount >= 0 ? '+' : '') + U.money(t.amount) + '</td>' +
                 '<td class="trk-rowbtns"><button class="trk-mini" data-edit="' + t.id + '">edit</button>' +
                     '<button class="trk-x" style="visibility:visible" data-del-txn="' + t.id + '" title="Delete">&times;</button></td>' +
             '</tr>';
@@ -298,7 +321,9 @@
             data: {
                 labels: take.map(function (mo) { return E.monthLabel(mo, true); }),
                 datasets: [
-                    { label: 'In', data: aggs.map(function (a) { return a.income; }), backgroundColor: K.alpha(K.PALETTE.income, 0.7) },
+                    // Estimated-income months get a paler In bar
+                    { label: 'In', data: aggs.map(function (a) { return a.income; }),
+                      backgroundColor: aggs.map(function (a) { return K.alpha(K.PALETTE.income, a.estIncome ? 0.3 : 0.7); }) },
                     { label: 'Out', data: aggs.map(function (a) { return a.expenses; }), backgroundColor: K.alpha(K.PALETTE.spending, 0.65) },
                     { label: 'Surplus', type: 'line', data: aggs.map(function (a) { return a.saved; }),
                       borderColor: K.PALETTE.ink, borderWidth: 1.8, pointRadius: 2, tension: 0.3, fill: false }
@@ -350,15 +375,23 @@
         els.body.querySelector('[data-el="form"]').addEventListener('click', function (e) {
             if (e.target.dataset.act === 'save') {
                 var f = readForm();
+                // The store notifies synchronously, so view state must be set
+                // BEFORE the commit or the re-render shows the old state (and
+                // a second Save click would duplicate the transaction)
                 if (editingId) {
-                    TrackerStore.updateTxn(editingId, f);
+                    var id = editingId;
                     editingId = null;
+                    TrackerStore.updateTxn(id, f);
                     FireApp.toast('Transaction updated');
-                } else if (TrackerStore.addTxn(f)) {
-                    selMonth = E.monthKey(f.date) || selMonth;
-                    FireApp.toast('Transaction added');
                 } else {
-                    FireApp.toast('A date and an amount are required');
+                    var prev = selMonth;
+                    selMonth = E.monthKey(f.date) || prev;
+                    if (TrackerStore.addTxn(f)) {
+                        FireApp.toast('Transaction added');
+                    } else {
+                        selMonth = prev; // invalid form: nothing committed or rendered
+                        FireApp.toast('A date and an amount are required');
+                    }
                 }
             } else if (e.target.dataset.act === 'cancel') {
                 editingId = null;

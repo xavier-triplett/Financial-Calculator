@@ -83,15 +83,23 @@ check('trailing savings rate', Math.abs(trail.savingsRate - (10000 - 2830) / 100
 const top = T.topMerchants(txns, '2025-01', 3);
 check('top merchant is mortgage', top[0].name === 'Mr. Cooper');
 
-// ---------- PAW / AAW / UAW benchmarks (values from the workbook's Dashboard Data) ----------
+// A month holding only transfers never materializes as an aggregate, so it
+// cannot dilute trailing() or read as a "+$0" month
+const transferOnly = txns.concat([{ date: '2025-03-10', name: 'CC Payment', amount: 900, category: 'Credit Card Payment' }]);
+check('transfer-only month has no aggregate', T.spendByMonth(transferOnly)['2025-03'] === undefined);
+check('transfer-only month absent from trailing', T.trailing(transferOnly, 12).months === 2);
+
+// ---------- PAW / AAW / UAW benchmarks (The Millionaire Next Door: age × income / 10) ----------
 const b25 = T.benchmarks(25, 170000);
-check('AAW at 25/170k', Math.abs(b25.aaw - 170000) < 0.01, '=' + b25.aaw);
-check('PAW = 2×AAW', Math.abs(b25.paw - 340000) < 0.01);
-check('UAW = AAW/2', Math.abs(b25.uaw - 85000) < 0.01);
+check('AAW at 25/170k', Math.abs(b25.aaw - 425000) < 0.01, '=' + b25.aaw);
+check('PAW = 2×AAW', Math.abs(b25.paw - 850000) < 0.01);
+check('UAW = AAW/2', Math.abs(b25.uaw - 212500) < 0.01);
 const b26 = T.benchmarks(26, 173000);
-check('AAW at 26/173k', Math.abs(b26.aaw - 187416.6667) < 0.01, '=' + b26.aaw);
+check('AAW at 26/173k', Math.abs(b26.aaw - 449800) < 0.01, '=' + b26.aaw);
 const b27 = T.benchmarks(27, 180000);
-check('PAW at 27/180k', Math.abs(b27.paw - 422608.6957) < 0.01, '=' + b27.paw);
+check('PAW at 27/180k', Math.abs(b27.paw - 972000) < 0.01, '=' + b27.paw);
+check('AAW stays sane at 50+', Math.abs(T.benchmarks(50, 100000).aaw - 500000) < 0.01 &&
+    Math.abs(T.benchmarks(60, 100000).aaw - 600000) < 0.01);
 check('benchmarks null without inputs', T.benchmarks(0, 100000) === null && T.benchmarks(30, 0) === null);
 
 const benchState = {
@@ -105,7 +113,7 @@ const profState = { ageIncome: {}, profile: { birthMonth: '1998-04', annualIncom
 check('profile fallback derives age', T.ageIncomeAt(profState, '2026-06').age === 28);
 check('no data → null', T.ageIncomeAt({ ageIncome: {}, profile: {} }, '2026-06') === null);
 const bs = T.benchmarkSeries(benchState, ['2024-03', '2024-04']);
-check('benchmarkSeries aligned + flagged', bs.any === true && bs.paw.length === 2 && Math.abs(bs.paw[0] - 340000) < 0.01);
+check('benchmarkSeries aligned + flagged', bs.any === true && bs.paw.length === 2 && Math.abs(bs.paw[0] - 850000) < 0.01);
 
 // income-only entries (the grid's income row) resolve age from the profile
 const mixState = {
