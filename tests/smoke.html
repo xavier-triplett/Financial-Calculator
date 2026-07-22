@@ -88,7 +88,7 @@
             check('non-money field stays plain number',
                 document.querySelector('input[data-key="marketReturn"]').value === '7' &&
                 document.querySelector('input[data-key="marketReturn"]').type === 'number');
-            document.querySelector('[data-group="buckets"]').classList.add('open'); // reveal so it can focus
+            FireForms.setGroupOpen(document.querySelector('[data-group="buckets"]'), true);
             defEl.focus();
             check('money field bares number on focus', defEl.value === '150000');
             defEl.blur();
@@ -192,9 +192,10 @@
                 phases: [{ id: 1, age: 'junk', deferred: 50 }, { id: 2, age: '40', deferred: '30', free: 10 }]
             }));
             FireStore.init();
-            check('bad phase dropped, string fields coerced',
-                FireStore.get().phases.length === 1 && FireStore.get().phases[0].age === 40 &&
-                FireStore.get().phases[0].deferred === 30 && FireStore.get().phases[0].isLocked === false);
+            check('bad phase dropped and baseline restored',
+                FireStore.get().phases.length === 2 && FireStore.get().phases[0].age === 30 &&
+                FireStore.get().phases[0].isLocked === true && FireStore.get().phases[1].age === 40 &&
+                FireStore.get().phases[1].deferred === 30 && FireStore.get().phases[1].taxable === 60);
             localStorage.setItem('fireData_v3', JSON.stringify({
                 inputs: {},
                 phases: [{ id: 1, age: 30, deferred: 80, free: 80, taxable: 40 }]
@@ -327,8 +328,11 @@
             // Profile's effective income tax (default 25%).
             var tr = TrackerEngine.trailing(TrackerStore.get().txns);
             check('cashflow bridge grosses up income', FireStore.get().inputs.income === Math.round(tr.annualIncome / 0.75));
-            check('savings rate is saved over gross', FireStore.get().inputs.savingsRate ===
-                Math.round(Math.max(0, (tr.annualIncome - tr.annualExpenses) / (tr.annualIncome / 0.75)) * 100));
+            var proposedSavingsRate = Math.round(Math.max(0, tr.annualSaved / (tr.annualIncome / 0.75)) * 100);
+            check('savings rate uses annualized saved dollars over gross', FireStore.get().inputs.savingsRate ===
+                Math.min(proposedSavingsRate, FireStore.get().inputs.maxSavingsRate));
+            check('normalized cashflow bridge stays in sync',
+                TrackerKit.proposals(TrackerStore.get(), 'cashflow').length === 0);
 
             // Expense-only months estimate take-home income: gross annual ÷ 12
             // less the effective income tax (180k × 75% → $11,250/mo)
@@ -350,7 +354,8 @@
             check('savings section renders', /Savings contributions/.test(text('.trk-page')));
             check('marked savings verdict line shows', /Marked as savings/.test(text('.trk-page')));
             var trM = TrackerEngine.trailing(TrackerStore.get().txns);
-            check('trailing prefers marked savings', trM.savedIsMarked === true && trM.annualSaving > 0);
+            check('partial marking keeps other months surplus',
+                trM.savedMethod === 'mixed' && trM.savedIsMarked === false && trM.annualSaved > 0);
             TrackerStore.removeTxn(savTxn.id);
             check('no marked line without contributions', !/Marked as savings/.test(text('.trk-page')));
 

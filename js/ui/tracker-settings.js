@@ -9,6 +9,7 @@
     var E = global.TrackerEngine;
     var K = global.TrackerKit;
     var els = {};
+    var pendingUpdate = false;
 
     var KIND_LABELS = {
         income: 'Income',
@@ -47,14 +48,30 @@
         els = { root: root, body: root.querySelector('[data-el="body"]'), actions: root.querySelector('[data-el="actions"]') };
         els.actions.appendChild(K.templateButton());
         wire();
+        els.body.addEventListener('focusout', function () {
+            if (!pendingUpdate) return;
+            setTimeout(function () {
+                if (!els.body) return;
+                var active = document.activeElement;
+                if (active && active.tagName === 'INPUT' && els.body.contains(active)) return;
+                pendingUpdate = false;
+                update(TrackerStore.get());
+            }, 0);
+        });
     }
 
     function knownCategories(state) {
-        var set = {};
-        for (var kind in E.KIND) E.KIND[kind].forEach(function (c) { set[c] = true; });
-        state.txns.forEach(function (t) { if (t.category) set[t.category] = true; });
-        Object.keys(state.categoryKinds).forEach(function (c) { set[c] = true; });
-        return Object.keys(set).sort(function (a, b) {
+        var byFold = {};
+        function add(category, preferred) {
+            var cat = String(category || '').trim();
+            if (!cat) return;
+            var key = cat.toLowerCase();
+            if (!byFold[key] || preferred) byFold[key] = cat;
+        }
+        for (var kind in E.KIND) E.KIND[kind].forEach(function (c) { add(c, false); });
+        state.txns.forEach(function (t) { add(t.category, false); });
+        Object.keys(state.categoryKinds).forEach(function (c) { add(c, true); });
+        return Object.keys(byFold).map(function (key) { return byFold[key]; }).sort(function (a, b) {
             return a.toLowerCase() < b.toLowerCase() ? -1 : 1;
         });
     }
@@ -67,9 +84,11 @@
     }
 
     function catRows(state) {
+        var customByFold = {};
+        Object.keys(state.categoryKinds).forEach(function (cat) { customByFold[cat.toLowerCase()] = true; });
         return knownCategories(state).map(function (cat) {
             var kind = E.categoryKind(cat);
-            var custom = Object.prototype.hasOwnProperty.call(state.categoryKinds, cat);
+            var custom = !!customByFold[cat.toLowerCase()];
             return '<tr>' +
                 '<td>' + escapeHtml(cat) + (custom ? ' <em class="trk-est">custom</em>' : '') + '</td>' +
                 '<td><span class="trk-badge trk-badge-' + kind + '">' + KIND_LABELS[kind] + '</span></td>' +
@@ -81,7 +100,11 @@
     function update(state) {
         // Don't rebuild under a focused text field (add-category / CSV headers)
         var a = document.activeElement;
-        if (a && a.tagName === 'INPUT' && els.root.contains(a)) return;
+        if (a && a.tagName === 'INPUT' && els.root.contains(a)) {
+            pendingUpdate = true;
+            return;
+        }
+        pendingUpdate = false;
 
         els.body.innerHTML =
             '<div class="trk-set-cols">' +
@@ -100,7 +123,8 @@
                         '<button class="trk-btn trk-btn-primary" type="button" data-act="addCat">Set kind</button>' +
                     '</div>' +
                     '<div class="trk-regwrap"><table class="trk-register">' +
-                        '<thead><tr><th>Category</th><th>Counts as</th><th>Change</th></tr></thead>' +
+                        '<caption class="trk-sr-only">Category classification rules</caption>' +
+                        '<thead><tr><th scope="col">Category</th><th scope="col">Counts as</th><th scope="col">Change</th></tr></thead>' +
                         '<tbody>' + catRows(state) + '</tbody>' +
                     '</table></div>' +
                 '</section>' +
@@ -141,10 +165,10 @@
     }
 
     function escapeHtml(s) {
-        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
-    function unmount() { els = {}; }
+    function unmount() { pendingUpdate = false; els = {}; }
 
     (global.TrackerUIs = global.TrackerUIs || []).push({
         id: 'categories', name: 'Categories', tag: 'Bookkeeping rules & CSV import',

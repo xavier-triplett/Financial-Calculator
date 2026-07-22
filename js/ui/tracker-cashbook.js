@@ -15,8 +15,10 @@
     var filter = { q: '', cat: '' };
     var editingId = null;
     var datePicker = null;
+    var pendingUpdate = false;
+    var searchTimer = null;
 
-    var ZERO_AGG = { income: 0, saving: 0, fixed: 0, variable: 0, spending: 0, expenses: 0, saved: 0, byCategory: {}, count: 0 };
+    var ZERO_AGG = { income: 0, saving: 0, fixed: 0, variable: 0, spending: 0, expenses: 0, saved: 0, byCategory: {}, count: 0, incomeCount: 0, savingCount: 0 };
 
     function template() {
         return '' +
@@ -45,23 +47,34 @@
             update(TrackerStore.get());
         });
         els.actions.appendChild(addMonth);
-        var clear = U.el('button', { class: 'trk-btn trk-btn-danger', type: 'button', text: 'Clear data' });
+        var clear = U.el('button', { class: 'trk-btn trk-btn-danger', type: 'button', text: 'Clear cashbook' });
         clear.addEventListener('click', function () {
-            FireApp.confirm('Clear all tracked data (net worth and cashbook)?', function () {
-                TrackerStore.reset();
-                FireApp.toast('Tracked data cleared');
-            }, 'Clear data');
+            FireApp.confirm('Clear all Cashbook months and transactions? Net worth data will be kept.', function () {
+                TrackerStore.resetCash();
+                FireApp.toast('Cashbook data cleared');
+            }, 'Clear cashbook');
         });
         els.actions.appendChild(clear);
         selMonth = null;
         filter = { q: '', cat: '' };
         editingId = null;
+        pendingUpdate = false;
+        els.body.addEventListener('focusout', function () {
+            if (!pendingUpdate) return;
+            setTimeout(function () {
+                if (!els.body) return;
+                var active = document.activeElement;
+                if (active && (active.tagName === 'INPUT' || active.tagName === 'SELECT') && els.body.contains(active)) return;
+                pendingUpdate = false;
+                update(TrackerStore.get());
+            }, 0);
+        });
     }
 
     /* Raw transaction months, not aggregate months: a month holding only
      * transfers has no spendByMonth entry but its rows must stay reachable. */
     function monthsOf(state) {
-        var set = {};
+        var set = Object.create(null);
         state.txns.forEach(function (t) {
             var mo = E.monthKey(t.date);
             if (mo) set[mo] = true;
@@ -76,7 +89,7 @@
      * less the Profile's effective income tax. Marked "est."; actual income
      * transactions (already net deposits) always win. */
     function withEstIncome(state, mo, agg) {
-        if (!agg || agg.count === 0 || agg.income > 0) return agg;
+        if (!agg || agg.count === 0 || agg.incomeCount > 0) return agg;
         var ai = E.ageIncomeAt(state, mo, K.sharedProfile());
         if (!ai) return agg;
         var keep = 1 - (Number(FireStore.get().inputs.incomeTaxRate) || 0) / 100;
@@ -88,9 +101,13 @@
     function update(state) {
         // Never rebuild under the user's fingers: a store commit while an
         // input here is focused (e.g. a background cloud adopt) would wipe
-        // a half-typed form or search. The next commit catches up.
+        // a half-typed form or search. A queued refresh runs after focus leaves.
         var a = document.activeElement;
-        if (a && (a.tagName === 'INPUT' || a.tagName === 'SELECT') && els.body && els.body.contains(a)) return;
+        if (a && (a.tagName === 'INPUT' || a.tagName === 'SELECT') && els.body && els.body.contains(a)) {
+            pendingUpdate = true;
+            return;
+        }
+        pendingUpdate = false;
         destroyCharts();
         if (datePicker) { datePicker.destroy(); datePicker = null; }
         if (!TrackerStore.hasCash()) {
@@ -101,28 +118,33 @@
                 update(TrackerStore.get());
             });
             els.body.appendChild(K.emptyState('A blank cashbook',
-                'Import a Rocket Money CSV (or one you author from the template), open a month and write it by hand, or seed from your config file.',
-                [K.importControl({ primary: true }), K.templateButton(), addMonth, K.seedButton()]));
+                'Import a Rocket Money CSV (or one you author from the template), or open a month and write it by hand.',
+                [K.importControl({ primary: true }), K.templateButton(), addMonth]));
             return;
         }
 
         var byMo = E.spendByMonth(state.txns);
         var months = monthsOf(state);
+        var rawCounts = {};
+        state.txns.forEach(function (t) {
+            var mo = E.monthKey(t.date);
+            if (mo) rawCounts[mo] = (rawCounts[mo] || 0) + 1;
+        });
         if (!selMonth || months.indexOf(selMonth) === -1) selMonth = months[months.length - 1];
         var agg = withEstIncome(state, selMonth, byMo[selMonth]) || ZERO_AGG;
         // A filter for a category no longer in this month would silently show
         // nothing while the select displays "All categories"
-        if (filter.cat && !agg.byCategory[filter.cat]) filter.cat = '';
+        if (filter.cat && !Object.prototype.hasOwnProperty.call(agg.byCategory, filter.cat)) filter.cat = '';
 
         els.body.innerHTML =
             '<div class="trk-book">' +
-                '<nav class="trk-spine" data-el="spine">' + spineHTML(state, byMo, months) + '</nav>' +
+                '<nav class="trk-spine" aria-label="Cashbook months" data-el="spine">' + spineHTML(state, byMo, months, rawCounts) + '</nav>' +
                 '<main class="trk-page">' +
-                    '<section class="trk-panel" data-el="statement">' + statementHTML(agg) + '</section>' +
+                    '<section class="trk-panel" data-el="statement">' + statementHTML(agg, rawCounts[selMonth] || 0) + '</section>' +
                     '<section class="trk-panel">' +
                         '<div class="trk-panel-head"><h2>Register</h2><div class="trk-reg-filters">' +
-                            '<input class="trk-search" type="search" placeholder="Search merchant…" value="' + escapeAttr(filter.q) + '" data-el="q">' +
-                            '<select class="trk-select" data-el="cat">' + catOptions(agg) + '</select>' +
+                            '<input class="trk-search" type="search" aria-label="Search merchants" placeholder="Search merchant…" value="' + escapeAttr(filter.q) + '" data-el="q">' +
+                            '<select class="trk-select" aria-label="Filter by category" data-el="cat">' + catOptions(agg) + '</select>' +
                         '</div></div>' +
                         '<div class="trk-txnform" data-el="form">' + formHTML(state) + '</div>' +
                         '<div class="trk-regwrap" data-el="register"></div>' +
@@ -131,7 +153,7 @@
                 '<aside class="trk-book-side">' +
                     '<section class="trk-panel">' +
                         '<div class="trk-panel-head"><h2>In &amp; out</h2><span class="trk-panel-note">last 12 months</span></div>' +
-                        '<div class="trk-chart trk-chart-sm"><canvas data-el="flowChart"></canvas></div>' +
+                        '<div class="trk-chart trk-chart-sm"><canvas data-el="flowChart" role="img" aria-label="Monthly income, expenses, and surplus"></canvas></div>' +
                     '</section>' +
                     '<section class="trk-panel trk-bridge" data-el="bridge"></section>' +
                 '</aside>' +
@@ -139,23 +161,25 @@
 
         renderRegister(state);
         K.renderBridge(els.body.querySelector('[data-el="bridge"]'), state, { scope: 'cashflow' });
-        makeFlowChart(state, byMo, months);
+        makeFlowChart(state, byMo);
         wire(state);
     }
 
-    function spineHTML(state, byMo, months) {
+    function spineHTML(state, byMo, months, rawCounts) {
         return months.map(function (mo) {
             var agg = withEstIncome(state, mo, byMo[mo]);
             var saved = agg ? agg.saved : 0;
-            return '<button class="trk-spine-mo' + (mo === selMonth ? ' active' : '') + '" data-month="' + mo + '">' +
+            var emptyLabel = rawCounts[mo] ? 'transfers only' : 'empty';
+            return '<button class="trk-spine-mo' + (mo === selMonth ? ' active' : '') + '" type="button" data-month="' + escapeAttr(mo) + '"' +
+                (mo === selMonth ? ' aria-current="page"' : '') + '>' +
                 '<span class="trk-spine-label">' + E.monthLabel(mo) + '</span>' +
                 '<span class="trk-spine-saved ' + (saved >= 0 ? 'pos' : 'neg') + '">' +
-                    (agg ? (saved >= 0 ? '+' : '') + U.compact(saved) + (agg.estIncome ? ' <em class="trk-est">est.</em>' : '') : 'empty') + '</span>' +
+                    (agg ? (saved >= 0 ? '+' : '') + U.compact(saved) + (agg.estIncome ? ' <em class="trk-est">est.</em>' : '') : emptyLabel) + '</span>' +
             '</button>';
         }).reverse().join('');
     }
 
-    function statementHTML(agg) {
+    function statementHTML(agg, rawCount) {
         var sections = E.categoryRows(agg);
         var saved = agg.saved;
         var rate = agg.income > 0 ? (saved / agg.income) * 100 : null;
@@ -174,7 +198,7 @@
         }
 
         var stampHTML = agg.count === 0
-            ? '<div class="trk-panel-note">an open page — add the first transaction below</div>'
+            ? '<div class="trk-panel-note">' + (rawCount ? 'transfers are excluded from the statement' : 'an open page — add the first transaction below') + '</div>'
             : '<div class="trk-st-stamp ' + (saved >= 0 ? 'trk-stamp-pos' : 'trk-stamp-neg') + '">' +
                 (saved >= 0 ? 'Surplus' : 'Deficit') + '</div>';
 
@@ -196,14 +220,14 @@
             section('Variable expenses', sections.variable, agg.variable) +
             section('Spending', sections.spending, agg.spending) +
             '<div class="trk-st-verdict">' +
-                '<span>Surplus this month</span>' +
+                '<span>' + (saved >= 0 ? 'Surplus' : 'Deficit') + ' this month</span>' +
                 '<strong class="' + (saved >= 0 ? 'pos' : 'neg') + '">' + (saved >= 0 ? '+' : '') + U.money(saved) +
                 (rate !== null ? ' <em>(' + rate.toFixed(0) + '% of income)</em>' : '') + '</strong>' +
             '</div>' +
             (agg.saving > 0
                 ? '<div class="trk-st-verdict trk-st-saving">' +
                     '<span>Marked as savings' +
-                        ' <span class="ff-hint" tabindex="0" role="img" data-tooltip="Transactions in savings-kind categories (Savings, Investments, Retirement Contributions, or any category you mark as Savings on the Categories tab). The plan bridge prefers this over assuming the whole surplus was saved.">i</span>' +
+                        ' <span class="ff-hint" tabindex="0" role="img" data-tooltip="Transactions in savings-kind categories (Savings, Investments, Retirement Contributions, or any category you mark as Savings on the Categories tab). The plan bridge uses marked savings for those months and surplus for unmarked months.">i</span>' +
                     '</span>' +
                     '<strong class="pos">' + U.money(agg.saving) +
                     (agg.income > 0 ? ' <em>(' + ((agg.saving / agg.income) * 100).toFixed(0) + '% of income)</em>' : '') + '</strong>' +
@@ -215,7 +239,7 @@
     /* Money-out suggestions only — money-in categories come from the
      * direction select's own list. */
     function knownCategories(state) {
-        var set = {};
+        var set = Object.create(null);
         state.txns.forEach(function (t) {
             if (E.categoryKind(t.category) !== 'income') set[t.category] = true;
         });
@@ -230,7 +254,9 @@
      * with the expense suggestions; money in offers the income categories
      * (built-ins plus anything marked income on the Categories tab). */
     function incomeCategories(state) {
-        var set = { 'Income': true, 'Other Income': true };
+        var set = Object.create(null);
+        set.Income = true;
+        set['Other Income'] = true;
         state.txns.forEach(function (t) { if (E.categoryKind(t.category) === 'income') set[t.category] = true; });
         var ck = state.categoryKinds || {};
         Object.keys(ck).forEach(function (c) { if (ck[c] === 'income') set[c] = true; });
@@ -241,11 +267,11 @@
         if (dir === 'in') {
             var cats = incomeCategories(state);
             if (t && E.categoryKind(t.category) === 'income' && cats.indexOf(t.category) === -1) cats.unshift(t.category);
-            return '<select data-f="category">' + cats.map(function (c) {
+            return '<select data-f="category" aria-label="Income category">' + cats.map(function (c) {
                 return '<option value="' + escapeAttr(c) + '"' + (t && t.category === c ? ' selected' : '') + '>' + escapeAttr(c) + '</option>';
             }).join('') + '</select>';
         }
-        return '<input type="text" data-f="category" list="trk-cats" placeholder="Category" value="' +
+        return '<input type="text" data-f="category" aria-label="Expense or savings category" list="trk-cats" placeholder="Category" value="' +
             (t ? escapeAttr(t.category) : '') + '">';
     }
 
@@ -258,15 +284,15 @@
         }).join('') + '</datalist>';
 
         return datalist +
-            '<input type="date" data-f="date" value="' + (t ? t.date : selMonth + '-15') + '">' +
-            '<select data-f="dir" title="Money in or out">' +
+            '<input type="date" data-f="date" aria-label="Transaction date" value="' + (t ? escapeAttr(t.date) : escapeAttr(selMonth + '-15')) + '">' +
+            '<select data-f="dir" aria-label="Money in or out">' +
                 '<option value="out"' + (dir === 'out' ? ' selected' : '') + '>&minus; Money out</option>' +
                 '<option value="in"' + (dir === 'in' ? ' selected' : '') + '>+ Money in</option>' +
             '</select>' +
-            '<input type="text" data-f="name" placeholder="Merchant" value="' + (t ? escapeAttr(t.name) : '') + '">' +
-            '<input type="text" inputmode="decimal" data-f="amount" placeholder="Amount" value="' + (t ? t.amount : '') + '">' +
+            '<input type="text" data-f="name" aria-label="Merchant or description" placeholder="Merchant" value="' + (t ? escapeAttr(t.name) : '') + '">' +
+            '<input type="text" inputmode="decimal" data-f="amount" aria-label="Transaction amount" placeholder="Amount" value="' + (t ? t.amount : '') + '">' +
             '<span class="trk-catwrap" data-el="catwrap">' + catControl(dir, t, state) + '</span>' +
-            '<input type="text" data-f="account" placeholder="Account" value="' + (t ? escapeAttr(t.account || '') : '') + '">' +
+            '<input type="text" data-f="account" aria-label="Account" placeholder="Account" value="' + (t ? escapeAttr(t.account || '') : '') + '">' +
             '<button class="trk-btn trk-btn-primary" type="button" data-act="save">' + (t ? 'Save' : 'Add') + '</button>' +
             (t ? '<button class="trk-btn" type="button" data-act="cancel">Cancel</button>' : '');
     }
@@ -291,8 +317,8 @@
 
         if (!list.length) { host.innerHTML = '<p class="trk-kpi-note">No transactions match.</p>'; return; }
 
-        var html = '<table class="trk-register"><thead><tr>' +
-            '<th>Date</th><th>Merchant</th><th>Category</th><th>Account</th><th class="num">Amount</th><th></th>' +
+        var html = '<table class="trk-register"><caption class="trk-sr-only">Transactions for ' + escapeAttr(E.monthLabel(selMonth)) + '</caption><thead><tr>' +
+            '<th scope="col">Date</th><th scope="col">Merchant</th><th scope="col">Category</th><th scope="col">Account</th><th class="num" scope="col">Amount</th><th scope="col">Actions</th>' +
             '</tr></thead><tbody>';
         list.forEach(function (t) {
             var kind = E.categoryKind(t.category);
@@ -306,15 +332,15 @@
                 '<td class="dim">' + escapeAttr(t.account || '') + '</td>' +
                 '<td class="num ' + amtCls + '">' +
                     (kind === 'income' && t.amount >= 0 ? '+' : '') + U.money(t.amount) + '</td>' +
-                '<td class="trk-rowbtns"><button class="trk-mini" data-edit="' + t.id + '">edit</button>' +
-                    '<button class="trk-x" style="visibility:visible" data-del-txn="' + t.id + '" title="Delete">&times;</button></td>' +
+                '<td class="trk-rowbtns"><button class="trk-mini" type="button" data-edit="' + escapeAttr(t.id) + '" aria-label="Edit ' + escapeAttr(t.name) + '">edit</button>' +
+                    '<button class="trk-x trk-x-visible" type="button" data-del-txn="' + escapeAttr(t.id) + '" aria-label="Delete ' + escapeAttr(t.name) + '">&times;</button></td>' +
             '</tr>';
         });
         host.innerHTML = html + '</tbody></table>';
     }
 
-    function makeFlowChart(state, byMo, months) {
-        var take = months.slice(-12);
+    function makeFlowChart(state, byMo) {
+        var take = E.monthWindow(state.txns, 12, state.cashMonths);
         var aggs = take.map(function (mo) { return withEstIncome(state, mo, byMo[mo]) || ZERO_AGG; });
         charts.flow = new Chart(els.body.querySelector('[data-el="flowChart"]').getContext('2d'), {
             type: 'bar',
@@ -341,7 +367,7 @@
         if (dateEl) {
             var yr = new Date().getFullYear();
             datePicker = U.datePicker(dateEl, {
-                dateFormat: 'Y-m-d', disableMobile: true, yearRange: [yr - 10, yr + 1]
+                dateFormat: 'Y-m-d', disableMobile: true, yearRange: [yr - 50, yr + 2]
             });
         }
 
@@ -354,10 +380,15 @@
             update(TrackerStore.get());
         });
         var q = els.body.querySelector('[data-el="q"]');
-        q.addEventListener('input', U.debounce(function () {
-            filter.q = q.value;
-            renderRegister(TrackerStore.get());
-        }, 150));
+        q.addEventListener('input', function () {
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(function () {
+                searchTimer = null;
+                if (!els.body || !document.contains(q)) return;
+                filter.q = q.value;
+                renderRegister(TrackerStore.get());
+            }, 150);
+        });
         els.body.querySelector('[data-el="cat"]').addEventListener('change', function (e) {
             filter.cat = e.target.value;
             renderRegister(TrackerStore.get());
@@ -375,14 +406,29 @@
         els.body.querySelector('[data-el="form"]').addEventListener('click', function (e) {
             if (e.target.dataset.act === 'save') {
                 var f = readForm();
+                if (!E.validDate(f.date) || f.amount === null || !Number.isFinite(f.amount)) {
+                    FireApp.toast('Enter a valid date and amount');
+                    return;
+                }
+                if (f.dir === 'out' && E.categoryKind(f.category) === 'income') {
+                    FireApp.toast('Choose Money in for an income category');
+                    return;
+                }
                 // The store notifies synchronously, so view state must be set
                 // BEFORE the commit or the re-render shows the old state (and
                 // a second Save click would duplicate the transaction)
                 if (editingId) {
                     var id = editingId;
+                    var priorMonth = selMonth;
                     editingId = null;
-                    TrackerStore.updateTxn(id, f);
-                    FireApp.toast('Transaction updated');
+                    selMonth = E.monthKey(f.date);
+                    if (TrackerStore.updateTxn(id, f)) {
+                        FireApp.toast('Transaction updated');
+                    } else {
+                        editingId = id;
+                        selMonth = priorMonth;
+                        FireApp.toast('Transaction could not be updated');
+                    }
                 } else {
                     var prev = selMonth;
                     selMonth = E.monthKey(f.date) || prev;
@@ -390,7 +436,7 @@
                         FireApp.toast('Transaction added');
                     } else {
                         selMonth = prev; // invalid form: nothing committed or rendered
-                        FireApp.toast('A date and an amount are required');
+                        FireApp.toast('Enter a valid date and amount');
                     }
                 }
             } else if (e.target.dataset.act === 'cancel') {
@@ -435,7 +481,7 @@
     }
 
     function escapeAttr(s) {
-        return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+        return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
     function destroyCharts() {
@@ -443,6 +489,9 @@
     }
 
     function unmount() {
+        clearTimeout(searchTimer);
+        searchTimer = null;
+        pendingUpdate = false;
         destroyCharts();
         if (datePicker) { datePicker.destroy(); datePicker = null; }
         els = {};

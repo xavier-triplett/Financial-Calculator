@@ -115,7 +115,7 @@
                 out.push({ key: 'balCash', label: 'Cash on hand', from: inputs.balCash, to: Math.round(b.cash) });
             }
         } else {
-            var t = E.trailing(state.txns);
+            var t = E.trailing(state.txns, 12, state.cashMonths);
             if (t) {
                 var span = ' (trailing ' + t.months + ' mo)';
                 out.push({ key: 'expenses', label: 'Annual expenses' + span, from: inputs.expenses, to: Math.round(t.annualExpenses) });
@@ -128,19 +128,30 @@
                     var gross = keep > 0 ? t.annualIncome / keep : t.annualIncome;
                     var takeHomeHint = 'Bank transactions only see take-home pay: 401k / HSA payroll deductions are invisible here. Log them as Savings transactions, or set the plan input by hand.';
                     out.push({ key: 'income', label: 'Annual gross income' + span, from: inputs.income, to: Math.round(gross), hint: takeHomeHint });
-                    // Marked savings contributions beat the surplus assumption
-                    var savedAnnual = t.savedIsMarked ? t.annualSaving : t.annualIncome - t.annualExpenses;
-                    out.push({ key: 'savingsRate', label: t.savedIsMarked ? 'Savings rate (marked)' : 'Savings rate (surplus)',
-                        from: inputs.savingsRate, to: Math.round(Math.max(0, savedAnnual / gross) * 100), pct: true, hint: takeHomeHint });
+                    var method = t.savedMethod === 'marked' ? 'marked' : t.savedMethod === 'mixed' ? 'marked + surplus' : 'surplus';
+                    out.push({ key: 'savingsRate', label: 'Savings rate (' + method + ')',
+                        from: inputs.savingsRate, to: Math.round(Math.max(0, t.annualSaved / gross) * 100), pct: true, hint: takeHomeHint });
                 }
             }
+        }
+        if (global.FireEngine && typeof FireEngine.normalizeInputs === 'function') {
+            var patch = {};
+            out.forEach(function (proposal) { patch[proposal.key] = proposal.to; });
+            var normalized = FireEngine.normalizeInputs(Object.assign({}, inputs, patch));
+            out.forEach(function (proposal) { proposal.to = normalized[proposal.key]; });
         }
         return out.filter(function (p) { return p.from !== p.to; });
     }
 
     function applyProposals(state, scope) {
         var list = proposals(state, scope);
-        list.forEach(function (p) { FireStore.setInput(p.key, p.to); });
+        if (list.length && typeof FireStore.setInputs === 'function') {
+            var patch = {};
+            list.forEach(function (p) { patch[p.key] = p.to; });
+            FireStore.setInputs(patch);
+        } else {
+            list.forEach(function (p) { FireStore.setInput(p.key, p.to); });
+        }
         return list.length;
     }
 
@@ -165,11 +176,12 @@
                 // never actually fund the FI number. Today's dollars on both
                 // sides of the ratio.
                 var market = b.deferred + b.free + b.taxable;
-                var pct = Math.min(100, (market / target) * 100);
+                var pct = (market / target) * 100;
+                var barPct = Math.max(0, Math.min(100, pct));
                 html += '<div class="trk-fi">' +
                     '<div class="trk-fi-row"><span>Invested today</span><strong>' + U.compact(market) + '</strong></div>' +
                     '<div class="trk-fi-row"><span>FI target (today&rsquo;s $)</span><strong>' + U.compact(target) + '</strong></div>' +
-                    '<div class="trk-fi-bar"><span style="width:' + pct.toFixed(1) + '%"></span></div>' +
+                    '<div class="trk-fi-bar"><span style="width:' + barPct.toFixed(1) + '%"></span></div>' +
                     '<div class="trk-fi-pct">' + pct.toFixed(1) + '% of the way · plan retires at ' + ctx.retireAge +
                     ' · ' + (ctx.successRate * 100).toFixed(0) + '% Monte Carlo</div>' +
                 '</div>';
@@ -211,19 +223,38 @@
         opts = opts || {};
         var wrap = U.el('span', { class: 'trk-import' });
         var btn = U.el('button', { class: 'trk-btn' + (opts.primary ? ' trk-btn-primary' : ''), type: 'button', text: opts.label || 'Import Rocket Money CSV' });
-        var input = U.el('input', { type: 'file', accept: '.csv,text/csv', style: 'display:none' });
+        var input = U.el('input', { type: 'file', accept: '.csv,text/csv', style: 'display:none', 'aria-label': 'Choose transaction CSV' });
 
         function handleFiles(files) {
             if (!files || !files.length) return;
+            if (files[0].size > 15 * 1024 * 1024) {
+                FireApp.toast('Import failed: CSV files must be 15 MB or smaller');
+                return;
+            }
             var reader = new FileReader();
             reader.onload = function () {
                 var res = RocketMoney.parse(reader.result, { columns: TrackerStore.get().csvColumns });
                 if (res.error) { FireApp.toast('Import failed: ' + res.error); return; }
-                var merged = TrackerStore.importTxns(res.txns);
-                FireApp.toast('Imported ' + merged.added + ' transactions' +
-                    (merged.duplicates ? ' (' + merged.duplicates + ' already present)' : '') +
-                    (res.skipped ? ' · ' + res.skipped + ' rows skipped' : ''));
+                if (!res.txns.length) {
+                    FireApp.toast('Import found no valid transactions' + (res.skipped ? ' (' + res.skipped + ' rows skipped)' : ''));
+                    return;
+                }
+                var sign = res.signAmbiguous
+                    ? 'Expense signs are ambiguous and will be kept as written.'
+                    : res.flipped ? 'Debit-negative amounts will be normalized.' : 'Expense-positive amounts were detected.';
+                var invalid = res.skipped - (res.ignored || 0);
+                var summary = 'Review import: ' + res.txns.length + ' valid transaction' + (res.txns.length === 1 ? '' : 's') + '. ' + sign +
+                    (res.ignored ? ' ' + res.ignored + ' ignored row' + (res.ignored === 1 ? '' : 's') + ' excluded.' : '') +
+                    (invalid ? ' ' + invalid + ' invalid row' + (invalid === 1 ? '' : 's') + ' will be skipped.' : '');
+                FireApp.confirm(summary, function () {
+                    var merged = TrackerStore.importTxns(res.txns);
+                    FireApp.toast('Imported ' + merged.added + ' transactions' +
+                        (merged.duplicates ? ' (' + merged.duplicates + ' already present)' : '') +
+                        (merged.rejected ? ' · ' + merged.rejected + ' rejected' : '') +
+                        (!merged.persisted ? ' · not saved to browser storage' : ''));
+                }, 'Import transactions');
             };
+            reader.onerror = function () { FireApp.toast('Import failed: the CSV could not be read'); };
             reader.readAsText(files[0]);
         }
 
@@ -267,17 +298,6 @@
         return box;
     }
 
-    /* "Seed my data" button — only exists when a seed.js config is present. */
-    function seedButton() {
-        if (!global.TrackerSeed) return null;
-        var btn = U.el('button', { class: 'trk-btn', type: 'button', text: 'Seed from config' });
-        btn.addEventListener('click', function () {
-            if (TrackerStore.seedFrom(global.TrackerSeed)) FireApp.toast('Seeded from config');
-            else FireApp.toast('Seed config is missing accounts/snapshots');
-        });
-        return btn;
-    }
-
     global.TrackerKit = {
         PALETTE: PALETTE,
         setTheme: setTheme,
@@ -292,8 +312,7 @@
         renderBridge: renderBridge,
         importControl: importControl,
         templateButton: templateButton,
-        emptyState: emptyState,
-        seedButton: seedButton
+        emptyState: emptyState
     };
 
 })(typeof window !== 'undefined' ? window : globalThis);
