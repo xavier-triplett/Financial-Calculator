@@ -88,7 +88,11 @@
         var d1 = n > 1 ? nw - s.netWorth[n - 2] : null;
         var d12 = n > 12 ? nw - s.netWorth[n - 13] : (n > 1 ? nw - s.netWorth[0] : null);
         var ctx = K.planContext();
-        var fiPct = n && ctx.fiNumber > 0 ? (s.investable[n - 1] / ctx.fiNumber) * 100 : null;
+        // Market buckets vs a today's-dollar target: cash is excluded (the
+        // plan holds it inert) and both sides share today's units.
+        var market = n ? s.byGroup.taxFree[n - 1] + s.byGroup.taxDeferred[n - 1] + s.byGroup.afterTax[n - 1] : 0;
+        var target = K.fiTargetToday();
+        var fiPct = n && target > 0 ? (market / target) * 100 : null;
         var ai = n ? E.ageIncomeAt(state, s.months[n - 1], K.sharedProfile()) : null;
         var verdict = wealthVerdict(nw, ai && E.benchmarks(ai.age, ai.income));
 
@@ -103,7 +107,7 @@
         html += kpi('Accumulator', verdict.label, verdict.note, verdict.cls);
         html += kpi('Progress to FI', fiPct === null ? '—' : fiPct.toFixed(1) + '%',
             fiPct === null ? 'the planner sets the target' :
-                U.compact(s.investable[n - 1]) + ' investable of ' + U.compact(ctx.fiNumber) + ' · plan retires at ' + ctx.retireAge);
+                U.compact(market) + ' invested of ' + U.compact(target) + ' in today&rsquo;s dollars · plan retires at ' + ctx.retireAge);
         return html + '</section>';
     }
 
@@ -142,7 +146,7 @@
                 '<aside class="trk-obs-side">' +
                     '<section class="trk-panel">' +
                         '<div class="trk-panel-head"><h2>Benchmark profile</h2></div>' +
-                        '<p class="trk-kpi-note" style="margin:0">' + profileSummary(state) + '</p>' +
+                        '<p class="trk-kpi-note" style="margin:0" data-el="profileSummary">' + profileSummary(state) + '</p>' +
                     '</section>' +
                     '<section class="trk-panel trk-bridge" data-el="bridge"></section>' +
                 '</aside>' +
@@ -277,6 +281,16 @@
         });
         var kpis = els.body.querySelector('[data-el="kpis"]');
         if (kpis) kpis.innerHTML = kpisHTML(state, s);
+        // The income row's inherited placeholders and the profile panel also
+        // derive from ageIncome, so refresh them too (skip the focused cell)
+        var profile = K.sharedProfile();
+        els.body.querySelectorAll('input[data-income-month]').forEach(function (inp) {
+            if (inp === document.activeElement) return;
+            var eff = E.ageIncomeAt(state, inp.getAttribute('data-income-month'), profile);
+            inp.placeholder = eff ? U.moneyStr(eff.income, true) : '—';
+        });
+        var ps = els.body.querySelector('[data-el="profileSummary"]');
+        if (ps) ps.innerHTML = profileSummary(state);
         feedCharts(state, s);
     }
 

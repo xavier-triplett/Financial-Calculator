@@ -108,6 +108,18 @@ html[data-theme="dark"] .ui-ledger .ff-phase-cell input:read-only { background: 
 .lg-stamp-partial { color: var(--amber); }
 .lg-stamp-na { color: var(--faint); transform: rotate(0deg); }
 
+.lg-infeasible {
+    margin: 14px 0 0;
+    padding: 10px 14px;
+    border: 1px solid var(--red);
+    border-left-width: 4px;
+    border-radius: 3px;
+    color: var(--red);
+    background: rgba(168, 58, 49, 0.06);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
 .lg-link {
     border: none; background: none; padding: 0;
     color: var(--steel); text-decoration: underline;
