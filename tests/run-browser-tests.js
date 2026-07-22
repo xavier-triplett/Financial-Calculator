@@ -198,7 +198,9 @@ async function main() {
         const port = hosted.server.address().port;
         const result = await chromeRun(`http://127.0.0.1:${port}/?browser-test=1`);
         const booted = /class="[^"]*pf-shell/.test(result.stdout) &&
-            result.stdout.includes('The Coast Ledger') && hosted.misses.length === 0;
+            result.stdout.includes('The Coast Ledger') &&
+            result.stdout.includes('Choose your retirement path') &&
+            result.stdout.includes('pf-path selected') && hosted.misses.length === 0;
         if (result.error || result.status !== 0 || !booted) {
             failed = true;
             console.error('index.html: FAIL');

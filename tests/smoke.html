@@ -66,6 +66,11 @@
             check('ledger mounts', document.querySelector('.lg-shell') !== null);
             check('bridge stamp populated', text('[data-el="bridgeStamp"]').length > 1);
             check('coast stamp populated', text('[data-el="coastStamp"]').length > 1);
+            check('default path is presented as Coast FIRE',
+                text('[data-el="planPath"]').includes('Coast FIRE') &&
+                text('[data-el="firstGoalLabel"]').toLowerCase().includes('coast'));
+            check('coasting years appear in the statement',
+                document.querySelectorAll('.lg-table tbody tr.st-coasting').length > 0);
             check('mc rate rendered', /%$/.test(text('[data-el="mcRate"]')));
             check('coast number rendered', /^\$/.test(text('[data-el="fiNumber"]')));
             check('table has all years', document.querySelectorAll('.lg-table tbody tr').length === 66);

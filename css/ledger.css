@@ -304,11 +304,13 @@ html[data-theme="dark"] .ui-ledger .ff-phase-cell input:read-only { background: 
 .lg-table .c-tax { color: var(--steel); }
 .lg-table .c-cash { color: var(--teal); }
 .lg-table tr.st-broke td { background: rgba(168, 58, 49, 0.07); }
+.lg-table tr.st-coasting td { background: color-mix(in srgb, var(--panel) 96%, var(--amber)); }
 .lg-table tr.st-bridge td { background: rgba(51, 96, 140, 0.045); }
 .lg-table tr.st-retired td { background: color-mix(in srgb, var(--panel) 94%, var(--green)); }
 .lg-match { color: var(--green); font-size: 10.5px; }
 .lg-status { font: 600 10px/1 "Public Sans", sans-serif; letter-spacing: 0.1em; text-transform: uppercase; }
 .lg-status.st-working { color: var(--faint); }
+.lg-status.st-coasting { color: var(--amber); }
 .lg-status.st-bridge { color: var(--steel); }
 .lg-status.st-retired { color: var(--green); }
 .lg-status.st-broke { color: var(--red); }

@@ -18,7 +18,7 @@
                 '<div class="lg-brand">' +
                     '<span class="lg-eyebrow">Private wealth projection</span>' +
                     '<h1>The Coast Ledger</h1>' +
-                    '<span class="lg-sub">Tax-deferred &middot; tax-free &middot; after-tax &mdash; one plan, three buckets</span>' +
+                    '<span class="lg-sub" data-el="planPath"></span>' +
                 '</div>' +
                 '<div class="lg-mast-right">' +
                     '<span class="lg-prepared">Prepared ' + FireApp.startYear() + '</span>' +
@@ -28,13 +28,13 @@
 
             '<section class="lg-verdicts">' +
                 '<article class="lg-verdict" data-v="bridge">' +
-                    '<span class="lg-eyebrow">Goal I &mdash; the bridge</span>' +
+                    '<span class="lg-eyebrow" data-el="firstGoalLabel">Goal I &mdash; the bridge</span>' +
                     '<span class="lg-v-range" data-el="bridgeRange"></span>' +
                     '<div class="lg-stamp" data-el="bridgeStamp">&mdash;</div>' +
                     '<p class="lg-v-note" data-el="bridgeNote"></p>' +
                 '</article>' +
                 '<article class="lg-verdict" data-v="coast">' +
-                    '<span class="lg-eyebrow">Goal II &mdash; the coast</span>' +
+                    '<span class="lg-eyebrow" data-el="secondGoalLabel">Goal II &mdash; retirement</span>' +
                     '<span class="lg-v-range" data-el="coastRange"></span>' +
                     '<div class="lg-stamp" data-el="coastStamp">&mdash;</div>' +
                     '<p class="lg-v-note" data-el="coastNote"></p>' +
@@ -225,21 +225,48 @@
         var s = results.sim.summary;
         var v = FireApp.verdicts();
         var inp = state.inputs;
+        var plan = FireSchema.planType(inp.planType);
+        var coastPlan = inp.planType === FireEngine.PLAN_TYPES.COAST;
+        var earlyPlan = inp.planType === FireEngine.PLAN_TYPES.EARLY;
 
-        els.bridgeRange.textContent = 'Age ' + inp.retireAge + ' → ' + inp.standardRetireAge;
-        els.coastRange.textContent = 'Age ' + inp.standardRetireAge + '+';
+        els.planPath.textContent = plan.name + ' · tax-deferred · tax-free · after-tax';
 
-        if (v.bridge.code === 'na') {
-            stamp(els.bridgeStamp, 'na', 'Not needed');
-            els.bridgeNote.textContent = 'You retire at or after the standard access age.';
-        } else if (v.bridge.code === 'failed') {
-            stamp(els.bridgeStamp, 'failed', 'Depleted ' + v.bridge.age);
-            els.bridgeNote.textContent = 'The brokerage runs dry at ' + v.bridge.age + '; retirement accounts are tapped early (deferred draws pay the early-withdrawal penalty).';
+        if (coastPlan) {
+            els.firstGoalLabel.textContent = 'Milestone I — reach the coast';
+            els.bridgeRange.textContent = 'Now → Age ' + s.coastStartAge;
+            if (s.coastCoverageAtStart >= 100) {
+                stamp(els.bridgeStamp, 'secure', 'Ready');
+                els.bridgeNote.textContent = 'Projected retirement balance at coast: ' + U.compact(s.coastBalanceAtStart) +
+                    ' against a ' + U.compact(s.coastTargetAtStart) + ' target.';
+            } else {
+                stamp(els.bridgeStamp, 'partial', s.coastCoverageAtStart.toFixed(0) + '% funded');
+                els.bridgeNote.textContent = 'At age ' + s.coastStartAge + ', projected retirement accounts are ' +
+                    U.compact(s.coastBalanceAtStart) + '; the coast target is ' + U.compact(s.coastTargetAtStart) + '.';
+            }
+        } else if (earlyPlan) {
+            els.firstGoalLabel.textContent = 'Goal I — the bridge';
+            els.bridgeRange.textContent = 'Age ' + inp.retireAge + ' → ' + inp.standardRetireAge;
+            if (v.bridge.code === 'na') {
+                stamp(els.bridgeStamp, 'na', 'Not needed');
+                els.bridgeNote.textContent = 'You retire at or after the standard access age.';
+            } else if (v.bridge.code === 'failed') {
+                stamp(els.bridgeStamp, 'failed', 'Depleted ' + v.bridge.age);
+                els.bridgeNote.textContent = 'The brokerage runs dry at ' + v.bridge.age + '; retirement accounts are tapped early.';
+            } else {
+                stamp(els.bridgeStamp, 'secure', 'Secure');
+                els.bridgeNote.textContent = 'The plan carries spending to account access at ' + inp.standardRetireAge + '.';
+            }
         } else {
-            stamp(els.bridgeStamp, 'secure', 'Secure');
-            els.bridgeNote.textContent = (inp.drawDeferredBridge + inp.drawFreeBridge > 0)
-                ? 'Your drawdown mix funds the bridge; deferred draws before ' + inp.standardRetireAge + ' pay the early-withdrawal penalty.'
-                : 'The brokerage carries you to ' + inp.standardRetireAge + ' without touching retirement accounts.';
+            els.firstGoalLabel.textContent = 'Milestone I — retirement readiness';
+            els.bridgeRange.textContent = 'Now → Age ' + inp.retireAge;
+            if (s.retirementCoverageAtReadiness >= 100) {
+                stamp(els.bridgeStamp, 'secure', 'Ready');
+                els.bridgeNote.textContent = 'The projected after-tax portfolio is ' + U.compact(s.retirementBalanceAtReadiness) +
+                    ' against a ' + U.compact(s.fiNumberAtUnlock) + ' retirement target.';
+            } else {
+                stamp(els.bridgeStamp, 'partial', s.retirementCoverageAtReadiness.toFixed(0) + '% funded');
+                els.bridgeNote.textContent = 'The current saving path falls short of the retirement checkpoint.';
+            }
         }
 
         if (s.firstInfeasibleAge !== null) {
@@ -251,17 +278,27 @@
             els.infeasible.hidden = true;
         }
 
-        if (v.coast.code === 'broke') {
+        els.secondGoalLabel.textContent = coastPlan ? 'Milestone II — coast to retirement' :
+            (earlyPlan ? 'Goal II — long retirement' : 'Milestone II — retirement runway');
+        els.coastRange.textContent = coastPlan ? 'Age ' + s.coastStartAge + ' → ' + inp.retireAge :
+            'Age ' + Math.max(inp.retireAge, inp.standardRetireAge) + ' → 95';
+
+        if (!coastPlan && !earlyPlan && s.ranOutOfMoneyAge === null) {
+            stamp(els.coastStamp, 'secure', 'Funded');
+            els.coastNote.textContent = 'The fixed-return projection funds retirement spending through age 95.';
+        } else if (v.coast.code === 'broke') {
             stamp(els.coastStamp, 'failed', 'Broke at ' + v.coast.age);
             els.coastNote.textContent = 'The portfolio is exhausted before age 95.';
         } else if (v.coast.code === 'secure') {
-            stamp(els.coastStamp, 'secure', 'Secure');
-            els.coastNote.textContent = FireApp.mode() === 'beginner'
-                ? 'Once your accounts unlock at ' + inp.standardRetireAge + ', spending is covered through 95.'
-                : 'Tax-advantaged accounts alone cover ' + v.coast.coverage.toFixed(0) + '% of spending at ' + inp.standardRetireAge + '.';
+            stamp(els.coastStamp, 'secure', coastPlan ? 'On course' : 'Secure');
+            els.coastNote.textContent = coastPlan
+                ? 'From age ' + s.coastStartAge + ', contributions stop while existing retirement balances keep growing. Full retirement begins at ' + inp.retireAge + '.'
+                : 'Tax-advantaged accounts cover ' + v.coast.coverage.toFixed(0) + '% of spending at age ' + s.readinessAge + '.';
         } else {
             stamp(els.coastStamp, 'partial', v.coast.coverage.toFixed(0) + '% funded');
-            els.coastNote.textContent = 'Tax-advantaged accounts fall short at ' + inp.standardRetireAge + '; the whole portfolio carries the load.';
+            els.coastNote.textContent = coastPlan
+                ? 'Growth alone does not reach the full retirement target; adjust the coast age, retirement age, or spending.'
+                : 'Tax-advantaged accounts fall short at age ' + s.readinessAge + '; the whole portfolio carries the load.';
         }
 
         els.mcRate.textContent = (v.successRate * 100).toFixed(0) + '%';
@@ -321,12 +358,13 @@
         var html = '';
         rows.forEach(function (r) {
             var status, cls;
-            if (!r.isRetired) { status = 'Working'; cls = 'st-working'; }
+            if (r.phase === 'coasting') { status = 'Coasting'; cls = 'st-coasting'; }
+            else if (!r.isRetired) { status = 'Working'; cls = 'st-working'; }
             else if (r.broke) { status = 'Broke'; cls = 'st-broke'; }
             else if (r.phase === 'bridge') { status = 'Bridge'; cls = 'st-bridge'; }
             else { status = 'Retired'; cls = 'st-retired'; }
 
-            var contrib = r.isRetired ? '—'
+            var contrib = r.isRetired || r.phase === 'coasting' ? '—'
                 : U.compact(r.contrib.deferred + r.contrib.free + r.contrib.taxable) +
                   (r.contrib.match > 0 ? ' <span class="lg-match">+' + U.compact(r.contrib.match) + '</span>' : '');
 

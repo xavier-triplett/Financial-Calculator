@@ -1,11 +1,20 @@
 /* UI: PROFILE — the baseline every tab builds on. Date of birth (which
- * drives your age), income, spending and the two retirement ages live here;
+ * drives your age), income, spending and retirement milestones live here;
  * the Planner keeps the simulation dials. */
 (function (global) {
     'use strict';
 
     var U = global.FireUtil;
     var els = {};
+
+    function pathOptions() {
+        return FireSchema.planTypes.map(function (type) {
+            return '<button class="pf-path" type="button" role="radio" aria-checked="false" data-plan-type="' + type.id + '">' +
+                '<span class="pf-path-name">' + type.name + '</span>' +
+                '<span class="pf-path-desc">' + type.description + '</span>' +
+            '</button>';
+        }).join('');
+    }
 
     function template() {
         var beginner = FireApp.mode() === 'beginner';
@@ -33,6 +42,13 @@
                 '</div>' +
             '</section>' +
 
+            '<section class="pf-card pf-path-card">' +
+                '<div class="pf-card-title">Choose your retirement path</div>' +
+                '<p class="pf-help">This changes how the projection treats your working and saving years.</p>' +
+                '<div class="pf-paths" role="radiogroup" aria-label="Retirement path">' + pathOptions() + '</div>' +
+                '<p class="pf-path-note" data-el="pathNote"></p>' +
+            '</section>' +
+
             '<section class="pf-card">' +
                 '<div class="pf-card-title">Baseline factors</div>' +
                 '<p class="pf-help">' + (beginner
@@ -51,6 +67,12 @@
         els.root = root;
 
         FireForms.buildGroups(els.groups, { groups: FireSchema.profileGroups });
+
+        root.querySelectorAll('[data-plan-type]').forEach(function (button) {
+            button.addEventListener('click', function () {
+                FireStore.setInput('planType', Number(button.getAttribute('data-plan-type')));
+            });
+        });
 
         els.dob.addEventListener('change', function () { FireStore.setProfile('birthDate', els.dob.value); });
         els.dobPicker = U.datePicker(els.dob, {
@@ -72,13 +94,42 @@
         var age = U.ageFromDOB(dob);
         els.age.textContent = age === null ? '—' : age;
 
+        var plan = FireSchema.planType(state.inputs.planType);
+        var coast = state.inputs.planType === FireEngine.PLAN_TYPES.COAST;
+        els.root.setAttribute('data-plan-type', state.inputs.planType);
+        els.root.querySelectorAll('[data-plan-type]').forEach(function (button) {
+            var selected = Number(button.getAttribute('data-plan-type')) === state.inputs.planType;
+            button.classList.toggle('selected', selected);
+            button.setAttribute('aria-checked', String(selected));
+        });
+
+        var coastField = els.root.querySelector('.ff-field[data-key="coastAge"]');
+        if (coastField) coastField.hidden = !coast;
+        var retirementLabel = els.root.querySelector('.ff-field[data-key="retireAge"] .ff-label-text');
+        if (retirementLabel) {
+            retirementLabel.textContent = coast ? 'Full retirement age' :
+                (state.inputs.planType === FireEngine.PLAN_TYPES.EARLY ? 'Early retirement age' : 'Retirement age');
+        }
+
+        if (coast) {
+            els.pathNote.textContent = 'Save through age ' + (state.inputs.coastAge - 1) + ', coast from ' +
+                state.inputs.coastAge + ' to ' + state.inputs.retireAge + ', then retire fully.';
+        } else if (state.inputs.planType === FireEngine.PLAN_TYPES.EARLY) {
+            els.pathNote.textContent = 'Save until age ' + state.inputs.retireAge + ', then use the bridge until accounts unlock at ' +
+                state.inputs.standardRetireAge + '.';
+        } else {
+            els.pathNote.textContent = 'Keep contributing until retirement at age ' + state.inputs.retireAge + '.';
+        }
+
         if (age === null) {
             els.ageNote.textContent = 'Set your birth date to place yourself on the timeline.';
         } else {
-            var toEarly = state.inputs.retireAge - age;
-            els.ageNote.textContent = toEarly > 0
-                ? 'Early retirement at ' + state.inputs.retireAge + ' is ' + toEarly + ' year' + (toEarly === 1 ? '' : 's') + ' away.'
-                : 'You are at or past your early-retirement age of ' + state.inputs.retireAge + '.';
+            var nextAge = coast && age < state.inputs.coastAge ? state.inputs.coastAge : state.inputs.retireAge;
+            var milestone = coast && age < state.inputs.coastAge ? 'Coasting' : 'Retirement';
+            var years = nextAge - age;
+            els.ageNote.textContent = years > 0
+                ? milestone + ' at ' + nextAge + ' is ' + years + ' year' + (years === 1 ? '' : 's') + ' away.'
+                : 'You are at or past the ' + plan.short.toLowerCase() + ' retirement milestone.';
         }
 
         FireForms.syncInputs(els.root);
