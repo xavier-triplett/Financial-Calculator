@@ -6,6 +6,7 @@
         location.hostname === '127.0.0.1' ||
         location.hostname === '[::1]';
     var values = Object.create(null);
+    var failingPrefix = null;
     var memoryStorage = {
         get length() { return Object.keys(values).length; },
         key: function (index) { return Object.keys(values)[index] || null; },
@@ -13,9 +14,14 @@
             key = String(key);
             return Object.prototype.hasOwnProperty.call(values, key) ? values[key] : null;
         },
-        setItem: function (key, value) { values[String(key)] = String(value); },
+        setItem: function (key, value) {
+            key = String(key);
+            if (failingPrefix && key.indexOf(failingPrefix) === 0) throw new Error('quota exceeded');
+            values[key] = String(value);
+        },
         removeItem: function (key) { delete values[String(key)]; },
-        clear: function () { values = Object.create(null); }
+        clear: function () { values = Object.create(null); failingPrefix = null; },
+        failWritesFor: function (prefix) { failingPrefix = prefix || null; }
     };
     var isolated = false;
 
