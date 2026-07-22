@@ -13,7 +13,7 @@
     var confirmStrict = false;  // strict dialogs ignore backdrop/Escape
     var confirmQueue = [];      // requests arriving while a dialog is open
     var active = null; // { ui, kind } currently mounted
-    var pref = { view: 'profile', theme: null };
+    var pref = { view: 'profile', theme: null, mode: null };
 
     function compute() {
         var state = FireStore.get();
@@ -118,6 +118,10 @@
         if (global.TrackerKit) global.TrackerKit.setTheme(pref.theme);
     }
 
+    function applyMode() {
+        document.documentElement.setAttribute('data-mode', pref.mode);
+    }
+
     function toggleTheme() {
         pref.theme = pref.theme === 'dark' ? 'light' : 'dark';
         applyTheme();
@@ -134,7 +138,7 @@
     function allTabs() {
         var fire = (global.FireUIs || []).map(function (u) { return { ui: u, kind: 'fire' }; });
         var trk = (global.TrackerUIs || []).map(function (u) { return { ui: u, kind: 'tracker' }; });
-        return fire.concat(trk);
+        return fire.concat(trk).filter(function (t) { return pref.mode === 'expert' || !t.ui.expertOnly; });
     }
 
     function currentEntry() {
@@ -164,6 +168,16 @@
         pref.view = view;
         savePref();
         mountActive();
+    }
+
+    function setMode(mode) {
+        if ((mode !== 'beginner' && mode !== 'expert') || pref.mode === mode) return;
+        pref.mode = mode;
+        applyMode();
+        pref.view = currentEntry().ui.id;
+        savePref();
+        mountActive();
+        toast(mode === 'beginner' ? 'Beginner view on' : 'Expert view on');
     }
 
     function escapeHtml(s) {
@@ -198,6 +212,10 @@
         navEl.innerHTML = '<span class="nav-brand">The Coast Ledger</span>' +
             '<span class="nav-tabs">' + tabButtonsHtml() + '</span>' +
             '<span class="nav-right">' + authHtml() +
+                '<span class="nav-mode" role="group" aria-label="Detail level">' +
+                    '<button type="button" data-mode-set="beginner" class="' + (pref.mode === 'beginner' ? 'active' : '') + '" aria-pressed="' + (pref.mode === 'beginner') + '">Beginner</button>' +
+                    '<button type="button" data-mode-set="expert" class="' + (pref.mode === 'expert' ? 'active' : '') + '" aria-pressed="' + (pref.mode === 'expert') + '">Expert</button>' +
+                '</span>' +
                 '<button class="nav-theme" type="button" data-theme-toggle aria-label="Switch to ' +
                     (pref.theme === 'dark' ? 'light' : 'dark') + ' mode" title="Switch to ' +
                     (pref.theme === 'dark' ? 'light' : 'dark') + ' mode">' +
@@ -241,6 +259,12 @@
         loadPref();
         FireStore.init();
         TrackerStore.init();
+        if (pref.mode !== 'beginner' && pref.mode !== 'expert') {
+            pref.mode = FireStore.isDefault() && TrackerStore.isEmpty() ? 'beginner' : 'expert';
+            pref.view = currentEntry().ui.id;
+            savePref();
+        }
+        applyMode();
         compute();
 
         navEl.addEventListener('click', function (e) {
@@ -251,12 +275,16 @@
                 else setView(e.target.dataset.view);
             }
             if (e.target.closest('[data-nav-burger]')) { navMenuOpen = !navMenuOpen; renderNav(); }
+            var modeButton = e.target.closest('[data-mode-set]');
+            if (modeButton) setMode(modeButton.dataset.modeSet);
             if (e.target.closest('[data-theme-toggle]')) toggleTheme();
             if (e.target.closest('[data-auth-signin]')) FireCloud.signIn();
             if (e.target.closest('[data-auth-signout]')) FireCloud.signOut();
         });
         window.addEventListener('resize', updateNavCollapse);
         document.addEventListener('click', function (e) {
+            var modeLink = e.target.closest('[data-mode-set]');
+            if (modeLink && !navEl.contains(modeLink)) setMode(modeLink.dataset.modeSet);
             // composedPath, not closest: the nav re-renders on burger clicks,
             // so by the time this runs the click target may be detached.
             if (navMenuOpen && e.composedPath().indexOf(navEl) === -1) { navMenuOpen = false; renderNav(); }
@@ -319,6 +347,8 @@
         prompt: askPrompt,
         verdicts: verdicts,
         results: function () { return results; },
+        mode: function () { return pref.mode; },
+        setMode: setMode,
         startYear: function () { return startYear; },
         confirmReset: function () {
             askConfirm('Reset all plan data to defaults?', function () {

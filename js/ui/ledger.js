@@ -11,6 +11,7 @@
     var C = {};
 
     function template() {
+        var beginner = FireApp.mode() === 'beginner';
         return '' +
         '<div class="lg-shell">' +
             '<header class="lg-masthead">' +
@@ -39,19 +40,19 @@
                     '<p class="lg-v-note" data-el="coastNote"></p>' +
                 '</article>' +
                 '<article class="lg-verdict" data-v="mc">' +
-                    '<span class="lg-eyebrow">Resilience &mdash; Monte Carlo' +
+                    '<span class="lg-eyebrow">' + (beginner ? 'Resilience &mdash; odds it works' : 'Resilience &mdash; Monte Carlo') +
                         '<span class="ff-hint" tabindex="0" role="img" data-tooltip="Rather than betting on one average return, your plan is re-run against randomly generated market futures &mdash; booms, crashes and flat decades alike. The rate is the share that still has money at 95." ' +
                             'aria-label="Rather than betting on one average return, your plan is re-run against randomly generated market futures. The rate is the share that still has money at 95.">i</span></span>' +
-                    '<span class="lg-v-range" data-el="mcSims"></span>' +
+                    '<span class="lg-v-range lg-expert" data-el="mcSims"></span>' +
                     '<div class="lg-bignum" data-el="mcRate">&mdash;</div>' +
                     '<p class="lg-v-note">of simulated market futures leave you with money at 95. ' +
-                        '<button class="lg-link" type="button" data-el="reroll">Re-roll markets</button></p>' +
+                        '<button class="lg-link lg-expert" type="button" data-el="reroll">Re-roll markets</button></p>' +
                 '</article>' +
                 '<article class="lg-verdict" data-v="fi">' +
-                    '<span class="lg-eyebrow">FI requirement</span>' +
-                    '<span class="lg-v-range">Perpetual-growth number</span>' +
+                    '<span class="lg-eyebrow">' + (beginner ? 'Your coast number' : 'Coast number today') + '</span>' +
+                    '<span class="lg-v-range">No new savings &rarr; account unlock</span>' +
                     '<div class="lg-bignum" data-el="fiNumber">&mdash;</div>' +
-                    '<p class="lg-v-note">Projected net worth at retirement: <strong data-el="nwAtRetire"></strong></p>' +
+                    '<p class="lg-v-note">Full target at unlock: <strong data-el="fiTarget"></strong><br>Current invested: <strong data-el="nwAtRetire"></strong></p>' +
                 '</article>' +
             '</section>' +
 
@@ -61,24 +62,25 @@
                 '<aside class="lg-controls">' +
                     '<div class="lg-panel-title">Plan inputs</div>' +
                     '<div data-el="formGroups"></div>' +
-                    '<div class="lg-panel-title">Saving phases</div>' +
-                    '<p class="lg-help">How each dollar saved is split between buckets, by age.</p>' +
-                    '<div data-el="phases"></div>' +
-                    '<div class="lg-panel-title">Drawdown order</div>' +
-                    '<p class="lg-help">Which buckets fund each retirement phase.</p>' +
-                    '<div data-el="drawdown"></div>' +
+                    '<div class="lg-panel-title lg-expert">Saving phases</div>' +
+                    '<p class="lg-help lg-expert">How each dollar saved is split between buckets, by age.</p>' +
+                    '<div class="lg-expert" data-el="phases"></div>' +
+                    '<div class="lg-panel-title lg-expert">Drawdown order</div>' +
+                    '<p class="lg-help lg-expert">Which buckets fund each retirement phase.</p>' +
+                    '<div class="lg-expert" data-el="drawdown"></div>' +
+                    '<p class="mode-note" data-el="assumptions"' + (beginner ? '' : ' hidden') + '></p>' +
                 '</aside>' +
 
                 '<main class="lg-main">' +
                     '<section class="lg-panel">' +
                         '<div class="lg-panel-head">' +
                             '<h2>Projected balances</h2>' +
-                            '<span class="lg-panel-note">Stacked by bucket &middot; dashed line marks the perpetual FI number</span>' +
+                            '<span class="lg-panel-note">Stacked by bucket &middot; dashed line marks ' + (beginner ? 'your target number' : 'the perpetual FI number') + '</span>' +
                         '</div>' +
                         '<div class="lg-chart"><canvas data-el="wealthChart"></canvas></div>' +
                     '</section>' +
 
-                    '<section class="lg-panel">' +
+                    '<section class="lg-panel lg-expert">' +
                         '<div class="lg-panel-head">' +
                             '<h2>Range of outcomes</h2>' +
                             '<span class="lg-panel-note" data-el="mcNote"></span>' +
@@ -86,13 +88,13 @@
                         '<div class="lg-chart lg-chart-mc"><canvas data-el="mcChart"></canvas></div>' +
                     '</section>' +
 
-                    '<section class="lg-figures">' +
+                    '<section class="lg-figures lg-expert">' +
                         '<div class="lg-figure"><span class="lg-figure-label">Employer match collected</span><span class="lg-figure-val" data-el="figMatch"></span></div>' +
                         '<div class="lg-figure"><span class="lg-figure-label">Taxes paid in retirement</span><span class="lg-figure-val" data-el="figTaxes"></span></div>' +
                         '<div class="lg-figure"><span class="lg-figure-label">Estate at 95</span><span class="lg-figure-val" data-el="figEstate"></span></div>' +
                     '</section>' +
 
-                    '<section class="lg-panel">' +
+                    '<section class="lg-panel lg-expert">' +
                         '<div class="lg-panel-head"><h2>Year-by-year statement</h2>' +
                         '<span class="lg-panel-note">Draws are gross of tax</span></div>' +
                         '<div class="lg-tablewrap"><table class="lg-table">' +
@@ -252,7 +254,9 @@
             els.coastNote.textContent = 'The portfolio is exhausted before age 95.';
         } else if (v.coast.code === 'secure') {
             stamp(els.coastStamp, 'secure', 'Secure');
-            els.coastNote.textContent = 'Tax-advantaged accounts alone cover ' + v.coast.coverage.toFixed(0) + '% of spending at ' + inp.standardRetireAge + '.';
+            els.coastNote.textContent = FireApp.mode() === 'beginner'
+                ? 'Once your accounts unlock at ' + inp.standardRetireAge + ', spending is covered through 95.'
+                : 'Tax-advantaged accounts alone cover ' + v.coast.coverage.toFixed(0) + '% of spending at ' + inp.standardRetireAge + '.';
         } else {
             stamp(els.coastStamp, 'partial', v.coast.coverage.toFixed(0) + '% funded');
             els.coastNote.textContent = 'Tax-advantaged accounts fall short at ' + inp.standardRetireAge + '; the whole portfolio carries the load.';
@@ -262,8 +266,14 @@
         els.mcRate.style.color = v.successRate >= 0.8 ? C.free : (v.successRate >= 0.6 ? C.deferred : C.red);
         els.mcSims.textContent = results.mc.sims + ' simulations · σ ' + inp.volatility + '%';
 
-        els.fiNumber.textContent = U.compact(s.fiNumber);
-        els.nwAtRetire.textContent = U.money(s.netWorthAtRetirement);
+        els.fiNumber.textContent = U.compact(s.coastNumber);
+        els.fiTarget.textContent = U.compact(s.fiNumberAtUnlock);
+        els.nwAtRetire.textContent = U.money(inp.balDeferred + inp.balFree + inp.balTaxable);
+
+        if (FireApp.mode() === 'beginner') {
+            els.assumptions.innerHTML = FireSchema.assumptionsText(state) +
+                ' <button type="button" data-mode-set="expert">Open Expert mode</button> to change them.';
+        }
 
         els.figMatch.textContent = U.money(s.totalMatch);
         els.figTaxes.textContent = U.money(s.totalTaxes);

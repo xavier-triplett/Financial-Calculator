@@ -8,6 +8,7 @@
     var els = {};
 
     function template() {
+        var beginner = FireApp.mode() === 'beginner';
         return '' +
         '<div class="pf-shell">' +
             '<header class="pf-masthead">' +
@@ -34,8 +35,11 @@
 
             '<section class="pf-card">' +
                 '<div class="pf-card-title">Baseline factors</div>' +
-                '<p class="pf-help">Income, spending, your target ages, withdrawal tax rates and the IRS contribution limits. The trackers measure against these; the Planner projects from them.</p>' +
+                '<p class="pf-help">' + (beginner
+                    ? 'Enter the few facts that shape your plan. Standard tax and contribution assumptions keep the rest ready for you.'
+                    : 'Income, spending, your target ages, withdrawal tax rates and the IRS contribution limits. The trackers measure against these; the Planner projects from them.') + '</p>' +
                 '<div data-el="groups"></div>' +
+                '<p class="mode-note" data-el="assumptions"' + (beginner ? '' : ' hidden') + '></p>' +
             '</section>' +
         '</div>';
     }
@@ -73,6 +77,10 @@
         }
 
         FireForms.syncInputs(els.root);
+        if (FireApp.mode() === 'beginner') {
+            els.assumptions.innerHTML = FireSchema.assumptionsText(state) +
+                ' <button type="button" data-mode-set="expert">Open Expert mode</button> to change them.';
+        }
     }
 
     function unmount() { if (els.dobPicker) els.dobPicker.destroy(); els = {}; }

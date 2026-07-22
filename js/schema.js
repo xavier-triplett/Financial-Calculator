@@ -22,7 +22,7 @@
         shuffle: icon('<polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/>')
     };
 
-    global.FireSchema = {
+    var schema = {
         /* Which groups belong to the Profile tab (baseline facts shared by
          * every tab) vs. the Planner tab (simulation assumptions). Date of
          * birth is rendered by the Profile tab itself — it lives on the
@@ -115,11 +115,61 @@
             }
         ],
 
+        expertKeys: function () {
+            var keys = [];
+            this.groups.forEach(function (g) {
+                g.fields.forEach(function (f) { if (g.expert || f.expert) keys.push(f.key); });
+            });
+            return keys.concat([
+                'drawTaxableBridge', 'drawDeferredBridge', 'drawFreeBridge',
+                'drawTaxableStd', 'drawDeferredStd', 'drawFreeStd'
+            ]);
+        },
+
+        hiddenCustomCount: function (state) {
+            var count = this.expertKeys().reduce(function (n, key) {
+                return n + (Number(state.inputs[key]) !== Number(FireEngine.DEFAULTS[key]) ? 1 : 0);
+            }, 0);
+            var phases = state.phases || [];
+            var defaults = FireEngine.DEFAULT_PHASES;
+            var phaseFields = ['age', 'deferred', 'free', 'taxable'];
+            var same = phases.length === defaults.length && phases.every(function (p, i) {
+                return phaseFields.every(function (key) {
+                    var expected = key === 'age' && defaults[i].isLocked ? state.inputs.currentAge : defaults[i][key];
+                    return Number(p[key]) === Number(expected);
+                });
+            });
+            return count + (same ? 0 : 1);
+        },
+
+        assumptionsText: function (state) {
+            var count = this.hiddenCustomCount(state);
+            return count
+                ? 'Simplified view. ' + count + ' setting' + (count === 1 ? ' was' : 's were') + ' customized in Expert mode and ' + (count === 1 ? 'is' : 'are') + ' still in effect.'
+                : 'Simplified view. Taxes, contribution limits, inflation and the 4% withdrawal rule are running on standard assumptions.';
+        },
+
         bucketMeta: {
             deferred: { label: 'Tax-Deferred', short: 'Deferred', desc: '401k / IRA' },
             free: { label: 'Tax-Free', short: 'Roth', desc: 'Roth accounts' },
             taxable: { label: 'After-Tax', short: 'Brokerage', desc: 'Brokerage' }
         }
     };
+
+    var expertGroups = { taxes: true, irs: true, montecarlo: true };
+    var expertFields = {
+        standardRetireAge: true, incomeTaxRate: true,
+        savingsRateIncrease: true, maxSavingsRate: true, incomeGrowth: true,
+        inflation: true, swr: true
+    };
+    schema.groups.forEach(function (group) {
+        if (expertGroups[group.id]) group.expert = true;
+        if (group.id === 'employer') {
+            group.beginnerToggle = { key: 'employerMatchRate', label: 'My employer matches 401k contributions' };
+        }
+        group.fields.forEach(function (field) { if (expertFields[field.key]) field.expert = true; });
+    });
+
+    global.FireSchema = schema;
 
 })(typeof window !== 'undefined' ? window : globalThis);

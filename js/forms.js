@@ -28,9 +28,23 @@
             group.fields.forEach(function (f) {
                 fieldsWrap.appendChild(buildField(f, state));
             });
+            if (group.beginnerToggle && FireApp.mode() === 'beginner') {
+                var toggle = group.beginnerToggle;
+                var checked = Number(state.inputs[toggle.key]) > 0;
+                var check = U.el('input', { type: 'checkbox' });
+                check.checked = checked;
+                fieldsWrap.classList.toggle('ff-toggle-off', !checked);
+                check.addEventListener('change', function () {
+                    fieldsWrap.classList.toggle('ff-toggle-off', !check.checked);
+                    FireStore.setInput(toggle.key, check.checked ? FireEngine.DEFAULTS[toggle.key] : 0);
+                });
+                body.appendChild(U.el('label', { class: 'ff-beginner-toggle' }, [
+                    check, U.el('span', { text: toggle.label })
+                ]));
+            }
             body.appendChild(fieldsWrap);
 
-            var groupEl = U.el('div', { class: 'ff-group' + (opts.collapsed ? '' : ' open'), 'data-group': group.id }, [head, body]);
+            var groupEl = U.el('div', { class: 'ff-group' + (group.expert ? ' ff-expert' : '') + (opts.collapsed ? '' : ' open'), 'data-group': group.id }, [head, body]);
             head.addEventListener('click', function () { groupEl.classList.toggle('open'); });
             container.appendChild(groupEl);
         });
@@ -86,7 +100,7 @@
         ]);
 
         return U.el('label', {
-            class: 'ff-field' + (f.bucket ? ' ff-bucket-' + f.bucket : ''),
+            class: 'ff-field' + (f.expert ? ' ff-expert' : '') + (f.bucket ? ' ff-bucket-' + f.bucket : ''),
             'data-key': f.key
         }, [U.el('span', { class: 'ff-label' }, labelBits), control]);
     }

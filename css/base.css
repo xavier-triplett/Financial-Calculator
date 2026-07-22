@@ -119,6 +119,25 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
     position: sticky; top: 0; z-index: 900;
 }
 .nav-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+.nav-mode {
+    display: inline-flex; padding: 2px;
+    border: 1px solid #C9CEC8; border-radius: 5px;
+}
+.nav-mode button {
+    border: 0; border-radius: 3px; padding: 6px 8px;
+    background: transparent; color: #66716B;
+    font: 600 9px/1 "Public Sans", sans-serif;
+    letter-spacing: .08em; text-transform: uppercase;
+}
+.nav-mode button.active { background: #17604A; color: #fff; }
+
+html[data-mode="beginner"] .ff-expert,
+html[data-mode="beginner"] .lg-expert { display: none !important; }
+.ff-beginner-toggle { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink); margin-bottom: 10px; }
+.ff-beginner-toggle input { accent-color: var(--green); }
+.ff-fields.ff-toggle-off { display: none !important; }
+.mode-note { color: var(--muted); font-size: 11.5px; line-height: 1.5; margin: 16px 0 0; padding-top: 12px; border-top: 1px solid var(--rule); }
+.mode-note button { border: 0; background: none; color: var(--green); font: inherit; font-weight: 600; padding: 0; text-decoration: underline; }
 /* Phones: the single nav row (brand + tabs + auth) is wider than the screen
  * and would force the whole page into horizontal overflow. Wrap the tabs onto
  * their own full-width row and let that row scroll sideways if it must. */
@@ -204,6 +223,9 @@ html[data-theme="dark"] .nav-auth { border-color: #46524B; color: #E8ECE8; }
 html[data-theme="dark"] .nav-auth:hover { border-color: #E8ECE8; }
 html[data-theme="dark"] .nav-auth-in { border-color: #8BE8BC; color: #8BE8BC; }
 html[data-theme="dark"] .nav-auth-in:hover { background: #8BE8BC; color: #111714; }
+html[data-theme="dark"] .nav-mode { border-color: #46524B; }
+html[data-theme="dark"] .nav-mode button { color: #A4AFA8; }
+html[data-theme="dark"] .nav-mode button.active { background: #8BE8BC; color: #111714; }
 .nav-brand {
     font: 600 12px/1 "Fraunces", Georgia, serif;
     letter-spacing: 0.04em; color: #1A211D;
@@ -225,6 +247,7 @@ html[data-theme="dark"] .nav-auth-in:hover { background: #8BE8BC; color: #111714
 @media (max-width: 720px) {
     #app-nav { flex-wrap: wrap; gap: 6px 10px; padding: 8px 14px; }
     .nav-right { gap: 8px; }
+    .nav-mode button { padding: 6px; letter-spacing: .04em; }
     .nav-tabs {
         order: 3; flex-basis: 100%;
         justify-content: space-between;
