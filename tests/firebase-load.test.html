@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Firebase SDK load test (real vendored SDK)</title>
+    <script src="test-bootstrap.js"></script>
 </head>
 <body>
     <pre id="out">RUNNING</pre>
@@ -15,6 +16,10 @@
 
     <script>
     window.addEventListener('load', function () {
+        if (!window.FireTest || !FireTest.allowed) {
+            document.getElementById('out').textContent = 'TEST DISABLED OUTSIDE LOCALHOST';
+            return;
+        }
         var out = [], fails = 0;
         function check(name, cond) { out.push((cond ? 'ok:   ' : 'FAIL: ') + name); if (!cond) fails++; }
         try {

@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>UI smoke test</title>
+    <script src="test-bootstrap.js"></script>
     <script src="../js/vendor/chart.umd.min.js"></script>
     <script src="../js/vendor/flatpickr.min.js"></script>
     <link rel="stylesheet" href="../css/base.css">
@@ -42,6 +44,10 @@
 
     <script>
     window.addEventListener('load', function () {
+        if (!window.FireTest || !FireTest.allowed) {
+            document.getElementById('smoke-result').textContent = 'TEST DISABLED OUTSIDE LOCALHOST';
+            return;
+        }
         var out = [];
         var failures = 0;
         function check(name, cond) {
@@ -51,7 +57,7 @@
         function text(sel) { var n = document.querySelector(sel); return n ? n.textContent : ''; }
 
         try {
-            localStorage.clear();
+            FireTest.storage.clear();
             FireStore.init();
             FireApp.setMode('beginner');
             FireApp.setMode('expert');
@@ -89,9 +95,10 @@
 
             // Reactivity through the store (as typed inputs would)
             var before = text('[data-el="nwAtRetire"]');
-            FireStore.setInput('income', 200000);
+            FireStore.setInput('balDeferred', 160000);
             var after = text('[data-el="nwAtRetire"]');
             check('reacts to input change', before !== after);
+            FireStore.setInput('income', 200000);
 
             // Feasibility warning: savings + spending must fit take-home pay
             check('feasibility warning hidden when plan fits',
@@ -414,7 +421,7 @@
             check('switching mode preserves plan data', FireStore.get().inputs.income === preservedIncome);
             FireApp.setMode('expert');
 
-            localStorage.clear();
+            FireTest.storage.clear();
         } catch (e) {
             failures++;
             out.push('EXCEPTION: ' + e.message + '\n' + e.stack);

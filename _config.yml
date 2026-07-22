@@ -1,0 +1,9 @@
+exclude:
+  - tests
+  - .github
+  - AGENTS.md
+  - CLAUDE.md
+  - TODO.md
+  - TECHNICAL.md
+  - firestore.rules
+  - seed.example.js

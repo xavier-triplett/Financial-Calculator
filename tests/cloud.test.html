@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Cloud sync test (mock Firebase)</title>
+    <script src="test-bootstrap.js"></script>
 </head>
 <body>
     <pre id="out">RUNNING</pre>
@@ -55,6 +56,10 @@
 
     <script>
     window.addEventListener('load', function () {
+        if (!window.FireTest || !FireTest.allowed) {
+            document.getElementById('out').textContent = 'TEST DISABLED OUTSIDE LOCALHOST';
+            return;
+        }
         var out = [], fails = 0;
         function check(name, cond) { out.push((cond ? 'ok:   ' : 'FAIL: ') + name); if (!cond) fails++; }
         function finish() {
@@ -63,7 +68,7 @@
         }
 
         try {
-            localStorage.clear();
+            FireTest.storage.clear();
             FireStore.init();
             TrackerStore.init();
 
