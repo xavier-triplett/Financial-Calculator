@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Service worker test</title>
+</head>
+<body>
+    <pre id="out">RUNNING</pre>
+    <script>
+    (async function () {
+        var lines = [];
+        var failures = 0;
+        var output = document.getElementById('out');
+        function check(name, condition) {
+            lines.push((condition ? 'ok:   ' : 'FAIL: ') + name);
+            if (!condition) failures++;
+            output.textContent = 'RUNNING\n' + lines.join('\n');
+        }
+        try {
+            check('loopback origin is a secure context', window.isSecureContext === true);
+            check('service workers are available', 'serviceWorker' in navigator);
+
+            var registrations = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(registrations.map(function (entry) { return entry.unregister(); }));
+            var cacheNames = await caches.keys();
+            await Promise.all(cacheNames.map(function (name) { return caches.delete(name); }));
+            await caches.open('coast-ledger-old');
+
+            var registration = await navigator.serviceWorker.register('/sw.js');
+            await navigator.serviceWorker.ready;
+            if (!navigator.serviceWorker.controller) {
+                await new Promise(function (resolve) {
+                    var timer = setTimeout(resolve, 5000);
+                    navigator.serviceWorker.addEventListener('controllerchange', function () {
+                        clearTimeout(timer);
+                        resolve();
+                    }, { once: true });
+                });
+            }
+
+            check('worker activates and claims the page',
+                registration.active && navigator.serviceWorker.controller);
+            cacheNames = await caches.keys();
+            check('new cache replaces old releases',
+                cacheNames.indexOf('coast-ledger-2026-07-22') >= 0 &&
+                cacheNames.indexOf('coast-ledger-old') < 0);
+            var cache = await caches.open('coast-ledger-2026-07-22');
+            check('application shell is precached',
+                !!(await cache.match('/index.html')) && !!(await cache.match('/js/app.js')));
+
+            var first = await (await fetch('/__sw_probe__')).text();
+            var second = await (await fetch('/__sw_probe__')).text();
+            check('online requests revalidate cached assets', first === 'probe-v1' && second === 'probe-v2');
+
+            await fetch('/__sw_offline__', { cache: 'no-store' });
+            await new Promise(function (resolve) { setTimeout(resolve, 100); });
+            var frame = document.createElement('iframe');
+            frame.src = '/offline-route';
+            document.body.appendChild(frame);
+            await new Promise(function (resolve) {
+                var timer = setTimeout(resolve, 6000);
+                frame.addEventListener('load', function () { clearTimeout(timer); resolve(); }, { once: true });
+                frame.addEventListener('error', function () { clearTimeout(timer); resolve(); }, { once: true });
+            });
+            check('offline navigation falls back to the cached application',
+                frame.contentDocument && frame.contentDocument.title.indexOf('The Coast Ledger') >= 0);
+        } catch (error) {
+            failures++;
+            lines.push('EXCEPTION: ' + error.message + '\n' + error.stack);
+        }
+        output.textContent =
+            (failures ? 'SW FAIL (' + failures + ')\n' : 'SW PASS\n') + lines.join('\n');
+    })();
+    </script>
+</body>
+</html>
