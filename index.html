@@ -3,12 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://apis.google.com; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com wss://*.firebaseio.com; frame-src https://*.firebaseapp.com https://accounts.google.com; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'self' https://accounts.google.com">
+    <script src="js/security.js"></script>
     <title>The Coast Ledger — Coast FIRE Planner</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
 
     <!-- Chart.js + Flatpickr + fonts (vendored locally so the app works offline) -->
-    <script src="js/vendor/chart.umd.min.js"></script>
-    <script src="js/vendor/flatpickr.min.js"></script>
+    <script defer src="js/vendor/chart.umd.min.js"></script>
+    <script defer src="js/vendor/flatpickr.min.js"></script>
 
     <!-- Styles -->
     <link rel="stylesheet" href="css/fonts.css">
@@ -27,64 +30,45 @@
 
     <!-- Toast -->
     <div id="toast" role="status"></div>
-    <div id="confirm-layer" aria-hidden="true">
-        <div id="confirm-prompt" role="alertdialog" aria-modal="true" aria-labelledby="confirm-message">
+    <div id="confirm-layer" aria-hidden="true" hidden>
+        <div id="confirm-prompt" role="alertdialog" aria-modal="true" aria-labelledby="confirm-message" tabindex="-1">
             <span id="confirm-message"></span>
-            <input id="confirm-input" type="text" autocomplete="off">
+            <input id="confirm-input" type="text" autocomplete="off" aria-labelledby="confirm-message">
             <span class="confirm-actions">
                 <button type="button" data-confirm-cancel>Cancel</button>
+                <button type="button" class="confirm-danger" data-confirm-alternate hidden></button>
                 <button type="button" class="confirm-danger" data-confirm-accept>Delete</button>
             </span>
         </div>
     </div>
 
     <!-- Core -->
-    <script src="js/engine.js"></script>
-    <script src="js/util.js"></script>
-    <script src="js/schema.js"></script>
-    <script src="js/store.js"></script>
-    <script src="js/forms.js"></script>
+    <script defer src="js/engine.js"></script>
+    <script defer src="js/util.js"></script>
+    <script defer src="js/schema.js"></script>
+    <script defer src="js/store.js"></script>
+    <script defer src="js/forms.js"></script>
 
     <!-- Tracker core -->
-    <script src="js/tracker/engine.js"></script>
-    <script src="js/tracker/rocketmoney.js"></script>
-    <script src="js/tracker/store.js"></script>
-    <script src="js/tracker/kit.js"></script>
+    <script defer src="js/tracker/engine.js"></script>
+    <script defer src="js/tracker/rocketmoney.js"></script>
+    <script defer src="js/tracker/store.js"></script>
+    <script defer src="js/tracker/kit.js"></script>
 
-    <!-- Optional personal seed (git-ignored; see seed.example.js). Fetched
-         first so the public site, which has no seed.js, never 404s. On
-         file:// fetch is unavailable, so fall back to a plain script tag. -->
-    <script>
-    (function () {
-        if (location.protocol === 'file:') {
-            document.write('<script src="seed.js"><\/script>');
-            return;
-        }
-        fetch('seed.js').then(function (r) { return r.ok ? r.text() : null; }).then(function (src) {
-            if (!src) return;
-            new Function(src)();
-            if (window.FireApp && FireApp.refresh) FireApp.refresh();
-        }).catch(function () { /* no seed */ });
-    })();
-    </script>
-
-    <!-- Firebase (vendored compat SDK) + cloud sync. Config is public by
-         design; access is governed by Auth + Firestore rules. -->
-    <script src="js/vendor/firebase-app-compat.js"></script>
-    <script src="js/vendor/firebase-auth-compat.js"></script>
-    <script src="js/vendor/firebase-firestore-compat.js"></script>
-    <script src="js/firebase-config.js"></script>
-    <script src="js/cloud.js"></script>
+    <!-- Firebase loads during idle time, or immediately when sign-in starts. -->
+    <script defer src="js/firebase-config.js"></script>
+    <script defer src="js/firebase-loader.js"></script>
+    <script defer src="js/cloud.js"></script>
 
     <!-- UI -->
-    <script src="js/ui/profile.js"></script>
-    <script src="js/ui/ledger.js"></script>
-    <script src="js/ui/tracker-observatory.js"></script>
-    <script src="js/ui/tracker-cashbook.js"></script>
-    <script src="js/ui/tracker-settings.js"></script>
-    <script src="js/ui/guide.js"></script>
+    <script defer src="js/ui/profile.js"></script>
+    <script defer src="js/ui/ledger.js"></script>
+    <script defer src="js/ui/tracker-observatory.js"></script>
+    <script defer src="js/ui/tracker-cashbook.js"></script>
+    <script defer src="js/ui/tracker-settings.js"></script>
+    <script defer src="js/ui/guide.js"></script>
 
     <!-- Shell -->
-    <script src="js/app.js"></script>
+    <script defer src="js/app.js"></script>
 </body>
 </html>

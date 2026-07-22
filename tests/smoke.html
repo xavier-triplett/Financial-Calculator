@@ -15,12 +15,13 @@
     <nav id="app-nav"></nav>
     <div id="ui-root"></div>
     <div id="toast"></div>
-    <div id="confirm-layer" aria-hidden="true">
-        <div id="confirm-prompt" role="alertdialog" aria-modal="true" aria-labelledby="confirm-message">
+    <div id="confirm-layer" aria-hidden="true" hidden>
+        <div id="confirm-prompt" role="alertdialog" aria-modal="true" aria-labelledby="confirm-message" tabindex="-1">
             <span id="confirm-message"></span>
-            <input id="confirm-input" type="text" autocomplete="off">
+            <input id="confirm-input" type="text" autocomplete="off" aria-labelledby="confirm-message">
             <span class="confirm-actions">
                 <button type="button" data-confirm-cancel>Cancel</button>
+                <button type="button" class="confirm-danger" data-confirm-alternate hidden></button>
                 <button type="button" class="confirm-danger" data-confirm-accept>Delete</button>
             </span>
         </div>
@@ -68,6 +69,9 @@
             check('mc rate rendered', /%$/.test(text('[data-el="mcRate"]')));
             check('coast number rendered', /^\$/.test(text('[data-el="fiNumber"]')));
             check('table has all years', document.querySelectorAll('.lg-table tbody tr').length === 66);
+            check('planner charts have accessible names',
+                document.querySelector('[data-el="wealthChart"]').getAttribute('aria-label') === 'Projected balances chart' &&
+                document.querySelector('[data-el="mcChart"]').getAttribute('aria-label') === 'Range of outcomes chart');
             check('phase editor rendered', document.querySelectorAll('.ff-phase').length === 1);
             check('drawdown editor rendered', document.querySelectorAll('.ff-draw').length === 2);
 
@@ -168,7 +172,36 @@
             document.getElementById('confirm-input').value = 'Test Acct';
             document.querySelector('[data-confirm-accept]').click();
             check('prompt dialog returns typed value', promptGot === 'Test Acct');
-            check('prompt dialog closes', !document.getElementById('confirm-layer').classList.contains('show'));
+            check('prompt dialog closes', document.getElementById('confirm-layer').hidden === true);
+
+            var returnTarget = document.querySelector('[data-theme-toggle]');
+            returnTarget.focus();
+            var cancelled = false;
+            FireApp.confirm('Delete this?', function () {}, 'Delete', {
+                onCancel: function () { cancelled = true; }
+            });
+            check('destructive dialog starts on cancel', document.activeElement.matches('[data-confirm-cancel]'));
+            check('dialog makes background inert', document.getElementById('ui-root').inert === true);
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true }));
+            check('dialog traps reverse tab', document.activeElement.matches('[data-confirm-accept]'));
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+            check('dialog traps forward tab', document.activeElement.matches('[data-confirm-cancel]'));
+            document.querySelector('[data-confirm-cancel]').click();
+            check('cancel callback runs', cancelled === true);
+            check('dialog restores background and focus',
+                document.getElementById('ui-root').inert === false && document.activeElement === returnTarget);
+
+            var alternate = false;
+            FireApp.confirm('Choose a copy', function () {}, 'Use cloud', {
+                strict: true,
+                alternateLabel: 'Overwrite cloud',
+                onAlternate: function () { alternate = true; }
+            });
+            check('three-choice dialog keeps a safe cancel',
+                !document.querySelector('[data-confirm-alternate]').hidden &&
+                document.querySelector('[data-confirm-cancel]').textContent === 'Cancel');
+            document.querySelector('[data-confirm-alternate]').click();
+            check('alternate conflict action runs explicitly', alternate === true);
 
             // Reroll changes seed and keeps a valid readout
             var seed = FireStore.get().mcSeed;
@@ -209,7 +242,7 @@
             /* ---------------- Tracker ---------------- */
             function nav(sel) { document.querySelector(sel).click(); }
 
-            // Net Worth tab starts blank; seed via a config like seed.js would provide
+            // Net Worth starts blank before representative test data is loaded.
             nav('[data-view="observatory"]');
             check('net worth tab mounts empty state', document.querySelector('.trk-empty') !== null);
 
@@ -390,6 +423,9 @@
             check('nav collapses when tabs overflow', navBar.classList.contains('nav-collapsed'));
             check('burger shown when collapsed',
                 getComputedStyle(navBar.querySelector('[data-nav-burger]')).display !== 'none');
+            check('burger identifies its controlled menu',
+                navBar.querySelector('[data-nav-burger]').getAttribute('aria-controls') === 'nav-menu' &&
+                navBar.querySelector('#nav-menu') !== null);
             check('tab row hidden when collapsed',
                 getComputedStyle(navBar.querySelector('.nav-tabs')).display === 'none');
             check('menu closed until opened', navBar.querySelector('.nav-menu').hidden === true);
@@ -400,10 +436,14 @@
             document.querySelector('#app-nav .nav-menu [data-view="observatory"]').click();
             check('menu tab switches view', document.querySelector('.ui-observatory') !== null);
             check('menu closes after choosing', document.querySelector('#app-nav .nav-menu').hidden === true);
+            document.querySelector('#app-nav [data-nav-burger]').click();
             document.getElementById('app-nav').style.maxWidth = '';
             window.dispatchEvent(new Event('resize'));
             check('nav restores when space returns',
                 document.getElementById('app-nav').classList.contains('nav-collapsed') === wasCollapsed);
+            check('burger state resets when overflow clears',
+                document.querySelector('#app-nav [data-nav-burger]').getAttribute('aria-expanded') === 'false' &&
+                document.querySelector('#app-nav .nav-menu').hidden === true);
             nav('[data-view="ledger"]');
 
             // Beginner is a view over the same state, not a second model.
