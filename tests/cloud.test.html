@@ -8,42 +8,109 @@
 <body>
     <pre id="out">RUNNING</pre>
 
-    <!-- In-memory mock of the Firebase compat API, installed before cloud.js
-         so FireCloud drives it exactly as it would the real SDK. -->
     <script>
     (function () {
-        var docs = {};       // uid -> stored document
-        var authCb = null;
-        var SENTINEL = { __ts: true };
-        window.__mockDocs = docs;
-        function ref(uid) {
-            return {
-                get: function () { return Promise.resolve({ exists: Object.prototype.hasOwnProperty.call(docs, uid), data: function () { return docs[uid]; } }); },
-                set: function (payload) { docs[uid] = payload; return Promise.resolve(); }
-            };
+        var docs = Object.create(null);
+        var authCallback = null;
+        var failures = [];
+        var gates = [];
+        var SENTINEL = { __serverTimestamp: true };
+
+        function copy(value) {
+            return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
         }
-        window.firebase = {
-            initializeApp: function () { return {}; },
-            auth: function () {
-                return {
-                    onAuthStateChanged: function (cb) { authCb = cb; },
-                    signInWithPopup: function () { return Promise.resolve(); },
-                    signOut: function () { if (authCb) authCb(null); return Promise.resolve(); }
+
+        function snapshot(path, source) {
+            var exists = Object.prototype.hasOwnProperty.call(source, path);
+            return { exists: exists, data: function () { return copy(source[path]); } };
+        }
+
+        function DocumentReference(path) { this.path = path; }
+        DocumentReference.prototype.collection = function (name) {
+            return new CollectionReference(this.path + '/' + name);
+        };
+        DocumentReference.prototype.get = function () { return Promise.resolve(snapshot(this.path, docs)); };
+        DocumentReference.prototype.set = function (value) {
+            docs[this.path] = copy(value);
+            return Promise.resolve();
+        };
+
+        function CollectionReference(path) { this.path = path; }
+        CollectionReference.prototype.doc = function (id) {
+            return new DocumentReference(this.path + '/' + id);
+        };
+
+        function runTransaction(update) {
+            var gate = gates.shift() || Promise.resolve();
+            return gate.then(function () {
+                if (failures.length) return Promise.reject(failures.shift());
+                var working = copy(docs);
+                var transaction = {
+                    get: function (ref) { return Promise.resolve(snapshot(ref.path, working)); },
+                    set: function (ref, value) { working[ref.path] = copy(value); },
+                    delete: function (ref) { delete working[ref.path]; }
                 };
-            },
+                return Promise.resolve(update(transaction)).then(function (result) {
+                    Object.keys(docs).forEach(function (key) { delete docs[key]; });
+                    Object.keys(working).forEach(function (key) { docs[key] = working[key]; });
+                    return result;
+                });
+            });
+        }
+
+        var authService = {
+            onAuthStateChanged: function (callback) { authCallback = callback; },
+            signInWithPopup: function () { return Promise.resolve(); },
+            signInWithRedirect: function () { return Promise.resolve(); },
+            signOut: function () {
+                if (authCallback) authCallback(null);
+                return Promise.resolve();
+            }
+        };
+
+        window.firebase = {
+            apps: [],
+            initializeApp: function () { this.apps.push({}); return this.apps[0]; },
+            auth: function () { return authService; },
             firestore: function () {
-                return { collection: function () { return { doc: function (uid) { return ref(uid); } }; } };
+                return {
+                    collection: function (name) { return new CollectionReference(name); },
+                    runTransaction: runTransaction
+                };
             }
         };
         window.firebase.auth.GoogleAuthProvider = function () {};
-        window.firebase.firestore.FieldValue = { serverTimestamp: function () { return SENTINEL; } };
-        window.__signIn = function (uid, email) { if (authCb) authCb({ uid: uid, email: email, displayName: email }); };
+        window.firebase.firestore.FieldValue = {
+            serverTimestamp: function () { return SENTINEL; }
+        };
+        window.__mock = {
+            get: function (path) { return copy(docs[path]); },
+            put: function (path, value) { docs[path] = copy(value); },
+            remove: function (path) { delete docs[path]; },
+            failNext: function (error) { failures.push(error); },
+            holdNext: function () {
+                var release;
+                gates.push(new Promise(function (resolve) { release = resolve; }));
+                return release;
+            },
+            holdAfterNext: function () {
+                var release;
+                gates.push(Promise.resolve());
+                gates.push(new Promise(function (resolve) { release = resolve; }));
+                return release;
+            },
+            all: docs
+        };
+        window.__signIn = function (uid, email) {
+            if (authCallback) authCallback({ uid: uid, email: email, displayName: email });
+        };
     })();
-    window.FirebaseConfig = { apiKey: 'test-key' };
+
+    window.FirebaseConfig = { apiKey: 'test-key', projectId: 'test-project' };
     window.__confirms = 0;
     window.FireApp = {
         toast: function () {},
-        confirm: function (msg, onConfirm) { window.__confirms++; onConfirm(); }
+        confirm: function (message, onConfirm) { window.__confirms++; onConfirm(); }
     };
     </script>
 
@@ -55,27 +122,63 @@
     <script src="../js/cloud.js"></script>
 
     <script>
-    window.addEventListener('load', function () {
+    window.addEventListener('load', async function () {
         if (!window.FireTest || !FireTest.allowed) {
             document.getElementById('out').textContent = 'TEST DISABLED OUTSIDE LOCALHOST';
             return;
         }
-        var out = [], fails = 0;
-        function check(name, cond) { out.push((cond ? 'ok:   ' : 'FAIL: ') + name); if (!cond) fails++; }
+        var out = [], failures = 0;
+        function check(name, condition) {
+            out.push((condition ? 'ok:   ' : 'FAIL: ') + name);
+            if (!condition) failures++;
+        }
+        function copy(value) { return JSON.parse(JSON.stringify(value)); }
+        function hash(text) {
+            var value = 2166136261;
+            for (var i = 0; i < text.length; i++) {
+                value ^= text.charCodeAt(i);
+                value = Math.imul(value, 16777619);
+            }
+            return 'fnv1a-' + text.length + '-' + ('00000000' + (value >>> 0).toString(16)).slice(-8);
+        }
+        function path(uid, suffix) { return 'users/' + uid + (suffix ? '/' + suffix : ''); }
+        function writeRemote(uid, plan, tracker, planRevision, trackerRevision) {
+            var json = JSON.stringify(tracker);
+            var chunks = [];
+            for (var start = 0; start < json.length; start += 180000) chunks.push(json.slice(start, start + 180000));
+            if (!chunks.length) chunks.push('');
+            var stamp = { __serverTimestamp: true };
+            __mock.put(path(uid), { schemaVersion: 2, updatedAt: stamp });
+            __mock.put(path(uid, 'state/plan'), {
+                schemaVersion: 2, revision: planRevision, data: plan, updatedAt: stamp
+            });
+            __mock.put(path(uid, 'state/tracker'), {
+                schemaVersion: 2, revision: trackerRevision, chunkCount: chunks.length,
+                digest: hash(json), updatedAt: stamp
+            });
+            chunks.forEach(function (data, index) {
+                __mock.put(path(uid, 'trackerChunks/c' + String(index).padStart(4, '0')), {
+                    schemaVersion: 2, revision: trackerRevision, index: index,
+                    count: chunks.length, data: data, updatedAt: stamp
+                });
+            });
+        }
+        function tick() { return new Promise(function (resolve) { setTimeout(resolve, 0); }); }
         function finish() {
             document.getElementById('out').textContent =
-                (fails ? 'CLOUD FAIL (' + fails + ')\n' : 'CLOUD PASS\n') + out.join('\n');
+                (failures ? 'CLOUD FAIL (' + failures + ')\n' : 'CLOUD PASS\n') + out.join('\n');
         }
 
         try {
             FireTest.storage.clear();
             FireStore.init();
             TrackerStore.init();
+            var defaultPlan = copy(FireStore.get());
+            var defaultTracker = copy(TrackerStore.get());
 
             check('available with mock + config', FireCloud.available() === true);
             check('starts signed out', FireCloud.signedIn() === false);
 
-            // Local edits before any sign-in
             FireStore.setInput('income', 123456);
             TrackerStore.seedFrom({
                 accounts: [{ id: 'a1', name: 'Savings', group: 'cash' }],
@@ -83,62 +186,225 @@
                 txns: []
             });
 
-            FireCloud.init();
+            check('initializes without throwing', await FireCloud.init() === true);
             __signIn('user1', 'a@b.com');
+            await FireCloud.flush();
 
-            // onSignIn resolves get() on a microtask; let it settle.
-            setTimeout(function () {
-                // Scenario A — first sign-in seeds the empty cloud from local
-                var d1 = window.__mockDocs.user1;
-                check('signed in as user1', FireCloud.signedIn() === true);
-                check('A: cloud doc created', !!d1);
-                check('A: cloud carries local plan', d1 && d1.plan.inputs.income === 123456);
-                check('A: cloud carries local tracker', d1 && d1.tracker.snapshots['2026-01'].a1 === 4321);
-                check('A: doc is versioned', d1 && d1.version === 1);
-                check('A: seeding asked for consent', window.__confirms === 1);
+            var seededPlan = __mock.get(path('user1', 'state/plan'));
+            var seededTracker = __mock.get(path('user1', 'state/tracker'));
+            check('fresh account writes a v2 manifest', __mock.get(path('user1')).schemaVersion === 2);
+            check('fresh account splits plan state', seededPlan.data.inputs.income === 123456);
+            check('fresh account splits tracker metadata', seededTracker.chunkCount === 1 && seededTracker.revision === 1);
+            check('fresh account writes tracker chunks', !!__mock.get(path('user1', 'trackerChunks/c0000')));
+            check('fresh local data requires consent', window.__confirms === 1);
+            check('fresh account reaches synced status', FireCloud.status().phase === 'synced');
 
-                // Scenario B — a returning user's cloud doc is the source of truth
-                window.__mockDocs.user2 = {
-                    version: 1,
-                    plan: { inputs: { income: 999000 }, profile: { birthDate: null }, phases: [{ id: 1, age: 30, deferred: 50, free: 50, taxable: 0, isLocked: true }], mcSeed: 7 },
-                    tracker: { accounts: [{ id: 'z9', name: 'Roth', group: 'taxFree' }], snapshots: { '2026-02': { z9: 88000 } }, ageIncome: {}, txns: [], cashMonths: [] }
-                };
-                FireCloud.signOut();
-                check('B: signOut clears user', FireCloud.signedIn() === false);
-                __signIn('user2', 'c@d.com');
+            var remotePlan = copy(defaultPlan);
+            remotePlan.inputs.income = 999000;
+            var remoteTracker = copy(defaultTracker);
+            remoteTracker.accounts = [{ id: 'z9', name: 'Roth', group: 'taxFree' }];
+            remoteTracker.snapshots = { '2026-02': { z9: 88000 } };
+            writeRemote('user2', remotePlan, remoteTracker, 1, 1);
 
-                setTimeout(function () {
-                    check('B: adopts cloud plan (income)', FireStore.get().inputs.income === 999000);
-                    check('B: adopts cloud tracker (accounts)', TrackerStore.get().accounts.length === 1 && TrackerStore.get().accounts[0].name === 'Roth');
-                    check('B: adopts cloud tracker (snapshot)', TrackerStore.get().snapshots['2026-02'].z9 === 88000);
-                    check('B: adopt did not overwrite the cloud doc', window.__mockDocs.user2.plan.inputs.income === 999000);
-                    check('B: returning account never prompts', window.__confirms === 1);
+            await FireCloud.signOut();
+            __signIn('user2', 'c@d.com');
+            await FireCloud.flush();
+            check('returning account adopts cloud plan', FireStore.get().inputs.income === 999000);
+            check('returning account adopts cloud tracker', TrackerStore.get().accounts[0].name === 'Roth');
+            check('returning account does not prompt', window.__confirms === 1);
 
-                    // Scenario C — edits while signed in push (debounced) to cloud
-                    FireStore.setInput('income', 555000);
-                    TrackerStore.addAccount('Brokerage', 'afterTax');
+            FireStore.setInput('income', 555000);
+            var changedElsewhere = copy(remotePlan);
+            changedElsewhere.inputs.income = 777000;
+            __mock.put(path('user2', 'state/plan'), {
+                schemaVersion: 2, revision: 2, data: changedElsewhere,
+                updatedAt: { __serverTimestamp: true }
+            });
+            check('stale write reports conflict', await FireCloud.flush() === false);
+            check('stale write preserves local plan', FireStore.get().inputs.income === 555000);
+            check('stale write does not overwrite remote', __mock.get(path('user2', 'state/plan')).data.inputs.income === 777000);
+            check('status names the conflicting domain', !!FireCloud.status().conflicts.plan);
+            await FireCloud.resolveConflict('remote', 'plan');
+            check('remote conflict resolution adopts cloud', FireStore.get().inputs.income === 777000);
 
-                    setTimeout(function () {
-                        check('C: debounced push wrote plan', window.__mockDocs.user2.plan.inputs.income === 555000);
-                        check('C: debounced push wrote tracker', window.__mockDocs.user2.tracker.accounts.length === 2);
-                        check('C: push stamped updatedAt', !!window.__mockDocs.user2.updatedAt);
+            FireStore.setInput('income', 666000);
+            var unavailable = new Error('network unavailable');
+            unavailable.code = 'unavailable';
+            __mock.failNext(unavailable);
+            check('transient push failure stays pending', await FireCloud.flush() === false && FireCloud.status().pending.indexOf('plan') >= 0);
+            check('transient push enters retry state', FireCloud.status().phase === 'retrying');
+            var pendingRecord = JSON.parse(FireTest.storage.getItem('fireCloudSync_v2:user2'));
+            check('pending write is durable before retry', pendingRecord.plan.dirty === true && !!pendingRecord.plan.pendingHash);
+            check('manual flush retries successfully', await FireCloud.flush() === true);
+            check('retry writes next revision', __mock.get(path('user2', 'state/plan')).revision === 3);
+            check('successful retry clears durable dirty state',
+                JSON.parse(FireTest.storage.getItem('fireCloudSync_v2:user2')).plan.dirty === false);
 
-                        // Scenario D — signed out, edits stay local only
-                        FireCloud.signOut();
-                        var before = JSON.stringify(window.__mockDocs.user2);
-                        FireStore.setInput('income', 111111);
-                        setTimeout(function () {
-                            check('D: no push while signed out', JSON.stringify(window.__mockDocs.user2) === before);
-                            check('D: local still updates', FireStore.get().inputs.income === 111111);
-                            finish();
-                        }, 1800);
-                    }, 1800);
-                }, 60);
-            }, 60);
-        } catch (e) {
-            fails++; out.push('EXCEPTION: ' + e.message + '\n' + e.stack);
-            finish();
+            FireStore.setInput('income', 676000);
+            var denied = new Error('rules denied the write');
+            denied.code = 'permission-denied';
+            __mock.failNext(denied);
+            check('permanent push failure is not retried', await FireCloud.flush() === false &&
+                FireCloud.status().phase === 'error' && FireCloud.status().retryAt === null);
+            check('manual retry can recover after permissions change', await FireCloud.flush() === true);
+
+            var hydrationPlan = copy(defaultPlan);
+            hydrationPlan.inputs.income = 300000;
+            writeRemote('user3', hydrationPlan, defaultTracker, 1, 1);
+            await FireCloud.signOut();
+            var release = __mock.holdNext();
+            __signIn('user3', 'e@f.com');
+            FireStore.setInput('income', 333333);
+            release();
+            await FireCloud.flush();
+            check('cross-account edit during hydration conflicts', !!FireCloud.status().conflicts.plan);
+            check('cross-account edit does not overwrite cloud',
+                __mock.get(path('user3', 'state/plan')).revision === 1 &&
+                __mock.get(path('user3', 'state/plan')).data.inputs.income === 300000);
+            await FireCloud.resolveConflict('remote', 'plan');
+
+            await FireCloud.signOut();
+            var releaseKnown = __mock.holdNext();
+            __signIn('user3', 'e@f.com');
+            FireStore.setInput('income', 333333);
+            releaseKnown();
+            await FireCloud.flush();
+            check('edit on a known hydration baseline is retained', FireStore.get().inputs.income === 333333);
+            check('edit on a known hydration baseline is pushed safely',
+                __mock.get(path('user3', 'state/plan')).revision === 2 &&
+                __mock.get(path('user3', 'state/plan')).data.inputs.income === 333333);
+
+            var largeTracker = copy(TrackerStore.get());
+            for (var i = 0; i < 700; i++) {
+                largeTracker.txns.push({
+                    id: 'large-' + i, date: '2026-01-01', name: 'Purchase ' + i,
+                    amount: i + 0.25, category: 'Other', account: 'Card',
+                    description: new Array(451).join(String(i % 10))
+                });
+            }
+            TrackerStore.replace(largeTracker);
+            await FireCloud.flush();
+            check('large tracker uses multiple documents', __mock.get(path('user3', 'state/tracker')).chunkCount > 1);
+            check('large tracker revision advances atomically', __mock.get(path('user3', 'state/tracker')).revision === 2);
+
+            var retryPlan = copy(defaultPlan);
+            retryPlan.inputs.income = 400000;
+            writeRemote('user4', retryPlan, defaultTracker, 1, 1);
+            await FireCloud.signOut();
+            var pullFailure = new Error('offline pull');
+            pullFailure.code = 'unavailable';
+            __mock.failNext(pullFailure);
+            __signIn('user4', 'g@h.com');
+            FireStore.setInput('income', 444444);
+            await tick();
+            check('failed hydration remains unhydrated', FireCloud.status().phase === 'retrying' && !FireCloud.status().hydrated);
+            check('unhydrated edit records provisional ownership',
+                FireTest.storage.getItem('fireCloudOwner_v2') === 'user4' &&
+                JSON.parse(FireTest.storage.getItem('fireCloudSync_v2:user4')).plan.revision === 0 &&
+                JSON.parse(FireTest.storage.getItem('fireCloudSync_v2:user4')).plan.dirty === true);
+            await FireCloud.flush();
+            check('retry detects an unknown edited baseline', !!FireCloud.status().conflicts.plan);
+            check('retry cannot overwrite a different account',
+                __mock.get(path('user4', 'state/plan')).revision === 1 &&
+                __mock.get(path('user4', 'state/plan')).data.inputs.income === 400000);
+            await FireCloud.resolveConflict('local', 'plan');
+            check('explicit local choice advances the observed revision',
+                __mock.get(path('user4', 'state/plan')).revision === 2 &&
+                __mock.get(path('user4', 'state/plan')).data.inputs.income === 444444);
+
+            __mock.put(path('user4', 'state/plan'), {
+                schemaVersion: 2, revision: 2, data: { inputs: 'invalid' },
+                updatedAt: { __serverTimestamp: true }
+            });
+            FireStore.setInput('income', 454545);
+            check('invalid remote state blocks a push', await FireCloud.flush() === false);
+            check('terminal push error remains visible',
+                FireCloud.status().phase === 'error' && !!FireCloud.status().error);
+
+            await FireCloud.signOut();
+            var before = JSON.stringify(__mock.all);
+            FireStore.setInput('income', 111111);
+            await FireCloud.flush();
+            check('signed-out edits stay local', JSON.stringify(__mock.all) === before && FireStore.get().inputs.income === 111111);
+
+            var malformedTracker = copy(defaultTracker);
+            writeRemote('user5', defaultPlan, malformedTracker, 1, 1);
+            __mock.put(path('user5', 'state/plan'), {
+                schemaVersion: 2, revision: 1, data: { inputs: 'invalid' },
+                updatedAt: { __serverTimestamp: true }
+            });
+            __signIn('user5', 'i@j.com');
+            await FireCloud.flush();
+            check('malformed cloud state is rejected', FireCloud.status().phase === 'error' && !FireCloud.status().hydrated);
+            check('account switch quarantines anonymous data', FireStore.get().inputs.income === 0);
+            await FireCloud.signOut();
+            check('sign-out restores anonymous local data', FireStore.get().inputs.income === 111111);
+
+            var releaseSeed = __mock.holdAfterNext();
+            __signIn('user6', 'k@l.com');
+            await tick();
+            var winningPlan = copy(defaultPlan);
+            winningPlan.inputs.income = 222222;
+            writeRemote('user6', winningPlan, defaultTracker, 1, 1);
+            releaseSeed();
+            await FireCloud.flush();
+            check('raced first upload becomes a conflict',
+                FireCloud.status().phase === 'conflict' && !!FireCloud.status().conflicts.plan);
+            check('raced first upload preserves the confirmed local copy', FireStore.get().inputs.income === 111111);
+            check('raced first upload does not replace the winner',
+                __mock.get(path('user6', 'state/plan')).data.inputs.income === 222222);
+            await FireCloud.resolveConflict('remote');
+            check('raced upload resolves only after an explicit choice', FireStore.get().inputs.income === 222222);
+
+            FireStore.setInput('income', 232323);
+            FireTest.storage.failWritesFor('fireCloudLocal_v2:');
+            check('sign-out stops when account data cannot be preserved', await FireCloud.signOut() === false);
+            check('failed preservation keeps identity and local data',
+                FireCloud.signedIn() && FireStore.get().inputs.income === 232323 &&
+                FireCloud.status().phase === 'error');
+            FireTest.storage.failWritesFor(null);
+            await FireCloud.signOut();
+
+            FireStore.setInput('income', 515151);
+            TrackerStore.replace(defaultTracker);
+            FireTest.storage.setItem('fireCloudOwner_v2', 'user7');
+            var reloadPlan = copy(defaultPlan);
+            reloadPlan.inputs.income = 700000;
+            var reloadTracker = copy(defaultTracker);
+            reloadTracker.accounts = [{ id: 'remote7', name: 'Remote tracker', group: 'cash' }];
+            reloadTracker.snapshots = { '2026-07': { remote7: 77 } };
+            writeRemote('user7', reloadPlan, reloadTracker, 1, 1);
+            __signIn('user7', 'm@n.com');
+            await FireCloud.flush();
+            check('missing owned sync record conflicts in every changed domain',
+                !!FireCloud.status().conflicts.plan && !!FireCloud.status().conflicts.tracker);
+            check('missing owned sync record preserves local data',
+                FireStore.get().inputs.income === 515151 && TrackerStore.get().accounts.length === 0);
+            check('missing owned sync record cannot overwrite cloud',
+                __mock.get(path('user7', 'state/plan')).revision === 1 &&
+                __mock.get(path('user7', 'state/plan')).data.inputs.income === 700000);
+            await FireCloud.resolveConflict('remote');
+            check('owned record conflict resolves only after an explicit choice',
+                FireStore.get().inputs.income === 700000 &&
+                TrackerStore.get().accounts[0].name === 'Remote tracker');
+            await FireCloud.signOut();
+
+            var incompleteTracker = copy(defaultTracker);
+            incompleteTracker.txns.push({
+                id: 'huge', date: '2026-01-01', name: 'Large import', amount: 1,
+                category: 'Other', account: 'Card', description: new Array(180101).join('x')
+            });
+            writeRemote('user8', defaultPlan, incompleteTracker, 1, 1);
+            __mock.remove(path('user8', 'trackerChunks/c0001'));
+            __signIn('user8', 'o@p.com');
+            await FireCloud.flush();
+            check('missing remote chunk is rejected',
+                FireCloud.status().phase === 'error' && !FireCloud.status().hydrated);
+        } catch (error) {
+            failures++;
+            out.push('EXCEPTION: ' + error.message + '\n' + error.stack);
         }
+        finish();
     });
     </script>
 </body>
