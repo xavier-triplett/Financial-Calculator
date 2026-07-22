@@ -106,7 +106,7 @@
         function sync(dates, str, fp) { if (sel) sel.value = fp.currentYear; }
         config.onReady = function (dates, str, fp) {
             var wrap = fp.currentYearElement.parentNode;
-            sel = el('select', { class: 'flatpickr-yearDropdown-years' });
+            sel = el('select', { class: 'flatpickr-yearDropdown-years', 'aria-label': 'Year' });
             for (var y = range[1]; y >= range[0]; y--) sel.appendChild(el('option', { value: y, text: y }));
             sel.addEventListener('change', function () { fp.changeYear(parseInt(sel.value, 10)); });
             wrap.parentNode.insertBefore(sel, wrap);
@@ -137,11 +137,30 @@
 
     function debounce(fn, ms) {
         var t = null;
-        return function () {
+        var lastArgs, lastSelf;
+        function wrapped() {
             var args = arguments, self = this;
             clearTimeout(t);
-            t = setTimeout(function () { fn.apply(self, args); }, ms);
+            lastArgs = args;
+            lastSelf = self;
+            t = setTimeout(function () {
+                t = null;
+                fn.apply(self, args);
+            }, ms);
+        }
+        wrapped.cancel = function () {
+            clearTimeout(t);
+            t = null;
+            lastArgs = null;
+            lastSelf = null;
         };
+        wrapped.flush = function () {
+            if (t === null) return;
+            clearTimeout(t);
+            t = null;
+            fn.apply(lastSelf, lastArgs);
+        };
+        return wrapped;
     }
 
     global.FireUtil = {

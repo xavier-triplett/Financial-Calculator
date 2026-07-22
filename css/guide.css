@@ -4,7 +4,7 @@
     --panel: #FFFFFF;
     --ink: #1A211D;
     --muted: #66716B;
-    --faint: #9AA39D;
+    --faint: #59655E;
     --rule: #E2E5E0;
     --rule-dark: #C9CEC8;
     --green: #17604A;
@@ -21,7 +21,7 @@ html[data-theme="dark"] .ui-guide {
     --panel: #19211D;
     --ink: #E8ECE8;
     --muted: #A4AFA8;
-    --faint: #78847D;
+    --faint: #98A39C;
     --rule: #2A342E;
     --rule-dark: #3B4740;
     --green: #8BE8BC;

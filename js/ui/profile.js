@@ -22,8 +22,8 @@
 
             '<section class="pf-hero">' +
                 '<div class="pf-hero-field">' +
-                    '<label class="pf-eyebrow" for="pf-dob">Date of birth</label>' +
-                    '<input id="pf-dob" class="pf-dob" type="date" data-el="dob" max="9999-12-31">' +
+                    '<label class="pf-eyebrow" id="pf-dob-label" for="pf-dob">Date of birth</label>' +
+                    '<input id="pf-dob" class="pf-dob" type="date" data-el="dob" aria-labelledby="pf-dob-label">' +
                     '<p class="pf-hero-note">Your age is derived from this, and used everywhere.</p>' +
                 '</div>' +
                 '<div class="pf-hero-age">' +
@@ -55,8 +55,13 @@
         els.dob.addEventListener('change', function () { FireStore.setProfile('birthDate', els.dob.value); });
         els.dobPicker = U.datePicker(els.dob, {
             dateFormat: 'Y-m-d', altInput: true, altFormat: 'F j, Y',
-            maxDate: 'today', disableMobile: true
+            maxDate: 'today', yearRange: [new Date().getFullYear() - 95, new Date().getFullYear()]
         });
+        if (els.dobPicker.altInput) {
+            els.dobPicker.altInput.id = 'pf-dob-visible';
+            els.dobPicker.altInput.setAttribute('aria-labelledby', 'pf-dob-label');
+            document.getElementById('pf-dob-label').setAttribute('for', 'pf-dob-visible');
+        }
         els.reset.addEventListener('click', FireApp.confirmReset);
     }
 

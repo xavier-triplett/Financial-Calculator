@@ -4,6 +4,20 @@
     'use strict';
 
     var U = global.FireUtil;
+    var pendingCommits = [];
+
+    function setGroupOpen(groupEl, open) {
+        var head = groupEl.querySelector('.ff-group-head');
+        var body = groupEl.querySelector('.ff-group-body');
+        groupEl.classList.toggle('open', open);
+        head.setAttribute('aria-expanded', String(open));
+        body.hidden = !open;
+    }
+
+    function cancelPending() {
+        pendingCommits.forEach(function (commit) { commit.cancel(); });
+        pendingCommits = [];
+    }
 
     /* ------------------------------------------------------------------
      * Field groups
@@ -16,12 +30,18 @@
         FireSchema.groups.forEach(function (group) {
             if (wanted && wanted.indexOf(group.id) === -1) return;
 
-            var head = U.el('button', { class: 'ff-group-head', type: 'button' }, [
+            var bodyId = 'ff-group-' + group.id + '-' + Math.random().toString(36).slice(2, 9);
+            var open = !opts.collapsed;
+            var head = U.el('button', {
+                class: 'ff-group-head', type: 'button',
+                'aria-expanded': String(open), 'aria-controls': bodyId
+            }, [
                 U.el('span', { class: 'ff-group-icon', html: group.icon || '' }),
                 U.el('span', { class: 'ff-group-title', text: group.title }),
                 U.el('span', { class: 'ff-group-caret' })
             ]);
-            var body = U.el('div', { class: 'ff-group-body' });
+            var body = U.el('div', { class: 'ff-group-body', id: bodyId });
+            body.hidden = !open;
             if (group.blurb) body.appendChild(U.el('p', { class: 'ff-group-blurb', text: group.blurb }));
 
             var fieldsWrap = U.el('div', { class: 'ff-fields' });
@@ -44,8 +64,8 @@
             }
             body.appendChild(fieldsWrap);
 
-            var groupEl = U.el('div', { class: 'ff-group' + (group.expert ? ' ff-expert' : '') + (opts.collapsed ? '' : ' open'), 'data-group': group.id }, [head, body]);
-            head.addEventListener('click', function () { groupEl.classList.toggle('open'); });
+            var groupEl = U.el('div', { class: 'ff-group' + (group.expert ? ' ff-expert' : '') + (open ? ' open' : ''), 'data-group': group.id }, [head, body]);
+            head.addEventListener('click', function () { setGroupOpen(groupEl, !groupEl.classList.contains('open')); });
             container.appendChild(groupEl);
         });
     }
@@ -74,8 +94,11 @@
             FireStore.setInput(f.key, v);
         }
 
-        input.addEventListener('input', U.debounce(commit, 250));
+        var deferredCommit = U.debounce(commit, 250);
+        pendingCommits.push(deferredCommit);
+        input.addEventListener('input', deferredCommit);
         input.addEventListener('change', function () {
+            deferredCommit.cancel();
             commit();
             var val = FireStore.get().inputs[f.key];
             if (money) U.setMoneyEl(input, val);
@@ -170,10 +193,14 @@
             if (phase.isLocked) ageInput.setAttribute('disabled', 'disabled');
             else ageInput.addEventListener('change', function () { FireStore.updatePhase(phase.id, 'age', ageInput.value); });
 
-            head.appendChild(U.el('span', { class: 'ff-phase-age-label', text: phase.isLocked ? 'From age (now)' : 'From age' }));
-            head.appendChild(ageInput);
+            head.appendChild(U.el('label', { class: 'ff-phase-age-label' }, [
+                U.el('span', { text: phase.isLocked ? 'From age (now)' : 'From age' }), ageInput
+            ]));
             if (!phase.isLocked) {
-                var del = U.el('button', { class: 'ff-phase-del', type: 'button', title: 'Remove phase', html: '&times;' });
+                var del = U.el('button', {
+                    class: 'ff-phase-del', type: 'button', title: 'Remove phase',
+                    'aria-label': 'Remove saving phase from age ' + phase.age, html: '&times;'
+                });
                 del.addEventListener('click', function () { FireStore.removePhase(phase.id); });
                 head.appendChild(del);
             }
@@ -188,7 +215,7 @@
                 });
                 if (key === 'taxable') inp.setAttribute('readonly', 'readonly');
                 else inp.addEventListener('change', function () { FireStore.updatePhase(phase.id, key, inp.value); });
-                split.appendChild(U.el('span', { class: 'ff-phase-cell ff-bucket-' + key }, [
+                split.appendChild(U.el('label', { class: 'ff-phase-cell ff-bucket-' + key }, [
                     U.el('span', { class: 'ff-phase-cell-label', text: pair[1] + ' %' }), inp
                 ]));
             });
@@ -260,7 +287,7 @@
             var block = container.querySelector('[data-set="' + set.id + '"]');
             if (!block) return;
             var total = 0;
-            block.querySelectorAll('input').forEach(function (i) { total += parseInt(i.value, 10) || 0; });
+            block.querySelectorAll('input').forEach(function (i) { total += Number(i.value) || 0; });
             var valEl = block.querySelector('.ff-draw-total-val');
             valEl.textContent = total + '%';
             block.classList.toggle('invalid', total !== 100);
@@ -271,7 +298,9 @@
         buildGroups: buildGroups,
         syncInputs: syncInputs,
         renderPhases: renderPhases,
-        renderDrawdown: renderDrawdown
+        renderDrawdown: renderDrawdown,
+        setGroupOpen: setGroupOpen,
+        cancelPending: cancelPending
     };
 
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -52,7 +52,7 @@
                     '<span class="lg-eyebrow">' + (beginner ? 'Your coast number' : 'Coast number today') + '</span>' +
                     '<span class="lg-v-range">No new savings &rarr; account unlock</span>' +
                     '<div class="lg-bignum" data-el="fiNumber">&mdash;</div>' +
-                    '<p class="lg-v-note">Full target at unlock: <strong data-el="fiTarget"></strong><br>Current invested: <strong data-el="nwAtRetire"></strong></p>' +
+                    '<p class="lg-v-note">Full target at unlock: <strong data-el="fiTarget"></strong><br>Tax-adjusted coast balance: <strong data-el="nwAtRetire"></strong></p>' +
                 '</article>' +
             '</section>' +
 
@@ -77,7 +77,8 @@
                             '<h2>Projected balances</h2>' +
                             '<span class="lg-panel-note">Stacked by bucket &middot; dashed line marks ' + (beginner ? 'your target number' : 'the perpetual FI number') + '</span>' +
                         '</div>' +
-                        '<div class="lg-chart"><canvas data-el="wealthChart"></canvas></div>' +
+                        '<div class="lg-chart"><canvas data-el="wealthChart" role="img" aria-label="Projected balances chart" aria-describedby="wealth-chart-summary"></canvas></div>' +
+                        '<p class="sr-only" id="wealth-chart-summary" data-el="wealthSummary"></p>' +
                     '</section>' +
 
                     '<section class="lg-panel lg-expert">' +
@@ -85,7 +86,8 @@
                             '<h2>Range of outcomes</h2>' +
                             '<span class="lg-panel-note" data-el="mcNote"></span>' +
                         '</div>' +
-                        '<div class="lg-chart lg-chart-mc"><canvas data-el="mcChart"></canvas></div>' +
+                        '<div class="lg-chart lg-chart-mc"><canvas data-el="mcChart" role="img" aria-label="Range of outcomes chart" aria-describedby="mc-chart-summary"></canvas></div>' +
+                        '<p class="sr-only" id="mc-chart-summary" data-el="mcSummary"></p>' +
                     '</section>' +
 
                     '<section class="lg-figures lg-expert">' +
@@ -137,7 +139,7 @@
         FireForms.buildGroups(els.formGroups, { collapsed: true, groups: FireSchema.plannerGroups });
         // Keep the first simulation group open
         var first = els.formGroups.querySelector('[data-group="' + FireSchema.plannerGroups[0] + '"]');
-        if (first) first.classList.add('open');
+        if (first) FireForms.setGroupOpen(first, true);
 
         root.querySelector('.lg-reset').addEventListener('click', FireApp.confirmReset);
         els.reroll.addEventListener('click', function () { FireStore.rerollSeed(); });
@@ -244,7 +246,7 @@
             els.infeasible.hidden = false;
             els.infeasible.textContent = 'Feasibility: from age ' + s.firstInfeasibleAge +
                 ', planned saving plus spending exceeds take-home pay (gross income less the effective income tax on the Profile tab). ' +
-                'The projection still shows those dollars being saved; lower the savings rate or spending to make the plan achievable.';
+                'Saving is capped to the available take-home surplus; lower the requested savings rate or spending to remove this constraint.';
         } else {
             els.infeasible.hidden = true;
         }
@@ -268,7 +270,7 @@
 
         els.fiNumber.textContent = U.compact(s.coastNumber);
         els.fiTarget.textContent = U.compact(s.fiNumberAtUnlock);
-        els.nwAtRetire.textContent = U.money(inp.balDeferred + inp.balFree + inp.balTaxable);
+        els.nwAtRetire.textContent = U.money(s.coastBalanceToday);
 
         if (FireApp.mode() === 'beginner') {
             els.assumptions.innerHTML = FireSchema.assumptionsText(state) +
@@ -281,6 +283,13 @@
 
         els.mcNote.textContent = 'Median estate at 95: ' + U.compact(results.mc.endBalance.p50) +
             ' · worst decile: ' + U.compact(results.mc.endBalance.p10);
+
+        var finalRow = results.sim.rows[results.sim.rows.length - 1];
+        els.wealthSummary.textContent = 'Projected balances from age ' + inp.currentAge + ' through 95. ' +
+            'The fixed-return projection ends with ' + U.money(finalRow ? finalRow.total : 0) + '.';
+        els.mcSummary.textContent = Math.round(v.successRate * 100) + ' percent of ' + results.mc.sims +
+            ' simulated market paths retain money through age 95. Median ending balance: ' +
+            U.money(results.mc.endBalance.p50) + '.';
 
         updateCharts(results);
         renderTable(results.sim.rows, inp);
