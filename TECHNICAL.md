@@ -19,11 +19,17 @@ underwriter's stamp that reads SECURE or DEPLETED at a glance.
 - Employer 401k match (rate + salary cap) and IRS contribution limits
   (401k / IRA, inflation-indexed, with age-50 catch-up; overflow spills into the brokerage)
 - Withdrawal tax modeling: effective income-tax rate on deferred draws,
-  capital-gains rate on brokerage draws, Roth tax-free
+  an effective rate on the full amount of brokerage draws, Roth tax-free,
+  plus a configurable early-withdrawal penalty (default 10%) on deferred
+  draws before the penalty-free access age
+- Feasibility check: if planned saving plus spending ever exceeds take-home
+  pay (gross income less the Profile's effective income tax), the Planner
+  flags the first infeasible age
 - Cash on hand held outside the market: counts toward net worth but is
   never grown by returns and never drawn by the simulation
-- Monte Carlo simulation: seeded, reproducible randomized-return runs with a
-  survival probability and a 10th–90th percentile net-worth corridor
+- Monte Carlo simulation: seeded, reproducible lognormal-return runs
+  calibrated so the median path compounds at the market-return assumption,
+  with a survival probability and a 10th–90th percentile net-worth corridor
 
 Plans persist in `localStorage`. Saved data carries no compatibility guarantees —
 if the format changes, old saves are simply discarded and the plan starts from defaults.
@@ -35,7 +41,7 @@ assumptions — switched from the top nav:
 
 - **Net Worth (The Observatory)** — net worth only, no transactions. The
   headline chart plots net worth against the **PAW / AAW / UAW** accumulator
-  benchmarks (AAW = income × age ÷ (50 − age); PAW = 2×; UAW = ½×), driven by
+  benchmarks (AAW = age × income ÷ 10; PAW = 2×; UAW = ½×), driven by
   recorded per-month age & income or a birth-month + income profile.
   Composition gets its own chart, and every month's balances are edited by
   hand in a ruled accounts × months grid (Cash / Tax-Free / Tax-Deferred /
