@@ -10,6 +10,8 @@
 
     var root, navEl, confirmLayer, confirmMessage, confirmAccept, confirmInput;
     var pendingConfirm = null, pendingCancel = null, confirmReturnFocus = null;
+    var confirmStrict = false;  // strict dialogs ignore backdrop/Escape
+    var confirmQueue = [];      // requests arriving while a dialog is open
     var active = null; // { ui, kind } currently mounted
     var pref = { view: 'profile', theme: null };
 
@@ -57,20 +59,32 @@
         var action = pendingConfirm, onCancel = pendingCancel;
         pendingConfirm = null;
         pendingCancel = null;
+        confirmStrict = false;
         confirmLayer.classList.remove('show');
         confirmLayer.setAttribute('aria-hidden', 'true');
         if (confirmReturnFocus && document.contains(confirmReturnFocus)) confirmReturnFocus.focus();
         if (accepted) action(confirmInput.value);
         else if (onCancel) onCancel();
+        if (confirmQueue.length) {
+            var next = confirmQueue.shift();
+            askConfirm(next[0], next[1], next[2], next[3]);
+        }
     }
 
     /* opts.input shows a text field; the accepted callback receives its
      * value. Without it this is the plain destructive confirm.
-     * opts.onCancel runs when the dialog is dismissed instead. */
+     * opts.onCancel runs when the dialog is dismissed instead.
+     * opts.strict requires an explicit button: backdrop/Escape do nothing.
+     * A request arriving while a dialog is open waits its turn. */
     function askConfirm(message, onConfirm, actionLabel, opts) {
+        if (pendingConfirm) {
+            confirmQueue.push([message, onConfirm, actionLabel, opts]);
+            return;
+        }
         opts = opts || {};
         pendingConfirm = onConfirm;
         pendingCancel = opts.onCancel || null;
+        confirmStrict = !!opts.strict;
         confirmReturnFocus = document.activeElement;
         confirmMessage.textContent = message;
         confirmAccept.textContent = actionLabel || 'Delete';
@@ -249,10 +263,11 @@
         });
         confirmLayer.addEventListener('click', function (e) {
             if (e.target.closest('[data-confirm-accept]')) closeConfirm(true);
-            else if (e.target.closest('[data-confirm-cancel]') || e.target === confirmLayer) closeConfirm(false);
+            else if (e.target.closest('[data-confirm-cancel]')) closeConfirm(false);
+            else if (e.target === confirmLayer && !confirmStrict) closeConfirm(false);
         });
         document.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape' && pendingConfirm) closeConfirm(false);
+            if (e.key === 'Escape' && pendingConfirm && !confirmStrict) closeConfirm(false);
             else if (e.key === 'Escape' && navMenuOpen) { navMenuOpen = false; renderNav(); }
         });
 

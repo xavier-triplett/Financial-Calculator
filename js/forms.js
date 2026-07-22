@@ -149,7 +149,7 @@
 
             var head = U.el('div', { class: 'ff-phase-head' });
             var ageInput = U.el('input', {
-                type: 'number',
+                type: 'number', min: '0',
                 value: phase.isLocked ? state.inputs.currentAge : phase.age,
                 'data-phase-id': phase.id, 'data-field': 'age'
             });
