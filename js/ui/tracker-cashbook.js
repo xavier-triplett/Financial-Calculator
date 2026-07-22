@@ -37,7 +37,7 @@
         root.innerHTML = template();
         els = { root: root, body: root.querySelector('[data-el="body"]'), actions: root.querySelector('[data-el="actions"]') };
         els.actions.appendChild(K.importControl({ primary: true }));
-        els.actions.appendChild(K.templateButton());
+        if (FireApp.mode() === 'expert') els.actions.appendChild(K.templateButton());
         var addMonth = U.el('button', { class: 'trk-btn', type: 'button', text: '+ Month' });
         addMonth.addEventListener('click', function () {
             // The commit re-renders before this assignment; render once more

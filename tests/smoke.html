@@ -53,11 +53,14 @@
         try {
             localStorage.clear();
             FireStore.init();
+            FireApp.setMode('beginner');
+            FireApp.setMode('expert');
 
             check('ledger mounts', document.querySelector('.lg-shell') !== null);
             check('bridge stamp populated', text('[data-el="bridgeStamp"]').length > 1);
             check('coast stamp populated', text('[data-el="coastStamp"]').length > 1);
             check('mc rate rendered', /%$/.test(text('[data-el="mcRate"]')));
+            check('coast number rendered', /^\$/.test(text('[data-el="fiNumber"]')));
             check('table has all years', document.querySelectorAll('.lg-table tbody tr').length === 66);
             check('phase editor rendered', document.querySelectorAll('.ff-phase').length === 1);
             check('drawdown editor rendered', document.querySelectorAll('.ff-draw').length === 2);
@@ -390,6 +393,26 @@
             check('nav restores when space returns',
                 document.getElementById('app-nav').classList.contains('nav-collapsed') === wasCollapsed);
             nav('[data-view="ledger"]');
+
+            // Beginner is a view over the same state, not a second model.
+            var preservedIncome = FireStore.get().inputs.income;
+            FireApp.setMode('beginner');
+            check('beginner mode stamped on document', document.documentElement.dataset.mode === 'beginner');
+            check('categories absent in beginner nav', document.querySelector('[data-view="categories"]') === null);
+            check('expert controls hidden in beginner',
+                getComputedStyle(document.querySelector('.lg-expert')).display === 'none');
+            var matchToggle = document.querySelector('.ff-beginner-toggle input');
+            check('employer match toggle rendered', matchToggle !== null);
+            matchToggle.click();
+            check('employer toggle disables match and fields',
+                FireStore.get().inputs.employerMatchRate === 0 &&
+                matchToggle.closest('.ff-group-body').querySelector('.ff-fields').classList.contains('ff-toggle-off'));
+            matchToggle.click();
+            check('employer toggle restores the standard match',
+                FireStore.get().inputs.employerMatchRate === FireEngine.DEFAULTS.employerMatchRate);
+            check('Monte Carlo rate remains visible', /^\d+%$/.test(text('[data-el="mcRate"]')));
+            check('switching mode preserves plan data', FireStore.get().inputs.income === preservedIncome);
+            FireApp.setMode('expert');
 
             localStorage.clear();
         } catch (e) {

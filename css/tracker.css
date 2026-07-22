@@ -192,6 +192,7 @@ th:hover .trk-x, td:hover .trk-x { visibility: visible; }
     background: var(--rule-dark); border: 1px solid var(--rule-dark);
     margin-bottom: 22px;
 }
+.trk-kpis-3 { grid-template-columns: repeat(3, 1fr); }
 .trk-kpi { background: var(--panel); padding: 18px 20px 14px; }
 .trk-kpi-val { font: 600 30px/1.1 "Fraunces", Georgia, serif; margin-top: 8px; font-variant-numeric: lining-nums; }
 .trk-kpi-val.neg { color: var(--red); }
@@ -350,11 +351,13 @@ html[data-theme="dark"] .trk-btn-primary:hover {
     .trk-book-side { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
     .trk-obs-grid, .trk-obs-grid2, .trk-band { grid-template-columns: 1fr; }
     .trk-kpis { grid-template-columns: 1fr 1fr; }
+    .trk-kpis-3 { grid-template-columns: repeat(3, 1fr); }
 }
 @media (max-width: 680px) {
     .trk-shell { padding: 18px 14px 40px; }
     .trk-masthead h1 { font-size: 26px; }
     .trk-kpis { grid-template-columns: 1fr 1fr; }
+    .trk-kpis-3 { grid-template-columns: 1fr; }
     .trk-book { grid-template-columns: 1fr; }
     .trk-spine { position: static; flex-direction: row; flex-wrap: wrap; max-height: none; }
     .trk-book-side { grid-template-columns: 1fr; }

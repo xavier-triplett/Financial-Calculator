@@ -28,9 +28,21 @@
                 'to pay the bills, but every dollar of retirement is already planted.</p>' +
                 '<p>This app models your specific version of that story: your income, your savings, your accounts &mdash; projected year by ' +
                 'year to age 95, and stress-tested against thousands of possible markets.</p>' +
-                '<p>One honest caveat: the projection assumes you keep saving at your savings rate until your retirement age &mdash; it does not ' +
-                'pick a coast point for you. To test a true coast (no more saving from today), set the savings rate <em>and</em> the yearly ' +
-                'savings-rate increase to 0 on the Planner and see whether the verdicts still hold.</p>' +
+            '</section>' +
+
+            '<section class="gd-card">' +
+                '<div class="gd-card-title">Two modes</div>' +
+                '<p><strong>Beginner</strong> keeps the core decisions visible and runs the detailed tax, contribution-limit, ' +
+                'inflation and withdrawal assumptions in the background. <strong>Expert</strong> exposes every dial, saving phase, ' +
+                'drawdown rule and diagnostic. Switching modes never changes your plan; customized expert settings remain in effect.</p>' +
+                '<p>Use the Beginner / Expert control in the top bar whenever you want more or less detail.</p>' +
+            '</section>' +
+
+            '<section class="gd-card">' +
+                '<div class="gd-card-title">The coast number</div>' +
+                '<p>The Planner calculates the balance you need <em>today</em> for market growth alone, with no new savings, ' +
+                'to reach your full retirement target when your accounts unlock. Compare that coast number with your current ' +
+                'invested balance to see whether the retirement seed is already planted.</p>' +
             '</section>' +
 
             '<section class="gd-card">' +

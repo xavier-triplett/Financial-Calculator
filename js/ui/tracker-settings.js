@@ -148,7 +148,7 @@
 
     (global.TrackerUIs = global.TrackerUIs || []).push({
         id: 'categories', name: 'Categories', tag: 'Bookkeeping rules & CSV import',
-        mount: mount, update: update, unmount: unmount
+        mount: mount, update: update, unmount: unmount, expertOnly: true
     });
 
 })(window);

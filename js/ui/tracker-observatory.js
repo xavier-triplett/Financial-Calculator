@@ -96,7 +96,8 @@
         var ai = n ? E.ageIncomeAt(state, s.months[n - 1], K.sharedProfile()) : null;
         var verdict = wealthVerdict(nw, ai && E.benchmarks(ai.age, ai.income));
 
-        var html = '<section class="trk-kpis" data-el="kpis-inner">';
+        var beginner = FireApp.mode() === 'beginner';
+        var html = '<section class="trk-kpis' + (beginner ? ' trk-kpis-3' : '') + '" data-el="kpis-inner">';
         html += kpi('Net worth', n ? U.compact(nw) : '—',
             d1 === null ? 'first tracked month' :
                 (d1 >= 0 ? '+' : '') + U.compact(d1) + ' this month · ' +
@@ -104,7 +105,7 @@
             d1 !== null && d1 < 0 ? 'neg' : '');
         html += kpi('Investable', n ? U.compact(s.investable[n - 1]) : '—',
             n ? 'against ' + U.compact(s.liabilities[n - 1]) + ' of liabilities' : 'no months yet');
-        html += kpi('Accumulator', verdict.label, verdict.note, verdict.cls);
+        if (!beginner) html += kpi('Accumulator', verdict.label, verdict.note, verdict.cls);
         html += kpi('Progress to FI', fiPct === null ? '—' : fiPct.toFixed(1) + '%',
             fiPct === null ? 'the planner sets the target' :
                 U.compact(market) + ' invested of ' + U.compact(target) + ' in today&rsquo;s dollars · plan retires at ' + ctx.retireAge);
@@ -130,27 +131,28 @@
 
         var s = E.series(state);
         destroyCharts();
-        els.body.innerHTML =
-            '<div data-el="kpis">' + kpisHTML(state, s) + '</div>' +
+        var beginner = FireApp.mode() === 'beginner';
+        var benchmarkPanel = beginner ? '' :
             '<section class="trk-panel">' +
                 '<div class="trk-panel-head"><h2>Net worth vs. the benchmarks</h2>' +
                 '<span class="trk-panel-note">PAW &middot; AAW &middot; UAW &mdash; expected accumulation for your age and income</span></div>' +
                 '<div class="trk-chart trk-chart-tall"><canvas data-el="benchChart"></canvas></div>' +
-            '</section>' +
-            '<div class="trk-obs-grid">' +
-                '<section class="trk-panel trk-obs-main">' +
-                    '<div class="trk-panel-head"><h2>Composition</h2>' +
-                    '<span class="trk-panel-note">Assets stacked by group &middot; liabilities dashed</span></div>' +
-                    '<div class="trk-chart"><canvas data-el="compChart"></canvas></div>' +
-                '</section>' +
-                '<aside class="trk-obs-side">' +
-                    '<section class="trk-panel">' +
-                        '<div class="trk-panel-head"><h2>Benchmark profile</h2></div>' +
-                        '<p class="trk-kpi-note" style="margin:0" data-el="profileSummary">' + profileSummary(state) + '</p>' +
-                    '</section>' +
-                    '<section class="trk-panel trk-bridge" data-el="bridge"></section>' +
-                '</aside>' +
-            '</div>' +
+            '</section>';
+        var chartsArea = beginner
+            ? '<section class="trk-panel">' +
+                '<div class="trk-panel-head"><h2>Composition</h2><span class="trk-panel-note">Assets stacked by group &middot; liabilities dashed</span></div>' +
+                '<div class="trk-chart"><canvas data-el="compChart"></canvas></div></section>' +
+                '<section class="trk-panel trk-bridge" data-el="bridge"></section>'
+            : '<div class="trk-obs-grid">' +
+                '<section class="trk-panel trk-obs-main"><div class="trk-panel-head"><h2>Composition</h2>' +
+                '<span class="trk-panel-note">Assets stacked by group &middot; liabilities dashed</span></div>' +
+                '<div class="trk-chart"><canvas data-el="compChart"></canvas></div></section>' +
+                '<aside class="trk-obs-side"><section class="trk-panel"><div class="trk-panel-head"><h2>Benchmark profile</h2></div>' +
+                '<p class="trk-kpi-note" style="margin:0" data-el="profileSummary">' + profileSummary(state) + '</p></section>' +
+                '<section class="trk-panel trk-bridge" data-el="bridge"></section></aside></div>';
+        els.body.innerHTML =
+            '<div data-el="kpis">' + kpisHTML(state, s) + '</div>' +
+            benchmarkPanel + chartsArea +
             '<section class="trk-panel">' +
                 '<div class="trk-panel-head"><h2>The months</h2>' +
                 '<span class="trk-panel-note">Edit any cell &middot; new months carry the prior balance forward</span></div>' +
@@ -211,7 +213,8 @@
         // Benchmark income: record a raise in the month it lands; blank
         // months inherit from the last recorded month or the Profile tab.
         var profile = K.sharedProfile();
-        body += '<tr class="trk-incomerow"><td class="trk-sticky">Annual income' +
+        if (FireApp.mode() === 'expert') {
+            body += '<tr class="trk-incomerow"><td class="trk-sticky">Annual income' +
             ' <span class="ff-hint" tabindex="0" role="img" data-tooltip="Gross annual income used for the PAW / AAW / UAW benchmarks. Type it in the month it changes; blank months inherit from the last recorded month, or the Profile tab.">i</span></td>';
         months.forEach(function (mo) {
             var rec = (state.ageIncome || {})[mo];
@@ -220,7 +223,8 @@
                 (rec && rec.income !== undefined ? Math.round(rec.income) : '') +
                 '" placeholder="' + (eff ? U.moneyStr(eff.income, true) : '—') + '" data-income-month="' + mo + '"></td>';
         });
-        body += '</tr>';
+            body += '</tr>';
+        }
 
         return '<table class="trk-grid"><thead>' + head + '</thead><tbody>' + body + '</tbody></table>';
     }
@@ -296,7 +300,8 @@
 
     /* ---------------- charts ---------------- */
     function makeCharts(state, s) {
-        charts.bench = new Chart(els.body.querySelector('[data-el="benchChart"]').getContext('2d'), {
+        var benchCanvas = els.body.querySelector('[data-el="benchChart"]');
+        if (benchCanvas) charts.bench = new Chart(benchCanvas.getContext('2d'), {
             type: 'line',
             data: { labels: [], datasets: [
                 { label: 'Net worth', data: [], borderColor: K.PALETTE.ink, backgroundColor: K.alpha(K.PALETTE.ink, 0.05), borderWidth: 2.4, fill: true, pointRadius: 0, tension: 0.3 },
