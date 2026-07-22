@@ -150,10 +150,12 @@
         (txns || []).forEach(function (t) {
             var mo = monthKey(t.date);
             if (!mo) return;
-            var agg = out[mo];
-            if (!agg) agg = out[mo] = { income: 0, saving: 0, fixed: 0, variable: 0, spending: 0, expenses: 0, saved: 0, byCategory: {}, count: 0 };
+            // Skip transfers before creating the aggregate, so a month of
+            // only transfers never materializes and cannot dilute trailing()
             var kind = categoryKind(t.category);
             if (kind === 'transfer') return;
+            var agg = out[mo];
+            if (!agg) agg = out[mo] = { income: 0, saving: 0, fixed: 0, variable: 0, spending: 0, expenses: 0, saved: 0, byCategory: {}, count: 0 };
             var amt = Number(t.amount) || 0;
             agg.count++;
             var cat = t.category || 'Uncategorized';
@@ -224,12 +226,12 @@
     }
 
     /* ------------------------- wealth benchmarks ------------------------- */
-    /* PAW / AAW / UAW lines, matching the source workbook's Dashboard Data:
-     *   AAW = income × age / (50 − age); PAW = 2 × AAW; UAW = AAW / 2. */
+    /* PAW / AAW / UAW lines per The Millionaire Next Door's rule of thumb:
+     *   AAW = age × income / 10; PAW = 2 × AAW; UAW = AAW / 2. */
     function benchmarks(age, income) {
         age = Number(age); income = Number(income);
         if (!age || !income) return null;
-        var aaw = income * age / Math.max(1, 50 - age);
+        var aaw = age * income / 10;
         return { paw: aaw * 2, aaw: aaw, uaw: aaw / 2 };
     }
 

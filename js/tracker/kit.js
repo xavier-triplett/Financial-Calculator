@@ -93,6 +93,14 @@
         };
     }
 
+    /* FI target in today's dollars (today's expenses at SWR), so it can be
+     * compared against today's tracked balances without an inflation gap. */
+    function fiTargetToday() {
+        var inputs = FireStore.get().inputs;
+        var swr = (Number(inputs.swr) || 0) / 100;
+        return swr > 0 ? (Number(inputs.expenses) || 0) / swr : 0;
+    }
+
     /* proposals(state, scope) — scope 'networth' offers bucket balances,
      * 'cashflow' offers trailing income/expenses/savings rate. */
     function proposals(state, scope) {
@@ -109,17 +117,21 @@
         } else {
             var t = E.trailing(state.txns);
             if (t) {
-                out.push({ key: 'expenses', label: 'Annual expenses (trailing)', from: inputs.expenses, to: Math.round(t.annualExpenses) });
-                if (t.annualIncome > 0) {
+                var span = ' (trailing ' + t.months + ' mo)';
+                out.push({ key: 'expenses', label: 'Annual expenses' + span, from: inputs.expenses, to: Math.round(t.annualExpenses) });
+                // Income and the savings rate need a few months of history
+                // before an annualized figure means anything.
+                if (t.annualIncome > 0 && t.months >= 3) {
                     // Transaction income is take-home; the planner wants gross,
                     // so gross it back up with the Profile's effective tax rate.
                     var keep = 1 - (Number(inputs.incomeTaxRate) || 0) / 100;
                     var gross = keep > 0 ? t.annualIncome / keep : t.annualIncome;
-                    out.push({ key: 'income', label: 'Annual gross income (trailing)', from: inputs.income, to: Math.round(gross) });
+                    var takeHomeHint = 'Bank transactions only see take-home pay: 401k / HSA payroll deductions are invisible here. Log them as Savings transactions, or set the plan input by hand.';
+                    out.push({ key: 'income', label: 'Annual gross income' + span, from: inputs.income, to: Math.round(gross), hint: takeHomeHint });
                     // Marked savings contributions beat the surplus assumption
                     var savedAnnual = t.savedIsMarked ? t.annualSaving : t.annualIncome - t.annualExpenses;
                     out.push({ key: 'savingsRate', label: t.savedIsMarked ? 'Savings rate (marked)' : 'Savings rate (surplus)',
-                        from: inputs.savingsRate, to: Math.round(Math.max(0, savedAnnual / gross) * 100), pct: true });
+                        from: inputs.savingsRate, to: Math.round(Math.max(0, savedAnnual / gross) * 100), pct: true, hint: takeHomeHint });
                 }
             }
         }
@@ -147,11 +159,16 @@
 
         if (opts.fi) {
             var b = E.buckets(state);
-            if (b && ctx.fiNumber > 0) {
-                var pct = Math.min(100, (b.investable / ctx.fiNumber) * 100);
+            var target = fiTargetToday();
+            if (b && target > 0) {
+                // Market buckets only: the plan holds cash inert, so cash can
+                // never actually fund the FI number. Today's dollars on both
+                // sides of the ratio.
+                var market = b.deferred + b.free + b.taxable;
+                var pct = Math.min(100, (market / target) * 100);
                 html += '<div class="trk-fi">' +
-                    '<div class="trk-fi-row"><span>Investable today</span><strong>' + U.compact(b.investable) + '</strong></div>' +
-                    '<div class="trk-fi-row"><span>FI number (plan)</span><strong>' + U.compact(ctx.fiNumber) + '</strong></div>' +
+                    '<div class="trk-fi-row"><span>Invested today</span><strong>' + U.compact(market) + '</strong></div>' +
+                    '<div class="trk-fi-row"><span>FI target (today&rsquo;s $)</span><strong>' + U.compact(target) + '</strong></div>' +
                     '<div class="trk-fi-bar"><span style="width:' + pct.toFixed(1) + '%"></span></div>' +
                     '<div class="trk-fi-pct">' + pct.toFixed(1) + '% of the way · plan retires at ' + ctx.retireAge +
                     ' · ' + (ctx.successRate * 100).toFixed(0) + '% Monte Carlo</div>' +
@@ -163,7 +180,10 @@
             html += '<table class="trk-bridge-diff"><tbody>';
             list.forEach(function (p) {
                 var fmt = p.pct ? function (v) { return v + '%'; } : U.compact;
-                html += '<tr><td>' + p.label + '</td><td class="num dim">' + fmt(p.from) + '</td>' +
+                var hint = p.hint
+                    ? ' <span class="ff-hint" tabindex="0" role="img" data-tooltip="' + p.hint + '" aria-label="' + p.hint + '">i</span>'
+                    : '';
+                html += '<tr><td>' + p.label + hint + '</td><td class="num dim">' + fmt(p.from) + '</td>' +
                     '<td class="arrow">→</td><td class="num strong">' + fmt(p.to) + '</td></tr>';
             });
             html += '</tbody></table>' +
@@ -266,6 +286,7 @@
         chartOpts: chartOpts,
         sharedProfile: sharedProfile,
         planContext: planContext,
+        fiTargetToday: fiTargetToday,
         proposals: proposals,
         applyProposals: applyProposals,
         renderBridge: renderBridge,

@@ -84,7 +84,7 @@
                 accounts: seed.accounts,
                 snapshots: seed.snapshots,
                 ageIncome: seed.ageIncome || {},
-                txns: (seed.txns || []).slice().sort(function (a, b) { return a.date < b.date ? -1 : 1; })
+                txns: (seed.txns || []).slice().sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; })
             });
             if (seed.profile && global.FireStore) {
                 if (seed.profile.birthMonth) global.FireStore.setProfile('birthDate', seed.profile.birthMonth + '-01');
@@ -197,7 +197,7 @@
                 account: String(t.account || '').trim()
             };
             state.txns.push(txn);
-            state.txns.sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+            state.txns.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
             commit();
             return txn;
         },
@@ -210,7 +210,7 @@
             if (patch.amount !== undefined && patch.amount !== null && !isNaN(Number(patch.amount))) t.amount = Math.round(Number(patch.amount) * 100) / 100;
             if (patch.category !== undefined) t.category = String(patch.category).trim() || 'Uncategorized';
             if (patch.account !== undefined) t.account = String(patch.account).trim();
-            state.txns.sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+            state.txns.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
             commit();
         },
 
@@ -250,7 +250,7 @@
                 state.txns.push(t);
                 added++;
             });
-            state.txns.sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+            state.txns.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
             commit();
             return { added: added, duplicates: (txns || []).length - added };
         },

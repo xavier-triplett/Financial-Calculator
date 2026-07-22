@@ -28,6 +28,9 @@
                 'to pay the bills, but every dollar of retirement is already planted.</p>' +
                 '<p>This app models your specific version of that story: your income, your savings, your accounts &mdash; projected year by ' +
                 'year to age 95, and stress-tested against thousands of possible markets.</p>' +
+                '<p>One honest caveat: the projection assumes you keep saving at your savings rate until your retirement age &mdash; it does not ' +
+                'pick a coast point for you. To test a true coast (no more saving from today), set the savings rate <em>and</em> the yearly ' +
+                'savings-rate increase to 0 on the Planner and see whether the verdicts still hold.</p>' +
             '</section>' +
 
             '<section class="gd-card">' +
@@ -52,6 +55,8 @@
                 '<p>Say you retire at 50 but your 401k and Roth stay locked until 60. Those ten years are <strong>the bridge</strong> &mdash; ' +
                 'and your brokerage has to carry every year of it alone. The app treats this as its own goal because it&rsquo;s the most ' +
                 'common way early-retirement plans fail: plenty of money in total, but locked behind the wrong door at the wrong time.</p>' +
+                '<p>If the bridge fails, the projection keeps going by tapping the locked accounts early: tax-deferred draws then pay the ' +
+                'early-withdrawal penalty on top of income tax, while Roth draws are treated as penalty-free withdrawals of what you contributed.</p>' +
             '</section>' +
 
             '<section class="gd-card">' +
@@ -78,10 +83,10 @@
             '<section class="gd-card">' +
                 '<div class="gd-card-title">Reading the verdicts</div>' +
                 '<dl class="gd-gloss">' +
-                    dt('SECURE', 'The projection never runs out of money in that phase. For the bridge, the brokerage lasts until your accounts unlock; for the coast, funds last to 95.') +
+                    dt('SECURE', 'For the bridge: the brokerage lasts until your accounts unlock. For the coast: your tax-advantaged accounts alone cover full-retirement spending at the unlock age, and the projection never runs dry before 95.') +
                     dt('DEPLETED / Broke at &hellip;', 'The projection runs dry, and the age it happens. Save more, spend less, retire later, or rebalance the buckets.') +
-                    dt('&hellip;% funded', 'Your projected net worth at unlock age versus the amount the safe-withdrawal rule says a full retirement needs. 100% or more earns the SECURE stamp.') +
-                    dt('Resilience %', 'The share of 2,000 randomized market futures (booms, crashes, flat decades) where you still have money at 95. The single average-return projection can look fine while many bad-luck futures fail &mdash; this number tells you how lucky you&rsquo;d need to be.') +
+                    dt('&hellip;% funded', 'Your projected <em>tax-advantaged</em> balances (401k + Roth, after estimated withdrawal tax &mdash; brokerage and cash are deliberately not counted) at the unlock age, versus the nest egg the safe-withdrawal rule says a full retirement needs. 100% or more earns the SECURE stamp; below that, the stamp shows the percentage even if the whole portfolio still lasts to 95.') +
+                    dt('Resilience %', 'The share of 2,000 randomized market futures (booms, crashes, flat decades) where you still have money at 95. The single average-return projection can look fine while many bad-luck futures fail &mdash; this number tells you how lucky you&rsquo;d need to be. The simulation is calibrated so the typical (median) future compounds at your market-return assumption; the spread around it is what varies.') +
                 '</dl>' +
             '</section>' +
 
@@ -100,14 +105,14 @@
                     dt('Employer match', 'Free money: your employer contributes to your 401k in proportion to what you contribute, up to a cap. The plan models both the rate and the cap.') +
                     dt('Contribution limits', 'The IRS caps how much can go into a 401k or IRA each year. The caps rise with inflation, and people 50+ may add an extra &ldquo;catch-up&rdquo; amount (ages 60&ndash;63 get a larger &ldquo;super catch-up&rdquo;). Savings past the caps spill into the brokerage.') +
                     dt('Penalty-free access age', 'The age your tax-advantaged accounts unlock &mdash; usually 59&frac12; (the app models 60). Some employer plans allow access at 55 if you leave the job then (the &ldquo;Rule of 55&rdquo;).') +
-                    dt('Effective tax rate', 'Your total tax as a share of the money in question &mdash; a blend of all the brackets, not your top bracket. The app applies one effective rate to deferred withdrawals and another to brokerage gains.') +
-                    dt('Capital gains', 'Profit from selling an investment for more than you paid. Brokerage withdrawals are taxed on this profit, typically at lower rates than income.') +
+                    dt('Effective tax rate', 'Your total tax as a share of the money in question &mdash; a blend of all the brackets, not your top bracket. The app applies one effective rate to deferred withdrawals and another to the full amount of each brokerage withdrawal.') +
+                    dt('Capital gains', 'Profit from selling an investment for more than you paid. In real life only this profit is taxed, typically at lower rates than income. The app instead applies your brokerage-draw rate to the <em>entire</em> withdrawal, so enter a blended rate lower than the statutory one (e.g. 15% on the half of a draw that is gains &asymp; 7&ndash;8%).') +
                     dt('Inflation', 'The slow rise of prices. The plan grows your expenses and the IRS limits with it, so a plan that works &ldquo;in today&rsquo;s dollars&rdquo; still works in 2050&rsquo;s dollars.') +
                     dt('Market return', 'The average yearly growth you expect from investments. Long-run stock-market history is roughly 9&ndash;10% before inflation &mdash; the default here is deliberately more modest.') +
                     dt('Volatility', 'How wildly returns swing year to year. Two plans with the same average return can have very different fates if one hits a crash early in retirement.') +
                     dt('Monte Carlo simulation', 'Instead of assuming one smooth average future, the app rolls thousands of random-but-realistic market histories and counts how many your plan survives.') +
                     dt('Safe withdrawal rate', 'The share of your portfolio you can spend each year with good odds of never running out &mdash; the classic rule of thumb is 4%. It also sets your target: yearly expenses &divide; the rate = the nest egg a full retirement needs.') +
-                    dt('PAW / AAW / UAW', 'Benchmarks from &ldquo;The Millionaire Next Door&rdquo; for how much wealth your age and income &ldquo;should&rdquo; have produced. AAW (average) = income &times; age &divide; (50 &minus; age); PAW (prodigious) is twice that; UAW (under) is half. The Net Worth chart plots you against all three.') +
+                    dt('PAW / AAW / UAW', 'Benchmarks from &ldquo;The Millionaire Next Door&rdquo; for how much wealth your age and income &ldquo;should&rdquo; have produced. AAW (average) = age &times; income &divide; 10; PAW (prodigious) is twice that; UAW (under) is half. The Net Worth chart plots you against all three.') +
                 '</dl>' +
             '</section>' +
 
