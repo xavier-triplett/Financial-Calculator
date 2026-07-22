@@ -2,9 +2,10 @@
     'use strict';
 
     var SCHEMA_VERSION = 2;
+    var LEGACY_SCHEMA_VERSION = 1;
     var PUSH_DEBOUNCE = 750;
-    var CHUNK_SIZE = 180000;
-    var MAX_CHUNKS = 40;
+    var CHUNK_SIZE = 700000;
+    var MAX_CHUNKS = 9;
     var SYNC_PREFIX = 'fireCloudSync_v2:';
     var OWNER_KEY = 'fireCloudOwner_v2';
     var LOCAL_PREFIX = 'fireCloudLocal_v2:';
@@ -213,10 +214,14 @@
         return JSON.stringify(value);
     }
 
-    function serialize(name) {
-        var data = clone(name === 'plan' ? global.FireStore.get() : global.TrackerStore.get());
+    function serializeData(name, value) {
+        var data = clone(value);
         var json = JSON.stringify(data);
         return { data: data, json: json, hash: hashString(name === 'plan' ? stableStringify(data) : json) };
+    }
+
+    function serialize(name) {
+        return serializeData(name, name === 'plan' ? global.FireStore.get() : global.TrackerStore.get());
     }
 
     function utf8Length(text) {
@@ -337,6 +342,47 @@
             object(value.categoryKinds) && object(value.csvColumns);
     }
 
+    function allowedKeys(value, required, optional) {
+        if (!object(value)) return false;
+        var allowed = required.concat(optional);
+        return required.every(function (key) {
+            return Object.prototype.hasOwnProperty.call(value, key);
+        }) && Object.keys(value).every(function (key) {
+            return allowed.indexOf(key) >= 0;
+        });
+    }
+
+    function validLegacyTracker(value) {
+        if (!allowedKeys(value,
+            ['accounts', 'snapshots', 'ageIncome', 'txns', 'cashMonths'],
+            ['categoryKinds', 'csvColumns'])) return false;
+        return Array.isArray(value.accounts) && object(value.snapshots) && object(value.ageIncome) &&
+            Array.isArray(value.txns) && Array.isArray(value.cashMonths) &&
+            (!Object.prototype.hasOwnProperty.call(value, 'categoryKinds') || object(value.categoryKinds)) &&
+            (!Object.prototype.hasOwnProperty.call(value, 'csvColumns') || object(value.csvColumns));
+    }
+
+    function validLegacyRoot(value) {
+        return exactKeys(value, ['version', 'plan', 'tracker', 'updatedAt']) &&
+            value.version === LEGACY_SCHEMA_VERSION &&
+            exactKeys(value.plan, ['inputs', 'profile', 'phases', 'mcSeed']) &&
+            validPlan(value.plan) && validLegacyTracker(value.tracker) &&
+            value.updatedAt !== undefined;
+    }
+
+    function upgradeLegacySnapshot(value) {
+        if (!validLegacyRoot(value)) {
+            throw cloudError('firecloud/schema', 'Legacy cloud state failed validation');
+        }
+        var tracker = clone(value.tracker);
+        if (!Object.prototype.hasOwnProperty.call(tracker, 'categoryKinds')) tracker.categoryKinds = {};
+        if (!Object.prototype.hasOwnProperty.call(tracker, 'csvColumns')) tracker.csvColumns = {};
+        return {
+            plan: serializeData('plan', value.plan),
+            tracker: serializeData('tracker', tracker)
+        };
+    }
+
     function validManifest(value) {
         return exactKeys(value, ['schemaVersion', 'updatedAt']) &&
             value.schemaVersion === SCHEMA_VERSION && value.updatedAt !== undefined;
@@ -363,10 +409,34 @@
             value.updatedAt !== undefined;
     }
 
+    function migrateLegacy(transaction, uid, rootData, planSnap, trackerSnap) {
+        if (planSnap.exists || trackerSnap.exists) {
+            throw cloudError('firecloud/schema', 'Legacy cloud state contains partial v2 data');
+        }
+        var upgraded = upgradeLegacySnapshot(rootData);
+        upgraded.tracker.chunks = splitChunks(upgraded.tracker.json);
+        writeManifest(transaction, uid);
+        writePlan(transaction, uid, upgraded.plan, 1);
+        writeTracker(transaction, uid, upgraded.tracker, 1, 0);
+        return {
+            kind: 'existing',
+            migrated: true,
+            plan: { data: upgraded.plan.data, revision: 1, hash: upgraded.plan.hash },
+            tracker: { data: upgraded.tracker.data, revision: 1, hash: upgraded.tracker.hash }
+        };
+    }
+
     function parseRemote(manifestSnap, planSnap, trackerSnap, chunkSnaps) {
-        if (!manifestSnap.exists) return { kind: 'fresh' };
+        if (!manifestSnap.exists) {
+            if (planSnap.exists || trackerSnap.exists) {
+                throw cloudError('firecloud/schema', 'Cloud state contains orphaned documents');
+            }
+            return { kind: 'fresh' };
+        }
         var manifest = manifestSnap.data();
-        if (!manifest || manifest.schemaVersion !== SCHEMA_VERSION) return { kind: 'fresh' };
+        if (!manifest || manifest.schemaVersion !== SCHEMA_VERSION) {
+            throw cloudError('firecloud/schema', 'Cloud root has an unknown schema');
+        }
         if (!validManifest(manifest)) throw cloudError('firecloud/schema', 'Cloud manifest is invalid');
         if (!planSnap.exists || !trackerSnap.exists) {
             throw cloudError('firecloud/schema', 'Cloud state is incomplete');
@@ -410,6 +480,10 @@
         return db.runTransaction(function (transaction) {
             return Promise.all([transaction.get(root), transaction.get(plan), transaction.get(tracker)])
                 .then(function (snapshots) {
+                    var rootData = snapshots[0].exists ? snapshots[0].data() : null;
+                    if (rootData && rootData.version === LEGACY_SCHEMA_VERSION) {
+                        return migrateLegacy(transaction, uid, rootData, snapshots[1], snapshots[2]);
+                    }
                     var trackerData = snapshots[2].exists ? snapshots[2].data() : null;
                     if (!snapshots[0].exists || !trackerData ||
                         snapshots[0].data().schemaVersion !== SCHEMA_VERSION) {
@@ -559,11 +633,14 @@
                 transaction.get(stateRef(uid, 'plan')),
                 transaction.get(stateRef(uid, 'tracker'))
             ]).then(function (snapshots) {
-                var manifest = snapshots[0].exists ? snapshots[0].data() : null;
-                if (manifest && manifest.schemaVersion === SCHEMA_VERSION) {
-                    throw cloudError('firecloud/conflict', 'Cloud account was created on another device', {
-                        remoteRevision: 1
-                    });
+                if (snapshots[0].exists) {
+                    var rootData = snapshots[0].data();
+                    if ((rootData && rootData.schemaVersion === SCHEMA_VERSION) || validLegacyRoot(rootData)) {
+                        throw cloudError('firecloud/conflict', 'Cloud account was created on another device', {
+                            remoteRevision: 1
+                        });
+                    }
+                    throw cloudError('firecloud/schema', 'Cloud root has an unknown schema');
                 }
                 if (snapshots[1].exists || snapshots[2].exists) {
                     throw cloudError('firecloud/schema', 'Cloud account contains incomplete state');
@@ -687,7 +764,9 @@
                 schedulePush();
             } else {
                 setPhase('synced');
-                toast('Signed in - your saved data loaded');
+                toast(remote.migrated ?
+                    'Signed in - your cloud data was upgraded and loaded' :
+                    'Signed in - your saved data loaded');
             }
             return true;
         }).catch(function (error) {

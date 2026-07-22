@@ -145,7 +145,7 @@
         function writeRemote(uid, plan, tracker, planRevision, trackerRevision) {
             var json = JSON.stringify(tracker);
             var chunks = [];
-            for (var start = 0; start < json.length; start += 180000) chunks.push(json.slice(start, start + 180000));
+            for (var start = 0; start < json.length; start += 700000) chunks.push(json.slice(start, start + 700000));
             if (!chunks.length) chunks.push('');
             var stamp = { __serverTimestamp: true };
             __mock.put(path(uid), { schemaVersion: 2, updatedAt: stamp });
@@ -162,6 +162,22 @@
                     count: chunks.length, data: data, updatedAt: stamp
                 });
             });
+        }
+        function writeLegacy(uid, plan, tracker) {
+            __mock.put(path(uid), {
+                version: 1,
+                plan: copy(plan),
+                tracker: copy(tracker),
+                updatedAt: { __serverTimestamp: true }
+            });
+        }
+        function readTracker(uid) {
+            var meta = __mock.get(path(uid, 'state/tracker'));
+            var json = '';
+            for (var index = 0; meta && index < meta.chunkCount; index++) {
+                json += __mock.get(path(uid, 'trackerChunks/c' + String(index).padStart(4, '0'))).data;
+            }
+            return json ? JSON.parse(json) : null;
         }
         function tick() { return new Promise(function (resolve) { setTimeout(resolve, 0); }); }
         function finish() {
@@ -275,11 +291,11 @@
                 __mock.get(path('user3', 'state/plan')).data.inputs.income === 333333);
 
             var largeTracker = copy(TrackerStore.get());
-            for (var i = 0; i < 700; i++) {
+            for (var i = 0; i < 1600; i++) {
                 largeTracker.txns.push({
                     id: 'large-' + i, date: '2026-01-01', name: 'Purchase ' + i,
                     amount: i + 0.25, category: 'Other', account: 'Card',
-                    description: new Array(451).join(String(i % 10))
+                    description: new Array(1101).join(String(i % 10))
                 });
             }
             TrackerStore.replace(largeTracker);
@@ -392,7 +408,7 @@
             var incompleteTracker = copy(defaultTracker);
             incompleteTracker.txns.push({
                 id: 'huge', date: '2026-01-01', name: 'Large import', amount: 1,
-                category: 'Other', account: 'Card', description: new Array(180101).join('x')
+                category: 'Other', account: 'Card', description: new Array(700101).join('x')
             });
             writeRemote('user8', defaultPlan, incompleteTracker, 1, 1);
             __mock.remove(path('user8', 'trackerChunks/c0001'));
@@ -400,6 +416,133 @@
             await FireCloud.flush();
             check('missing remote chunk is rejected',
                 FireCloud.status().phase === 'error' && !FireCloud.status().hydrated);
+
+            await FireCloud.signOut();
+            FireStore.reset();
+            TrackerStore.reset();
+            FireStore.setInput('income', 717171);
+            var legacyPlan = copy(defaultPlan);
+            legacyPlan.inputs.income = 818181;
+            var legacyTracker = copy(defaultTracker);
+            delete legacyTracker.categoryKinds;
+            delete legacyTracker.csvColumns;
+            legacyTracker.accounts = [{ id: 'legacy-cash', name: 'Legacy cash', group: 'cash' }];
+            legacyTracker.snapshots = { '2025-12': { 'legacy-cash': 9191 } };
+            var legacyDescription = (new Array(101).join('\0') + '😀').repeat(6000);
+            legacyTracker.txns.push({
+                id: 'legacy-large', date: '2025-12-01', name: 'Legacy import', amount: 42,
+                category: 'Other', account: 'Card', description: legacyDescription
+            });
+            writeLegacy('legacy1', legacyPlan, legacyTracker);
+            var confirmsBeforeMigration = window.__confirms;
+            __signIn('legacy1', 'legacy@example.com');
+            await FireCloud.flush();
+            var migratedTracker = readTracker('legacy1');
+            var migratedMeta = __mock.get(path('legacy1', 'state/tracker'));
+            var migratedChunks = [];
+            for (var chunkIndex = 0; chunkIndex < migratedMeta.chunkCount; chunkIndex++) {
+                migratedChunks.push(__mock.get(path('legacy1',
+                    'trackerChunks/c' + String(chunkIndex).padStart(4, '0'))).data);
+            }
+            check('legacy root migrates atomically to a v2 manifest',
+                __mock.get(path('legacy1')).schemaVersion === 2 &&
+                !Object.prototype.hasOwnProperty.call(__mock.get(path('legacy1')), 'plan'));
+            check('legacy plan is copied without changing values',
+                JSON.stringify(__mock.get(path('legacy1', 'state/plan')).data) === JSON.stringify(legacyPlan));
+            check('legacy tracker is copied across multiple chunks',
+                migratedMeta.chunkCount >= 6 &&
+                migratedTracker.accounts[0].name === 'Legacy cash' &&
+                migratedTracker.txns[0].description === legacyTracker.txns[0].description);
+            check('legacy chunks respect UTF-8 limits and surrogate boundaries',
+                migratedChunks.every(function (data, index) {
+                    var last = data.charCodeAt(data.length - 1);
+                    var next = index + 1 < migratedChunks.length ? migratedChunks[index + 1].charCodeAt(0) : 0;
+                    return new TextEncoder().encode(data).length <= 700000 &&
+                        !(last >= 0xD800 && last <= 0xDBFF && next >= 0xDC00 && next <= 0xDFFF);
+                }));
+            check('migration adds only missing tracker settings',
+                JSON.stringify(migratedTracker.categoryKinds) === '{}' &&
+                JSON.stringify(migratedTracker.csvColumns) === '{}');
+            check('migrated cloud data loads locally without a seed prompt',
+                FireStore.get().inputs.income === 818181 &&
+                TrackerStore.get().accounts[0].name === 'Legacy cash' &&
+                window.__confirms === confirmsBeforeMigration);
+            check('migration preserves unrelated pre-login local data',
+                JSON.parse(FireTest.storage.getItem('fireCloudLocal_v2:anonymous')).plan.inputs.income === 717171);
+            var migratedPlanRevision = __mock.get(path('legacy1', 'state/plan')).revision;
+            var migratedTrackerRevision = __mock.get(path('legacy1', 'state/tracker')).revision;
+            await FireCloud.signOut();
+            check('sign-out restores the pre-migration local data', FireStore.get().inputs.income === 717171);
+            __signIn('legacy1', 'legacy@example.com');
+            await FireCloud.flush();
+            check('migration is idempotent on the next sign-in',
+                __mock.get(path('legacy1', 'state/plan')).revision === migratedPlanRevision &&
+                __mock.get(path('legacy1', 'state/tracker')).revision === migratedTrackerRevision);
+
+            await FireCloud.signOut();
+            var malformedLegacy = {
+                version: 1, plan: copy(defaultPlan), tracker: { accounts: 'invalid' },
+                updatedAt: { __serverTimestamp: true }
+            };
+            __mock.put(path('legacy-bad'), malformedLegacy);
+            __signIn('legacy-bad', 'legacy-bad@example.com');
+            await FireCloud.flush();
+            check('malformed legacy data fails without being changed',
+                FireCloud.status().phase === 'error' &&
+                __mock.get(path('legacy-bad')).version === 1 &&
+                !__mock.get(path('legacy-bad', 'state/plan')));
+
+            await FireCloud.signOut();
+            writeLegacy('legacy-partial', defaultPlan, defaultTracker);
+            __mock.put(path('legacy-partial', 'state/plan'), {
+                schemaVersion: 2, revision: 1, data: defaultPlan,
+                updatedAt: { __serverTimestamp: true }
+            });
+            __signIn('legacy-partial', 'legacy-partial@example.com');
+            await FireCloud.flush();
+            check('partial legacy migration fails without overwriting either copy',
+                FireCloud.status().phase === 'error' &&
+                __mock.get(path('legacy-partial')).version === 1 &&
+                __mock.get(path('legacy-partial', 'state/plan')).schemaVersion === 2);
+
+            await FireCloud.signOut();
+            FireStore.reset();
+            TrackerStore.reset();
+            var editDuringMigration = copy(defaultPlan);
+            editDuringMigration.inputs.income = 900000;
+            writeLegacy('legacy-edit', editDuringMigration, defaultTracker);
+            var releaseMigration = __mock.holdNext();
+            __signIn('legacy-edit', 'legacy-edit@example.com');
+            FireStore.setInput('income', 910000);
+            releaseMigration();
+            await FireCloud.flush();
+            check('an edit during migration becomes an explicit conflict',
+                FireStore.get().inputs.income === 910000 && !!FireCloud.status().conflicts.plan);
+            check('migration durably preserves the legacy cloud copy before conflict resolution',
+                __mock.get(path('legacy-edit')).schemaVersion === 2 &&
+                __mock.get(path('legacy-edit', 'state/plan')).data.inputs.income === 900000);
+            await FireCloud.resolveConflict('local', 'plan');
+            check('explicit local resolution advances the migrated plan',
+                __mock.get(path('legacy-edit', 'state/plan')).revision === 2 &&
+                __mock.get(path('legacy-edit', 'state/plan')).data.inputs.income === 910000);
+
+            await FireCloud.signOut();
+            FireStore.setInput('income', 303030);
+            var releaseLegacySeed = __mock.holdAfterNext();
+            __signIn('legacy-race', 'legacy-race@example.com');
+            await tick();
+            var racedLegacyPlan = copy(defaultPlan);
+            racedLegacyPlan.inputs.income = 404040;
+            writeLegacy('legacy-race', racedLegacyPlan, defaultTracker);
+            releaseLegacySeed();
+            await FireCloud.flush();
+            check('a legacy root appearing during first upload is not overwritten',
+                __mock.get(path('legacy-race')).version === 1 &&
+                FireStore.get().inputs.income === 303030 && !!FireCloud.status().conflicts.plan);
+            await FireCloud.resolveConflict('remote');
+            check('remote resolution migrates and adopts the raced legacy root',
+                __mock.get(path('legacy-race')).schemaVersion === 2 &&
+                FireStore.get().inputs.income === 404040);
         } catch (error) {
             failures++;
             out.push('EXCEPTION: ' + error.message + '\n' + error.stack);
