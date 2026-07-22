@@ -1,4 +1,4 @@
-var CACHE = 'coast-ledger-2026-07-22';
+var CACHE = 'coast-ledger-2026-07-22-paths';
 var ASSETS = [
     './',
     './index.html',

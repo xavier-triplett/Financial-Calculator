@@ -42,9 +42,9 @@
                 registration.active && navigator.serviceWorker.controller);
             cacheNames = await caches.keys();
             check('new cache replaces old releases',
-                cacheNames.indexOf('coast-ledger-2026-07-22') >= 0 &&
+                cacheNames.indexOf('coast-ledger-2026-07-22-paths') >= 0 &&
                 cacheNames.indexOf('coast-ledger-old') < 0);
-            var cache = await caches.open('coast-ledger-2026-07-22');
+            var cache = await caches.open('coast-ledger-2026-07-22-paths');
             check('application shell is precached',
                 !!(await cache.match('/index.html')) && !!(await cache.match('/js/app.js')));
 
