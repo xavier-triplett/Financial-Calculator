@@ -1,12 +1,147 @@
 rules_version = '2';
 
-// Each user's whole app state lives at /users/{uid}. A signed-in user may
-// read and write only their own document — the database refuses cross-account
-// access even if the client asks for it. Everything else is denied by default.
 service cloud.firestore {
   match /databases/{database}/documents {
+    function owns(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    function stamped(data) {
+      return data.updatedAt == request.time;
+    }
+
+    function validManifest(data) {
+      return data.keys().hasOnly(['schemaVersion', 'updatedAt'])
+        && data.schemaVersion == 2
+        && stamped(data);
+    }
+
+    function validPlan(data) {
+      return data.keys().hasOnly(['schemaVersion', 'revision', 'data', 'updatedAt'])
+        && data.schemaVersion == 2
+        && data.revision is int
+        && data.revision >= 1
+        && data.data is map
+        && data.data.inputs is map
+        && data.data.profile is map
+        && data.data.phases is list
+        && (data.data.mcSeed is int || data.data.mcSeed is float)
+        && stamped(data);
+    }
+
+    function validTracker(data) {
+      return data.keys().hasOnly(['schemaVersion', 'revision', 'chunkCount', 'digest', 'updatedAt'])
+        && data.schemaVersion == 2
+        && data.revision is int
+        && data.revision >= 1
+        && data.chunkCount is int
+        && data.chunkCount >= 1
+        && data.chunkCount <= 40
+        && data.digest is string
+        && data.digest.size() <= 80
+        && stamped(data);
+    }
+
+    function trackerBefore(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)/state/tracker);
+    }
+
+    function trackerAfter(uid) {
+      return getAfter(/databases/$(database)/documents/users/$(uid)/state/tracker);
+    }
+
+    function chunkIds() {
+      return ['c0000', 'c0001', 'c0002', 'c0003', 'c0004', 'c0005', 'c0006', 'c0007', 'c0008', 'c0009', 'c0010', 'c0011', 'c0012', 'c0013', 'c0014', 'c0015', 'c0016', 'c0017', 'c0018', 'c0019', 'c0020', 'c0021', 'c0022', 'c0023', 'c0024', 'c0025', 'c0026', 'c0027', 'c0028', 'c0029', 'c0030', 'c0031', 'c0032', 'c0033', 'c0034', 'c0035', 'c0036', 'c0037', 'c0038', 'c0039'];
+    }
+
+    function trackerAdvanced(uid) {
+      return existsAfter(/databases/$(database)/documents/users/$(uid)/state/tracker)
+        && validTracker(trackerAfter(uid).data)
+        && ((!exists(/databases/$(database)/documents/users/$(uid)/state/tracker)
+            && trackerAfter(uid).data.revision == 1)
+          || (exists(/databases/$(database)/documents/users/$(uid)/state/tracker)
+            && trackerBefore(uid).data.schemaVersion == 2
+            && trackerAfter(uid).data.revision == trackerBefore(uid).data.revision + 1));
+    }
+
+    function chunkMatchesTracker(uid, data) {
+      return trackerAdvanced(uid)
+        && data.revision == trackerAfter(uid).data.revision
+        && data.count == trackerAfter(uid).data.chunkCount;
+    }
+
+    function validChunk(uid, chunkId, data) {
+      return chunkId == chunkIds()[data.index]
+        && data.keys().hasOnly(['schemaVersion', 'revision', 'index', 'count', 'data', 'updatedAt'])
+        && data.schemaVersion == 2
+        && data.revision is int
+        && data.revision >= 1
+        && data.index is int
+        && data.index >= 0
+        && data.index < data.count
+        && data.count is int
+        && data.count >= 1
+        && data.count <= 40
+        && data.data is string
+        && data.data.size() <= 180000
+        && stamped(data)
+        && chunkMatchesTracker(uid, data);
+    }
+
+    function firstChunkMatches(uid, data) {
+      let first = getAfter(/databases/$(database)/documents/users/$(uid)/trackerChunks/c0000);
+      return existsAfter(/databases/$(database)/documents/users/$(uid)/trackerChunks/c0000)
+        && first.data.schemaVersion == 2
+        && first.data.revision == data.revision
+        && first.data.index == 0
+        && first.data.count == data.chunkCount;
+    }
+
+    function lastChunkMatches(uid, data) {
+      let lastId = chunkIds()[data.chunkCount - 1];
+      let last = getAfter(/databases/$(database)/documents/users/$(uid)/trackerChunks/$(lastId));
+      return existsAfter(/databases/$(database)/documents/users/$(uid)/trackerChunks/$(lastId))
+        && last.data.schemaVersion == 2
+        && last.data.revision == data.revision
+        && last.data.index == data.chunkCount - 1
+        && last.data.count == data.chunkCount;
+    }
+
     match /users/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow read: if owns(uid);
+      allow create, update: if owns(uid) && validManifest(request.resource.data);
+
+      match /state/plan {
+        allow read: if owns(uid);
+        allow create: if owns(uid) && validPlan(request.resource.data)
+          && request.resource.data.revision == 1;
+        allow update: if owns(uid) && validPlan(request.resource.data)
+          && resource.data.schemaVersion == 2
+          && request.resource.data.revision == resource.data.revision + 1;
+      }
+
+      match /state/tracker {
+        allow read: if owns(uid);
+        allow create: if owns(uid) && validTracker(request.resource.data)
+          && request.resource.data.revision == 1
+          && firstChunkMatches(uid, request.resource.data)
+          && lastChunkMatches(uid, request.resource.data);
+        allow update: if owns(uid) && validTracker(request.resource.data)
+          && resource.data.schemaVersion == 2
+          && request.resource.data.revision == resource.data.revision + 1
+          && firstChunkMatches(uid, request.resource.data)
+          && lastChunkMatches(uid, request.resource.data);
+      }
+
+      match /trackerChunks/{chunkId} {
+        allow read: if owns(uid);
+        allow create, update: if owns(uid) && validChunk(uid, chunkId, request.resource.data);
+        allow delete: if owns(uid)
+          && trackerAdvanced(uid)
+          && resource.data.schemaVersion == 2
+          && resource.data.revision == trackerBefore(uid).data.revision
+          && resource.data.index >= trackerAfter(uid).data.chunkCount;
+      }
     }
   }
 }
