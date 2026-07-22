@@ -10,10 +10,56 @@ service cloud.firestore {
       return data.updatedAt == request.time;
     }
 
-    function validManifest(data) {
+    function manifestShape(data) {
       return data.keys().hasOnly(['schemaVersion', 'updatedAt'])
         && data.schemaVersion == 2
-        && stamped(data);
+        && data.updatedAt is timestamp;
+    }
+
+    function validManifest(data) {
+      return manifestShape(data) && stamped(data);
+    }
+
+    function v2RootAfter(uid) {
+      let root = getAfter(/databases/$(database)/documents/users/$(uid));
+      return existsAfter(/databases/$(database)/documents/users/$(uid))
+        && manifestShape(root.data);
+    }
+
+    function legacyPlanShape(data) {
+      return data is map
+        && data.keys().hasOnly(['inputs', 'profile', 'phases', 'mcSeed'])
+        && data.keys().hasAll(['inputs', 'profile', 'phases', 'mcSeed'])
+        && data.inputs is map
+        && data.profile is map
+        && data.phases is list
+        && (data.mcSeed is int || data.mcSeed is float);
+    }
+
+    function legacyTrackerShape(data) {
+      return data is map
+        && data.keys().hasOnly(['accounts', 'snapshots', 'ageIncome', 'txns', 'cashMonths', 'categoryKinds', 'csvColumns'])
+        && data.keys().hasAll(['accounts', 'snapshots', 'ageIncome', 'txns', 'cashMonths'])
+        && data.accounts is list
+        && data.snapshots is map
+        && data.ageIncome is map
+        && data.txns is list
+        && data.cashMonths is list
+        && (!('categoryKinds' in data) || data.categoryKinds is map)
+        && (!('csvColumns' in data) || data.csvColumns is map);
+    }
+
+    function legacyRootShape(data) {
+      return data.keys().hasOnly(['version', 'plan', 'tracker', 'updatedAt'])
+        && data.keys().hasAll(['version', 'plan', 'tracker', 'updatedAt'])
+        && data.version == 1
+        && legacyPlanShape(data.plan)
+        && legacyTrackerShape(data.tracker)
+        && data.updatedAt is timestamp;
+    }
+
+    function validLegacyRoot(data) {
+      return legacyRootShape(data) && stamped(data);
     }
 
     function validPlan(data) {
@@ -36,7 +82,7 @@ service cloud.firestore {
         && data.revision >= 1
         && data.chunkCount is int
         && data.chunkCount >= 1
-        && data.chunkCount <= 40
+        && data.chunkCount <= 9
         && data.digest is string
         && data.digest.size() <= 80
         && stamped(data);
@@ -51,17 +97,18 @@ service cloud.firestore {
     }
 
     function chunkIds() {
-      return ['c0000', 'c0001', 'c0002', 'c0003', 'c0004', 'c0005', 'c0006', 'c0007', 'c0008', 'c0009', 'c0010', 'c0011', 'c0012', 'c0013', 'c0014', 'c0015', 'c0016', 'c0017', 'c0018', 'c0019', 'c0020', 'c0021', 'c0022', 'c0023', 'c0024', 'c0025', 'c0026', 'c0027', 'c0028', 'c0029', 'c0030', 'c0031', 'c0032', 'c0033', 'c0034', 'c0035', 'c0036', 'c0037', 'c0038', 'c0039'];
+      return ['c0000', 'c0001', 'c0002', 'c0003', 'c0004', 'c0005', 'c0006', 'c0007', 'c0008'];
     }
 
     function trackerAdvanced(uid) {
+      let before = trackerBefore(uid);
+      let after = trackerAfter(uid);
       return existsAfter(/databases/$(database)/documents/users/$(uid)/state/tracker)
-        && validTracker(trackerAfter(uid).data)
         && ((!exists(/databases/$(database)/documents/users/$(uid)/state/tracker)
-            && trackerAfter(uid).data.revision == 1)
+            && after.data.revision == 1)
           || (exists(/databases/$(database)/documents/users/$(uid)/state/tracker)
-            && trackerBefore(uid).data.schemaVersion == 2
-            && trackerAfter(uid).data.revision == trackerBefore(uid).data.revision + 1));
+            && before.data.schemaVersion == 2
+            && after.data.revision == before.data.revision + 1));
     }
 
     function chunkMatchesTracker(uid, data) {
@@ -81,63 +128,97 @@ service cloud.firestore {
         && data.index < data.count
         && data.count is int
         && data.count >= 1
-        && data.count <= 40
+        && data.count <= 9
         && data.data is string
-        && data.data.size() <= 180000
+        && data.data.toUtf8().size() <= 700000
         && stamped(data)
         && chunkMatchesTracker(uid, data);
     }
 
-    function firstChunkMatches(uid, data) {
-      let first = getAfter(/databases/$(database)/documents/users/$(uid)/trackerChunks/c0000);
-      return existsAfter(/databases/$(database)/documents/users/$(uid)/trackerChunks/c0000)
-        && first.data.schemaVersion == 2
-        && first.data.revision == data.revision
-        && first.data.index == 0
-        && first.data.count == data.chunkCount;
+    function chunkAtMatches(uid, data, index) {
+      let id = chunkIds()[index];
+      let chunk = getAfter(/databases/$(database)/documents/users/$(uid)/trackerChunks/$(id));
+      return data.chunkCount <= index
+        || (existsAfter(/databases/$(database)/documents/users/$(uid)/trackerChunks/$(id))
+          && chunk.data.schemaVersion == 2
+          && chunk.data.revision == data.revision
+          && chunk.data.index == index
+          && chunk.data.count == data.chunkCount);
     }
 
-    function lastChunkMatches(uid, data) {
-      let lastId = chunkIds()[data.chunkCount - 1];
-      let last = getAfter(/databases/$(database)/documents/users/$(uid)/trackerChunks/$(lastId));
-      return existsAfter(/databases/$(database)/documents/users/$(uid)/trackerChunks/$(lastId))
-        && last.data.schemaVersion == 2
-        && last.data.revision == data.revision
-        && last.data.index == data.chunkCount - 1
-        && last.data.count == data.chunkCount;
+    function allChunksMatch(uid, data) {
+      return chunkAtMatches(uid, data, 0)
+        && chunkAtMatches(uid, data, 1)
+        && chunkAtMatches(uid, data, 2)
+        && chunkAtMatches(uid, data, 3)
+        && chunkAtMatches(uid, data, 4)
+        && chunkAtMatches(uid, data, 5)
+        && chunkAtMatches(uid, data, 6)
+        && chunkAtMatches(uid, data, 7)
+        && chunkAtMatches(uid, data, 8);
+    }
+
+    function splitStateAbsentAfter(uid) {
+      return !existsAfter(/databases/$(database)/documents/users/$(uid)/state/plan)
+        && !existsAfter(/databases/$(database)/documents/users/$(uid)/state/tracker);
+    }
+
+    function initialV2StateAfter(uid) {
+      let plan = getAfter(/databases/$(database)/documents/users/$(uid)/state/plan);
+      let tracker = getAfter(/databases/$(database)/documents/users/$(uid)/state/tracker);
+      return !exists(/databases/$(database)/documents/users/$(uid)/state/plan)
+        && !exists(/databases/$(database)/documents/users/$(uid)/state/tracker)
+        && existsAfter(/databases/$(database)/documents/users/$(uid)/state/plan)
+        && existsAfter(/databases/$(database)/documents/users/$(uid)/state/tracker)
+        && validPlan(plan.data)
+        && plan.data.revision == 1
+        && validTracker(tracker.data)
+        && tracker.data.revision == 1;
     }
 
     match /users/{uid} {
       allow read: if owns(uid);
-      allow create, update: if owns(uid) && validManifest(request.resource.data);
+      allow create: if owns(uid)
+        && ((validManifest(request.resource.data) && initialV2StateAfter(uid))
+          || (validLegacyRoot(request.resource.data) && splitStateAbsentAfter(uid)));
+      allow update: if owns(uid)
+        && ((legacyRootShape(resource.data)
+            && validLegacyRoot(request.resource.data)
+            && splitStateAbsentAfter(uid))
+          || (legacyRootShape(resource.data)
+            && validManifest(request.resource.data)
+            && initialV2StateAfter(uid)
+            && getAfter(/databases/$(database)/documents/users/$(uid)/state/plan).data.data == resource.data.plan)
+          || (manifestShape(resource.data) && validManifest(request.resource.data)));
 
       match /state/plan {
         allow read: if owns(uid);
-        allow create: if owns(uid) && validPlan(request.resource.data)
+        allow create: if owns(uid) && v2RootAfter(uid)
+          && validPlan(request.resource.data)
           && request.resource.data.revision == 1;
-        allow update: if owns(uid) && validPlan(request.resource.data)
+        allow update: if owns(uid) && v2RootAfter(uid)
+          && validPlan(request.resource.data)
           && resource.data.schemaVersion == 2
           && request.resource.data.revision == resource.data.revision + 1;
       }
 
       match /state/tracker {
         allow read: if owns(uid);
-        allow create: if owns(uid) && validTracker(request.resource.data)
+        allow create: if owns(uid) && v2RootAfter(uid)
+          && validTracker(request.resource.data)
           && request.resource.data.revision == 1
-          && firstChunkMatches(uid, request.resource.data)
-          && lastChunkMatches(uid, request.resource.data);
-        allow update: if owns(uid) && validTracker(request.resource.data)
+          && allChunksMatch(uid, request.resource.data);
+        allow update: if owns(uid) && v2RootAfter(uid)
+          && validTracker(request.resource.data)
           && resource.data.schemaVersion == 2
           && request.resource.data.revision == resource.data.revision + 1
-          && firstChunkMatches(uid, request.resource.data)
-          && lastChunkMatches(uid, request.resource.data);
+          && allChunksMatch(uid, request.resource.data);
       }
 
       match /trackerChunks/{chunkId} {
         allow read: if owns(uid);
         allow create, update: if owns(uid) && validChunk(uid, chunkId, request.resource.data);
-        allow delete: if owns(uid)
-          && trackerAdvanced(uid)
+        allow delete: if owns(uid) && trackerAdvanced(uid)
           && resource.data.schemaVersion == 2
           && resource.data.revision == trackerBefore(uid).data.revision
           && resource.data.index >= trackerAfter(uid).data.chunkCount;

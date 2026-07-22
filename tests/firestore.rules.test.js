@@ -58,12 +58,38 @@ function chunk(revision = 1, index = 0, count = 1, data = '{}') {
     };
 }
 
+function legacyTracker(includeSettings = true) {
+    const value = {
+        accounts: [],
+        snapshots: {},
+        ageIncome: {},
+        txns: [],
+        cashMonths: []
+    };
+    if (includeSettings) {
+        value.categoryKinds = {};
+        value.csvColumns = {};
+    }
+    return value;
+}
+
+function legacyRoot(includeSettings = true) {
+    return {
+        version: 1,
+        plan: plan(1).data,
+        tracker: legacyTracker(includeSettings),
+        updatedAt: serverTimestamp()
+    };
+}
+
 function userDb(uid) {
     return environment.authenticatedContext(uid, { email: uid + '@example.com' }).firestore();
 }
 
-async function createTracker(db, uid, count = 1) {
+async function createAccount(db, uid, count = 1) {
     const batch = writeBatch(db);
+    batch.set(doc(db, `users/${uid}`), manifest());
+    batch.set(doc(db, `users/${uid}/state/plan`), plan(1));
     batch.set(doc(db, `users/${uid}/state/tracker`), tracker(1, count));
     for (let index = 0; index < count; index++) {
         batch.set(doc(db, `users/${uid}/trackerChunks/c${String(index).padStart(4, '0')}`),
@@ -93,18 +119,75 @@ test('requires authentication and isolates every user tree', async () => {
     const bob = userDb('bob');
     const guest = environment.unauthenticatedContext().firestore();
 
-    await assertSucceeds(setDoc(doc(alice, 'users/alice'), manifest()));
+    await createAccount(alice, 'alice');
     await assertFails(getDoc(doc(guest, 'users/alice')));
     await assertFails(getDoc(doc(bob, 'users/alice')));
     await assertFails(setDoc(doc(bob, 'users/alice/state/plan'), plan()));
     await assertFails(setDoc(doc(alice, 'public/leak'), { value: true }));
 });
 
-test('accepts a valid v2 manifest and split plan', async () => {
+test('permits valid legacy writes only for the owning user', async () => {
+    const alice = userDb('alice');
+    const bob = userDb('bob');
+    const guest = environment.unauthenticatedContext().firestore();
+
+    await assertSucceeds(setDoc(doc(alice, 'users/alice'), legacyRoot(false)));
+    await assertSucceeds(setDoc(doc(alice, 'users/alice'), legacyRoot(true)));
+    await assertFails(setDoc(doc(bob, 'users/alice'), legacyRoot()));
+    await assertFails(setDoc(doc(guest, 'users/alice'), legacyRoot()));
+
+    const invalidRoot = legacyRoot();
+    invalidRoot.extra = true;
+    await assertFails(setDoc(doc(alice, 'users/alice'), invalidRoot));
+    const invalidTracker = legacyRoot();
+    invalidTracker.tracker.csvColumns = 'invalid';
+    await assertFails(setDoc(doc(alice, 'users/alice'), invalidTracker));
+    const invalidPlan = legacyRoot();
+    delete invalidPlan.plan.phases;
+    await assertFails(setDoc(doc(alice, 'users/alice'), invalidPlan));
+});
+
+test('requires a complete atomic legacy migration and denies downgrade', async () => {
+    const db = userDb('alice');
+    await assertSucceeds(setDoc(doc(db, 'users/alice'), legacyRoot(false)));
+
+    await assertFails(setDoc(doc(db, 'users/alice/state/plan'), plan(1)));
+    const detachedTracker = writeBatch(db);
+    detachedTracker.set(doc(db, 'users/alice/state/tracker'), tracker(1, 1));
+    detachedTracker.set(doc(db, 'users/alice/trackerChunks/c0000'), chunk(1, 0, 1));
+    await assertFails(detachedTracker.commit());
+    await assertFails(setDoc(doc(db, 'users/alice'), manifest()));
+    const partial = writeBatch(db);
+    partial.set(doc(db, 'users/alice'), manifest());
+    partial.set(doc(db, 'users/alice/state/plan'), plan(1));
+    await assertFails(partial.commit());
+
+    const changedPlan = writeBatch(db);
+    const replacement = plan(1);
+    replacement.data.inputs.income = 200000;
+    changedPlan.set(doc(db, 'users/alice'), manifest());
+    changedPlan.set(doc(db, 'users/alice/state/plan'), replacement);
+    changedPlan.set(doc(db, 'users/alice/state/tracker'), tracker(1, 1));
+    changedPlan.set(doc(db, 'users/alice/trackerChunks/c0000'), chunk(1, 0, 1));
+    await assertFails(changedPlan.commit());
+
+    const migration = writeBatch(db);
+    migration.set(doc(db, 'users/alice'), manifest());
+    migration.set(doc(db, 'users/alice/state/plan'), plan(1));
+    migration.set(doc(db, 'users/alice/state/tracker'), tracker(1, 1));
+    migration.set(doc(db, 'users/alice/trackerChunks/c0000'), chunk(1, 0, 1));
+    await assertSucceeds(migration.commit());
+
+    assert.equal((await assertSucceeds(getDoc(doc(db, 'users/alice')))).data().schemaVersion, 2);
+    assert.equal((await assertSucceeds(getDoc(doc(db, 'users/alice/state/plan')))).data().revision, 1);
+    await assertFails(setDoc(doc(db, 'users/alice'), legacyRoot()));
+    await assertSucceeds(setDoc(doc(db, 'users/alice'), manifest()));
+});
+
+test('accepts a complete v2 account and revisioned plan updates', async () => {
     const db = userDb('alice');
 
-    await assertSucceeds(setDoc(doc(db, 'users/alice'), manifest()));
-    await assertSucceeds(setDoc(doc(db, 'users/alice/state/plan'), plan(1)));
+    await createAccount(db, 'alice');
     const saved = await assertSucceeds(getDoc(doc(db, 'users/alice/state/plan')));
     assert.equal(saved.data().revision, 1);
 
@@ -118,7 +201,7 @@ test('accepts a valid v2 manifest and split plan', async () => {
 
 test('requires tracker metadata and chunks in one atomic revision', async () => {
     const db = userDb('alice');
-    await createTracker(db, 'alice');
+    await createAccount(db, 'alice');
 
     await assertFails(setDoc(doc(db, 'users/alice/state/tracker'), tracker(2, 1)));
     await assertFails(setDoc(doc(db, 'users/alice/trackerChunks/c0000'), chunk(2, 0, 1)));
@@ -131,36 +214,48 @@ test('requires tracker metadata and chunks in one atomic revision', async () => 
 
 test('validates chunk identifiers, indices, counts, and size', async () => {
     const db = userDb('alice');
+    await createAccount(db, 'alice');
     const invalidId = writeBatch(db);
-    invalidId.set(doc(db, 'users/alice/state/tracker'), tracker(1, 1));
-    invalidId.set(doc(db, 'users/alice/trackerChunks/chunk-0'), chunk(1, 0, 1));
+    invalidId.set(doc(db, 'users/alice/state/tracker'), tracker(2, 1));
+    invalidId.set(doc(db, 'users/alice/trackerChunks/chunk-0'), chunk(2, 0, 1));
     await assertFails(invalidId.commit());
 
     const invalidIndex = writeBatch(db);
-    invalidIndex.set(doc(db, 'users/alice/state/tracker'), tracker(1, 1));
-    invalidIndex.set(doc(db, 'users/alice/trackerChunks/c0000'), chunk(1, 1, 1));
+    invalidIndex.set(doc(db, 'users/alice/state/tracker'), tracker(2, 1));
+    invalidIndex.set(doc(db, 'users/alice/trackerChunks/c0000'), chunk(2, 1, 1));
     await assertFails(invalidIndex.commit());
 
     const mismatchedId = writeBatch(db);
-    mismatchedId.set(doc(db, 'users/alice/state/tracker'), tracker(1, 2));
-    mismatchedId.set(doc(db, 'users/alice/trackerChunks/c0000'), chunk(1, 0, 2));
-    mismatchedId.set(doc(db, 'users/alice/trackerChunks/c0001'), chunk(1, 0, 2));
+    mismatchedId.set(doc(db, 'users/alice/state/tracker'), tracker(2, 2));
+    mismatchedId.set(doc(db, 'users/alice/trackerChunks/c0000'), chunk(2, 0, 2));
+    mismatchedId.set(doc(db, 'users/alice/trackerChunks/c0001'), chunk(2, 0, 2));
     await assertFails(mismatchedId.commit());
 
-    const missingTail = writeBatch(db);
-    missingTail.set(doc(db, 'users/alice/state/tracker'), tracker(1, 2));
-    missingTail.set(doc(db, 'users/alice/trackerChunks/c0000'), chunk(1, 0, 2));
-    await assertFails(missingTail.commit());
+    const missingMiddle = writeBatch(db);
+    missingMiddle.set(doc(db, 'users/alice/state/tracker'), tracker(2, 3));
+    missingMiddle.set(doc(db, 'users/alice/trackerChunks/c0000'), chunk(2, 0, 3));
+    missingMiddle.set(doc(db, 'users/alice/trackerChunks/c0002'), chunk(2, 2, 3));
+    await assertFails(missingMiddle.commit());
 
     const tooLarge = writeBatch(db);
-    tooLarge.set(doc(db, 'users/alice/state/tracker'), tracker(1, 1));
-    tooLarge.set(doc(db, 'users/alice/trackerChunks/c0000'), chunk(1, 0, 1, 'x'.repeat(180001)));
+    tooLarge.set(doc(db, 'users/alice/state/tracker'), tracker(2, 1));
+    tooLarge.set(doc(db, 'users/alice/trackerChunks/c0000'), chunk(2, 0, 1, 'x'.repeat(700001)));
     await assertFails(tooLarge.commit());
+
+    const tooWide = writeBatch(db);
+    tooWide.set(doc(db, 'users/alice/state/tracker'), tracker(2, 1));
+    tooWide.set(doc(db, 'users/alice/trackerChunks/c0000'), chunk(2, 0, 1, '€'.repeat(233334)));
+    await assertFails(tooWide.commit());
+
+    const exactUtf8 = writeBatch(db);
+    exactUtf8.set(doc(db, 'users/alice/state/tracker'), tracker(2, 1));
+    exactUtf8.set(doc(db, 'users/alice/trackerChunks/c0000'), chunk(2, 0, 1, '€'.repeat(233333) + 'a'));
+    await assertSucceeds(exactUtf8.commit());
 });
 
 test('permits obsolete chunks to be removed only during a tracker advance', async () => {
     const db = userDb('alice');
-    await createTracker(db, 'alice', 2);
+    await createAccount(db, 'alice', 2);
 
     await assertFails(deleteDoc(doc(db, 'users/alice/trackerChunks/c0001')));
 
@@ -173,9 +268,26 @@ test('permits obsolete chunks to be removed only during a tracker advance', asyn
     assert.equal(removed.exists(), false);
 });
 
-test('accepts the maximum supported tracker chunk batch', async () => {
+test('accepts the maximum supported tracker chunk count', async () => {
     const db = userDb('alice');
-    await createTracker(db, 'alice', 40);
+    await createAccount(db, 'alice', 9);
     const saved = await assertSucceeds(getDoc(doc(db, 'users/alice/state/tracker')));
-    assert.equal(saved.data().chunkCount, 40);
+    assert.equal(saved.data().chunkCount, 9);
+    await assertFails(setDoc(doc(db, 'users/alice/state/tracker'), tracker(2, 10)));
+});
+
+test('accepts a maximum-count atomic legacy migration', async () => {
+    const db = userDb('alice');
+    await assertSucceeds(setDoc(doc(db, 'users/alice'), legacyRoot()));
+    const migration = writeBatch(db);
+    migration.set(doc(db, 'users/alice'), manifest());
+    migration.set(doc(db, 'users/alice/state/plan'), plan(1));
+    migration.set(doc(db, 'users/alice/state/tracker'), tracker(1, 9));
+    for (let index = 0; index < 9; index++) {
+        migration.set(doc(db, `users/alice/trackerChunks/c${String(index).padStart(4, '0')}`),
+            chunk(1, index, 9, index === 0 ? '{}' : 'tail'));
+    }
+    await assertSucceeds(migration.commit());
+    const saved = await assertSucceeds(getDoc(doc(db, 'users/alice/state/tracker')));
+    assert.equal(saved.data().chunkCount, 9);
 });
