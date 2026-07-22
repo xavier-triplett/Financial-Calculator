@@ -16,6 +16,11 @@ one row per age from the current age through 95.
 
 ### Working years
 
+The plan type is Traditional retirement, Coast FIRE, or Early FIRE. Traditional and
+Early FIRE continue normal contributions until `retireAge`. Coast FIRE contributes only
+before `coastAge`; from `coastAge` through `retireAge`, income and expenses continue but
+employee contributions and employer match are zero.
+
 - A starting savings rate can increase each year up to its configured cap.
 - Requested saving is capped at the money actually available after the effective income
   tax and current expenses. The result records the savings rate used and flags the first
@@ -58,8 +63,13 @@ exhausted portfolio.
 ### FI and Coast measures
 
 The FI target is annual spending divided by the safe-withdrawal rate. The Coast number
-inflates current spending to the account-access age, calculates the FI target at that
-age, and discounts it back to today using the configured market return.
+inflates current spending to the later of retirement or account access, calculates the
+FI target at that age, and discounts it back to today using the configured market return.
+
+For a Coast FIRE plan, the engine also records the projected tax-adjusted retirement
+balance when contributions stop, the Coast target at that age, and percentage coverage.
+Traditional retirement readiness compares the full after-tax investable portfolio with
+the FI target; the Coast measure continues to exclude brokerage and cash by design.
 
 The headline Coast-number progress comparison uses today's Roth balance plus today's
 tax-deferred balance reduced by the configured deferred-withdrawal tax rate. Brokerage

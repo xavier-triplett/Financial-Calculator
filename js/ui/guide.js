@@ -31,6 +31,15 @@
             '</section>' +
 
             '<section class="gd-card">' +
+                '<div class="gd-card-title">Three retirement paths</div>' +
+                '<p><strong>Traditional retirement</strong> keeps contributions going until retirement. <strong>Coast FIRE</strong> ' +
+                'stops retirement contributions at the coast age while you keep working to cover current living costs. ' +
+                '<strong>Early FIRE</strong> keeps saving until an early retirement and then draws from the portfolio.</p>' +
+                '<p>The path is not just a label. On the Coast FIRE path, the year-by-year projection records a distinct coasting phase ' +
+                'with no new contributions, while income and expenses continue until full retirement.</p>' +
+            '</section>' +
+
+            '<section class="gd-card">' +
                 '<div class="gd-card-title">Two modes</div>' +
                 '<p><strong>Beginner</strong> keeps the core decisions visible and runs the detailed tax, contribution-limit, ' +
                 'inflation and withdrawal assumptions in the background. <strong>Expert</strong> exposes every dial, saving phase, ' +
@@ -41,7 +50,7 @@
             '<section class="gd-card">' +
                 '<div class="gd-card-title">The coast number</div>' +
                 '<p>The Planner calculates the after-tax value your tax-advantaged accounts need <em>today</em> for market growth alone, ' +
-                'with no new savings, to reach your full retirement target when those accounts unlock. Compare it with your Roth balance ' +
+                'with no new savings, to reach your full retirement target at the later of retirement or account access. Compare it with your Roth balance ' +
                 'plus your deferred balance after estimated withdrawal tax; brokerage and cash belong to the bridge instead.</p>' +
             '</section>' +
 
@@ -74,14 +83,14 @@
             '<section class="gd-card">' +
                 '<div class="gd-card-title">How to use the app</div>' +
                 '<ol class="gd-steps">' +
-                    '<li><strong>Profile</strong> &mdash; enter the facts: date of birth, gross income, annual expenses, the age you want ' +
-                    'to stop working, and the age your retirement accounts unlock. Your withdrawal tax rates and the IRS ' +
+                    '<li><strong>Profile</strong> &mdash; choose Traditional retirement, Coast FIRE, or Early FIRE, then enter the facts: ' +
+                    'date of birth, gross income, annual expenses, your milestone ages, and the age your retirement accounts unlock. Your withdrawal tax rates and the IRS ' +
                     'contribution limits live here too. Every tab reads from here.</li>' +
                     '<li><strong>Planner</strong> &mdash; set the assumptions: your savings rate, how each saved dollar splits across the ' +
                     'three buckets, employer match, and what you expect from the market. The defaults are ' +
                     'reasonable &mdash; start by only changing what you know.</li>' +
-                    '<li><strong>Read the verdicts</strong> &mdash; the stamps at the top of the Planner. Goal I: does the bridge hold? ' +
-                    'Goal II: is the rest of your life funded once everything unlocks? Resilience: how many of 2,000 simulated market ' +
+                    '<li><strong>Read the verdicts</strong> &mdash; the first two stamps adapt to the selected path: reaching the coast and ' +
+                    'coasting to retirement, funding an early-retirement bridge, or reaching a traditional retirement. Resilience shows how many simulated market ' +
                     'futures still leave you with money at 95.</li>' +
                     '<li><strong>Experiment</strong> &mdash; every change recalculates instantly. Try retiring two years later, or saving ' +
                     '5% more, and watch what it does to the verdicts. The small &#9432; icons explain each field.</li>' +
@@ -95,9 +104,9 @@
             '<section class="gd-card">' +
                 '<div class="gd-card-title">Reading the verdicts</div>' +
                 '<dl class="gd-gloss">' +
-                    dt('SECURE', 'For the bridge: the brokerage lasts until your accounts unlock. For the coast: your tax-advantaged accounts alone cover full-retirement spending at the unlock age, and the projection never runs dry before 95.') +
+                    dt('READY / SECURE', 'The selected path reaches its current milestone: the Coast target, retirement-readiness checkpoint, or early-retirement bridge. The note below the stamp names the exact test.') +
                     dt('DEPLETED / Broke at &hellip;', 'The projection runs dry, and the age it happens. Save more, spend less, retire later, or rebalance the buckets.') +
-                    dt('&hellip;% funded', 'Your projected <em>tax-advantaged</em> balances (401k + Roth, after estimated withdrawal tax &mdash; brokerage and cash are deliberately not counted) at the unlock age, versus the nest egg the safe-withdrawal rule says a full retirement needs. 100% or more earns the SECURE stamp; below that, the stamp shows the percentage even if the whole portfolio still lasts to 95.') +
+                    dt('&hellip;% funded', 'Your projected <em>tax-advantaged</em> balances (401k + Roth, after estimated withdrawal tax &mdash; brokerage and cash are deliberately not counted) at the relevant path milestone, versus the nest egg the safe-withdrawal rule says a full retirement needs.') +
                     dt('Resilience %', 'The share of 2,000 randomized market futures (booms, crashes, flat decades) where you still have money at 95. Annual returns are calibrated so their arithmetic average and standard deviation match your market-return and volatility assumptions. A typical compounded path can be lower because volatility compounds unevenly.') +
                 '</dl>' +
             '</section>' +

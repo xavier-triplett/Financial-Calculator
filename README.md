@@ -2,10 +2,10 @@
 
 **Use it here: https://xavier-triplett.github.io/Financial-Calculator/**
 
-The Coast Ledger projects a retirement plan through working years, an early-retirement
-bridge, and retirement through age 95. It tracks tax-deferred, Roth, and brokerage
-balances separately and shows whether the bridge is secure, retirement is fully or
-partially funded, or the portfolio is depleted.
+The Coast Ledger projects Traditional retirement, Coast FIRE, and Early FIRE paths
+through age 95. It tracks tax-deferred, Roth, and brokerage balances separately and
+shows when a plan reaches its coast milestone, whether an early-retirement bridge is
+secure, and how the full retirement holds up.
 
 This is a planning model, not financial advice. Taxes, account rules, returns, and
 personal circumstances are simplified assumptions that you should review before relying
@@ -13,24 +13,22 @@ on an output.
 
 ## Getting started
 
-1. In **Profile**, enter your date of birth, gross income, annual expenses, and early
-   retirement age. The account-access age defaults to 60; switch to **Expert** to change
-   it or review tax and contribution-limit assumptions.
+1. In **Profile**, choose a retirement path and enter your date of birth, gross income,
+   annual expenses, and milestone ages. Coast FIRE stops new retirement contributions at
+   the coast age while modeled employment continues until full retirement. The
+   account-access age defaults to 60; switch to **Expert** to change it.
 2. In **Planner**, review your savings rate, account balances, allocation, employer
    match, market return, inflation, and drawdown strategy.
    The default match assumes an employer contributes 50% of eligible workplace-plan
    contributions up to 6% of salary; set the match rate to zero if that is not yours.
 3. Read the four headline results:
 
-   - **Goal I — The Bridge:** whether brokerage can cover the years between early
-     retirement and the account-access age without needing retirement assets to fill a
-     shortfall.
-   - **Goal II — The Coast:** whether the retirement accounts can support spending once
-     they become available.
+   - **Path milestones:** adaptive verdicts for reaching and sustaining Coast FIRE,
+     reaching a traditional retirement, or funding the Early FIRE bridge.
    - **Resilience:** the share of randomized market paths that retain money through age
      95.
    - **Coast number:** the after-tax retirement balance needed today for growth alone to
-     reach the full retirement target at the account-access age. The progress comparison
+   reach the full retirement target at the later of retirement or account access. The progress comparison
      uses Roth assets plus tax-adjusted tax-deferred assets; brokerage and cash are not
      part of this particular measure.
 4. Adjust the inputs and watch the projection update immediately.
