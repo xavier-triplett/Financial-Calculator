@@ -25,7 +25,10 @@ Thumbs.db
 # Test/coverage
 coverage/
 
-# Personal financial data (source spreadsheet, Rocket Money exports, seed config)
-*.xlsx
-*.csv
+# Personal financial data
 seed.js
+
+# AI
+.claude/settings.local.json
+.codex/config.toml
+
