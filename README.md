@@ -71,8 +71,11 @@ Firestore user tree. Sync is revision-checked: if another device changed the sam
 the app stops and asks whether to keep the cloud copy or the local copy instead of
 silently overwriting either one. Pending changes retry after temporary failures.
 
-Saved formats have no compatibility guarantee. This is a greenfield project, so a future
-schema change may discard old local or cloud data rather than migrate it.
+A valid older single-document cloud save is upgraded atomically the first time its owner
+signs in with the current app, preserving its plan and tracker data. After that upgrade,
+an older copy of the app can keep working locally but cannot sync; reload it before making
+more changes. Saved formats otherwise have no compatibility guarantee, and a future schema
+change may discard old local or cloud data rather than migrate it.
 
 ## For developers
 

@@ -133,10 +133,15 @@ uses Google sign-in, and Firestore stores each user's data below `/users/{uid}`:
 /users/{uid}/trackerChunks/cNNNN     ordered tracker JSON chunks
 ```
 
-Plan and tracker revisions advance independently in Firestore transactions. Tracker
-metadata and all new chunks are written atomically; obsolete trailing chunks are deleted
-only as part of the same revision advance. The client validates exact document shapes,
-chunk order/count, size limits, and a digest before adopting remote tracker data.
+Plan and tracker revisions advance independently in Firestore transactions. Tracker JSON
+uses one to nine ordered UTF-8 chunks of at most 700,000 bytes each. Every tracker revision
+writes its metadata and all declared chunks atomically; obsolete trailing chunks are
+deleted only as part of the same revision advance. The client validates exact document
+shapes, chunk order/count, size limits, and a digest before adopting remote tracker data.
+
+Fresh schema-v2 account creation and legacy migration write the manifest, both state
+documents, and every declared tracker chunk in one atomic operation. The rules reject
+orphaned state, partial account creation, and any tracker revision with a missing chunk.
 
 `firestore.rules` requires authentication, restricts every read and write to the matching
 UID, enforces schema v2 and monotonically increasing revisions, validates timestamps and
@@ -152,6 +157,18 @@ last-writer-wins conflict resolution.
 On a new cloud account, non-empty local data is uploaded only after confirmation. On an
 existing account, unchanged local state adopts the cloud data. Invalid or incomplete
 cloud state is never applied locally.
+
+A valid schema-v1 root document is migrated lazily when its owner first signs in with the
+schema-v2 client. One transaction validates the old document, replaces it with the v2
+manifest, writes both revision-1 state documents and all tracker chunks, and then loads the
+preserved data without a new-account upload prompt. Missing legacy category and CSV maps
+are initialized empty. Malformed legacy data or a partial migration is rejected without
+changing either copy.
+
+Transition rules let schema-v1 clients continue reading and writing a valid legacy root
+until that account migrates. After migration, the rules reject a downgrade: an old client
+can still save locally, but it does not load or update the v2 cloud state and must be
+refreshed to the current release.
 
 Anonymous and signed-in local snapshots are isolated under separate keys. Account
 switches restore only the destination account's snapshot, and sign-out restores the
@@ -177,6 +194,18 @@ local-only.
    ```
 
 Never leave the database in Firestore test mode.
+
+### Cloud-schema release order
+
+Cloud schema releases use this order:
+
+1. Run `npm test` against the client and matching rules.
+2. Deploy and verify `firestore.rules`.
+3. Publish the client, then smoke-test sign-in against production.
+
+Rules must land first so the new client can write its document tree. The transition rules
+keep unmigrated old clients working during this interval. GitHub Actions tests and deploys
+the static Pages site only; it does not deploy Firestore rules.
 
 ## Offline and browser security
 
@@ -228,11 +257,12 @@ The scripts can also run separately:
   removes a stale release cache, verifies network-first behavior, and loads the cached
   application shell with the server offline. Fixture pages use in-memory storage and
   disable themselves outside local or `file:` origins.
-- `npm run test:rules` runs authenticated-isolation, schema, revision, chunk, and cleanup
-  tests against the Firestore emulator.
+- `npm run test:rules` runs authenticated-isolation, atomic account creation/migration,
+  revision, all-chunk, size-limit, and cleanup tests against the Firestore emulator.
 
 GitHub Actions runs verification for pushes and pull requests. A successful push to
-`main` builds the static site with GitHub Pages and deploys it after tests pass.
+`main` builds the static site with GitHub Pages and deploys it after tests pass. Firestore
+rules remain the separate manual release step described above.
 
 ## Repository layout
 
