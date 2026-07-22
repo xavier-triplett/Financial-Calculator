@@ -484,7 +484,7 @@
         var localMismatch = owned && !!saved.lastHash && initial.hash !== saved.lastHash;
         var changedBeforeSignIn = owned && saved.dirty;
         var unknownOwnedBaseline = owned &&
-            ((saved.revision === 0 && saved.dirty && initial.hash !== remote.hash) ||
+            ((saved.revision === 0 && initial.hash !== remote.hash) ||
                 (localMismatch && !saved.dirty));
         if (owned && saved.dirty && saved.pendingHash && saved.pendingHash === initial.hash) {
             changedBeforeSignIn = true;

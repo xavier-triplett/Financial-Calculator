@@ -366,12 +366,8 @@
             await FireCloud.signOut();
 
             FireStore.setInput('income', 515151);
+            TrackerStore.replace(defaultTracker);
             FireTest.storage.setItem('fireCloudOwner_v2', 'user7');
-            FireTest.storage.setItem('fireCloudSync_v2:user7', JSON.stringify({
-                schemaVersion: 2,
-                plan: { revision: 0, lastHash: null, pendingHash: null, dirty: true },
-                tracker: { revision: 0, lastHash: null, pendingHash: null, dirty: false }
-            }));
             var reloadPlan = copy(defaultPlan);
             reloadPlan.inputs.income = 700000;
             var reloadTracker = copy(defaultTracker);
@@ -380,13 +376,17 @@
             writeRemote('user7', reloadPlan, reloadTracker, 1, 1);
             __signIn('user7', 'm@n.com');
             await FireCloud.flush();
-            check('unknown dirty revision conflicts only in its domain',
-                !!FireCloud.status().conflicts.plan && !FireCloud.status().conflicts.tracker);
-            check('clean rev0 domain still adopts remote', TrackerStore.get().accounts[0].name === 'Remote tracker');
-            check('unknown dirty revision cannot overwrite cloud',
+            check('missing owned sync record conflicts in every changed domain',
+                !!FireCloud.status().conflicts.plan && !!FireCloud.status().conflicts.tracker);
+            check('missing owned sync record preserves local data',
+                FireStore.get().inputs.income === 515151 && TrackerStore.get().accounts.length === 0);
+            check('missing owned sync record cannot overwrite cloud',
                 __mock.get(path('user7', 'state/plan')).revision === 1 &&
                 __mock.get(path('user7', 'state/plan')).data.inputs.income === 700000);
-            await FireCloud.resolveConflict('remote', 'plan');
+            await FireCloud.resolveConflict('remote');
+            check('owned record conflict resolves only after an explicit choice',
+                FireStore.get().inputs.income === 700000 &&
+                TrackerStore.get().accounts[0].name === 'Remote tracker');
             await FireCloud.signOut();
 
             var incompleteTracker = copy(defaultTracker);
