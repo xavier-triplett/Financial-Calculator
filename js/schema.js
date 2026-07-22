@@ -33,9 +33,10 @@
         groups: [
             {
                 id: 'goals', title: 'Retirement goals', icon: ICONS.target,
-                blurb: 'When you want out.',
+                blurb: 'The milestones for your selected path.',
                 fields: [
-                    { key: 'retireAge', label: 'Early retirement age', step: 1, min: 25, max: 80 },
+                    { key: 'coastAge', label: 'Coast age', step: 1, min: 25, max: 80, hint: 'The age when retirement contributions stop. You keep working to cover living expenses while invested retirement balances grow on their own.' },
+                    { key: 'retireAge', label: 'Full retirement age', step: 1, min: 25, max: 80 },
                     { key: 'standardRetireAge', label: 'Penalty-free deferred access age', step: 1, min: 50, max: 75, hint: 'Usually 59½ (modeled as 60). Enter 55 only if your employer plan qualifies for the Rule of 55, and note that rule covers only that employer\'s 401k, not IRAs or Roth IRAs, while this age unlocks every account in the model.' }
                 ]
             },
@@ -153,6 +154,31 @@
             deferred: { label: 'Tax-Deferred', short: 'Deferred', desc: '401k / IRA' },
             free: { label: 'Tax-Free', short: 'Roth', desc: 'Roth accounts' },
             taxable: { label: 'After-Tax', short: 'Brokerage', desc: 'Brokerage' }
+        },
+
+        planTypes: [
+            {
+                id: FireEngine.PLAN_TYPES.TRADITIONAL,
+                name: 'Traditional retirement',
+                short: 'Traditional',
+                description: 'Keep saving throughout your career, then retire on your target date.'
+            },
+            {
+                id: FireEngine.PLAN_TYPES.COAST,
+                name: 'Coast FIRE',
+                short: 'Coast FIRE',
+                description: 'Stop retirement contributions at your coast age, then work only to cover living costs.'
+            },
+            {
+                id: FireEngine.PLAN_TYPES.EARLY,
+                name: 'Early FIRE',
+                short: 'Early FIRE',
+                description: 'Save until early retirement, then fund the years before retirement accounts unlock.'
+            }
+        ],
+
+        planType: function (id) {
+            return this.planTypes.find(function (type) { return type.id === Number(id); }) || this.planTypes[1];
         }
     };
 

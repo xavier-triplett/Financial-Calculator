@@ -12,11 +12,14 @@
     'use strict';
 
     var MAX_AGE = 95;
+    var PLAN_TYPES = { TRADITIONAL: 0, COAST: 1, EARLY: 2 };
 
     var DEFAULTS = {
         // Profile
+        planType: PLAN_TYPES.COAST,
         currentAge: 30,
-        retireAge: 50,
+        coastAge: 40,
+        retireAge: 60,
         standardRetireAge: 60,
 
         // Income & savings — personal dollar figures ship as zero so a
@@ -79,7 +82,9 @@
     };
 
     var INPUT_RULES = {
+        planType: { min: PLAN_TYPES.TRADITIONAL, max: PLAN_TYPES.EARLY, integer: true },
         currentAge: { min: 0, max: MAX_AGE, integer: true },
+        coastAge: { min: 0, max: MAX_AGE, integer: true },
         retireAge: { min: 0, max: MAX_AGE, integer: true },
         standardRetireAge: { min: 0, max: MAX_AGE, integer: true },
         income: { min: 0, max: 1e15 },
@@ -190,6 +195,7 @@
             d[k] = normalizeValue(k, value, DEFAULTS[k]);
         }
         if (d.savingsRate > d.maxSavingsRate) d.savingsRate = d.maxSavingsRate;
+        if (d.planType === PLAN_TYPES.COAST && d.coastAge > d.retireAge) d.coastAge = d.retireAge;
         DRAW_SETS.forEach(function (keys) { normalizeDrawSet(d, keys); });
         return d;
     }
@@ -284,6 +290,10 @@
         var ranOutOfMoneyAge = null;
         var standardSuccess = false;
         var standardCoverage = 0;
+        var effectiveCoastAge = Math.max(d.currentAge, Math.min(d.coastAge, d.retireAge));
+        var readinessAge = Math.max(d.retireAge, d.standardRetireAge);
+        var coastBalanceAtStart = d.balDeferred * keepD + d.balFree;
+        var retirementBalanceAtReadiness = d.balDeferred * keepD + d.balFree + d.balTaxable * keepT;
         var netWorthAtRetirement = 0;
         var expensesAtRetirement = 0;
         var totalTaxes = 0;
@@ -296,6 +306,7 @@
             var yearIndex = age - d.currentAge;
             var isRetired = age >= d.retireAge;
             var isStandardAge = age >= d.standardRetireAge;
+            var isCoasting = d.planType === PLAN_TYPES.COAST && age >= effectiveCoastAge && !isRetired;
 
             var yearExpenses = curExpenses;
             if (age === d.retireAge || (age === d.currentAge && d.currentAge > d.retireAge)) {
@@ -303,7 +314,12 @@
                 expensesAtRetirement = curExpenses;
             }
 
-            if (age === d.standardRetireAge || (age === d.currentAge && d.currentAge > d.standardRetireAge)) {
+            if (age === effectiveCoastAge) {
+                coastBalanceAtStart = curDeferred * keepD + curFree;
+            }
+
+            if (age === readinessAge || (age === d.currentAge && d.currentAge > readinessAge)) {
+                retirementBalanceAtReadiness = curDeferred * keepD + curFree + curTaxable * keepT;
                 var safeAmount = (curDeferred * keepD + curFree) * swr;
                 if (curExpenses <= 0) {
                     standardCoverage = 100;
@@ -333,7 +349,7 @@
                     if (phaseList[p].age <= age) { activePhase = phaseList[p]; break; }
                 }
 
-                var plannedSavings = curIncome * curSavingsRate;
+                var plannedSavings = isCoasting ? 0 : curIncome * curSavingsRate;
                 var availableSavings = Math.max(0, curIncome * keepIncome - curExpenses);
                 var totalSavings = Math.min(plannedSavings, availableSavings);
                 usedSavingsRate = curIncome > 0 ? totalSavings / curIncome : 0;
@@ -381,7 +397,7 @@
                 totalContributed += cD + cF + cT;
 
                 // Ramp savings rate
-                if (curSavingsRate < maxSavingsRate) {
+                if (!isCoasting && curSavingsRate < maxSavingsRate) {
                     curSavingsRate = Math.min(maxSavingsRate, curSavingsRate + savingsRateStep);
                 }
 
@@ -484,7 +500,7 @@
                     total: totalNW,
                     expenses: yearExpenses,
                     isRetired: isRetired,
-                    phase: !isRetired ? 'working' : (isStandardAge ? 'standard' : 'bridge'),
+                    phase: isCoasting ? 'coasting' : (!isRetired ? 'working' : (isStandardAge ? 'standard' : 'bridge')),
                     savingsRate: isRetired ? 0 : usedSavingsRate,
                     contrib: contrib,
                     wd: { gross: wdGross, net: wdNet, taxes: wdTaxes, taxable: wdT, deferred: wdD, free: wdF },
@@ -496,12 +512,22 @@
         }
 
         var fiNumber = swr > 0 ? expensesAtRetirement / swr : 0;
-        var coastYears = Math.max(0, d.standardRetireAge - d.currentAge);
+        var coastYears = Math.max(0, readinessAge - d.currentAge);
         var unlockExpenses = d.expenses * Math.pow(1 + inflation, coastYears);
         var fiNumberAtUnlock = swr > 0 ? unlockExpenses / swr : 0;
         var coastGrowth = 1 + growth;
         var coastNumber = coastGrowth > 0 ? fiNumberAtUnlock / Math.pow(coastGrowth, coastYears) : 0;
         var coastBalanceToday = d.balDeferred * keepD + d.balFree;
+        var coastRunwayYears = Math.max(0, readinessAge - effectiveCoastAge);
+        var coastTargetAtStart = coastGrowth > 0
+            ? fiNumberAtUnlock / Math.pow(coastGrowth, coastRunwayYears)
+            : 0;
+        var coastCoverageAtStart = coastTargetAtStart > 0
+            ? coastBalanceAtStart / coastTargetAtStart * 100
+            : 100;
+        var retirementCoverageAtReadiness = fiNumberAtUnlock > 0
+            ? retirementBalanceAtReadiness / fiNumberAtUnlock * 100
+            : 100;
         var endingNetWorth = curDeferred + curFree + curTaxable + cash;
 
         return {
@@ -512,6 +538,13 @@
                 coastNumber: coastNumber,
                 coastBalanceToday: coastBalanceToday,
                 coastYears: coastYears,
+                coastStartAge: effectiveCoastAge,
+                coastBalanceAtStart: coastBalanceAtStart,
+                coastTargetAtStart: coastTargetAtStart,
+                coastCoverageAtStart: coastCoverageAtStart,
+                readinessAge: readinessAge,
+                retirementBalanceAtReadiness: retirementBalanceAtReadiness,
+                retirementCoverageAtReadiness: retirementCoverageAtReadiness,
                 netWorthAtRetirement: netWorthAtRetirement,
                 expensesAtRetirement: expensesAtRetirement,
                 bridgeFailureAge: bridgeFailureAge,
@@ -615,6 +648,7 @@
 
     global.FireEngine = {
         DEFAULTS: DEFAULTS,
+        PLAN_TYPES: PLAN_TYPES,
         DEFAULT_PHASES: DEFAULT_PHASES,
         INPUT_RULES: INPUT_RULES,
         DRAW_SETS: DRAW_SETS,

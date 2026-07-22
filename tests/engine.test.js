@@ -18,6 +18,8 @@ function finiteResult(result) {
 }
 
 const DEMO = Object.assign({}, E.DEFAULTS, {
+    planType: E.PLAN_TYPES.EARLY,
+    retireAge: 50,
     income: 120000,
     expenses: 60000,
     balDeferred: 150000,
@@ -126,6 +128,7 @@ check('traditional IRA capacity follows the workplace limit',
     approx(deferredVehicle.deferred, 32000) && approx(deferredVehicle.taxable, 8000));
 
 const catchups = E.simulate(Object.assign({}, E.DEFAULTS, {
+    planType: E.PLAN_TYPES.TRADITIONAL,
     currentAge: 60, retireAge: 70, standardRetireAge: 70,
     income: 400000, incomeTaxRate: 0, expenses: 0,
     savingsRate: 20, savingsRateIncrease: 0, maxSavingsRate: 20,
@@ -158,7 +161,46 @@ const immediate = E.simulate(Object.assign({}, coastInputs, {
 }), null, {});
 check('immediate retirement snapshot uses starting balances', approx(immediate.summary.netWorthAtRetirement, 1500000));
 
+const coastPathInputs = Object.assign({}, E.DEFAULTS, {
+    planType: E.PLAN_TYPES.COAST,
+    currentAge: 30, coastAge: 32, retireAge: 35, standardRetireAge: 35,
+    income: 100000, incomeTaxRate: 0, expenses: 0,
+    savingsRate: 10, savingsRateIncrease: 0, maxSavingsRate: 10,
+    incomeGrowth: 0, marketReturn: 0, inflation: 0, employerMatchRate: 0,
+    limit401k: 1e9, limitIRA: 1e9
+});
+const coastPath = E.simulate(coastPathInputs, null, {});
+const traditionalPath = E.simulate(Object.assign({}, coastPathInputs, {
+    planType: E.PLAN_TYPES.TRADITIONAL
+}), null, {});
+check('Coast FIRE contributes only before the coast age',
+    approx(coastPath.summary.totalContributed, 20000) &&
+    coastPath.rows.filter(row => row.age >= 32 && row.age < 35).every(row =>
+        row.phase === 'coasting' && row.savingsRate === 0 &&
+        row.contrib.deferred + row.contrib.free + row.contrib.taxable === 0));
+check('traditional retirement keeps contributing through working years',
+    approx(traditionalPath.summary.totalContributed, 50000) &&
+    traditionalPath.rows.filter(row => row.age < 35).every(row => row.phase === 'working'));
+check('coast checkpoint captures the balance when contributions stop',
+    coastPath.summary.coastStartAge === 32 && approx(coastPath.summary.coastBalanceAtStart, 18500));
+
+const laterTraditional = E.simulate(Object.assign({}, coastPathInputs, {
+    planType: E.PLAN_TYPES.TRADITIONAL, retireAge: 67, standardRetireAge: 60
+}), null, {});
+check('retirement readiness waits for a later traditional retirement age',
+    laterTraditional.summary.readinessAge === 67);
+const brokerageRetirement = E.simulate(Object.assign({}, E.DEFAULTS, {
+    planType: E.PLAN_TYPES.TRADITIONAL,
+    currentAge: 30, retireAge: 31, standardRetireAge: 31,
+    income: 0, expenses: 4000, inflation: 0, marketReturn: 0, swr: 4,
+    balTaxable: 100000 / 0.9, employerMatchRate: 0
+}), null, {});
+check('traditional readiness counts the whole after-tax portfolio',
+    approx(brokerageRetirement.summary.retirementCoverageAtReadiness, 100) &&
+    brokerageRetirement.summary.standardCoverage === 0);
+
 const futurePhase = E.simulate(Object.assign({}, E.DEFAULTS, {
+    planType: E.PLAN_TYPES.TRADITIONAL,
     currentAge: 30, retireAge: 41, standardRetireAge: 41,
     income: 100000, incomeTaxRate: 0, expenses: 0,
     savingsRate: 10, savingsRateIncrease: 0, maxSavingsRate: 10,
