@@ -377,12 +377,20 @@
         }
 
         var fiNumber = swr > 0 ? expensesAtRetirement / swr : 0;
+        var coastYears = Math.max(0, d.standardRetireAge - d.currentAge);
+        var unlockExpenses = d.expenses * Math.pow(1 + inflation, coastYears);
+        var fiNumberAtUnlock = swr > 0 ? unlockExpenses / swr : 0;
+        var coastGrowth = 1 + growth;
+        var coastNumber = coastGrowth > 0 ? fiNumberAtUnlock / Math.pow(coastGrowth, coastYears) : 0;
         var endingNetWorth = curDeferred + curFree + curTaxable + cash;
 
         return {
             rows: rows,
             summary: {
                 fiNumber: fiNumber,
+                fiNumberAtUnlock: fiNumberAtUnlock,
+                coastNumber: coastNumber,
+                coastYears: coastYears,
                 netWorthAtRetirement: netWorthAtRetirement,
                 expensesAtRetirement: expensesAtRetirement,
                 bridgeFailureAge: bridgeFailureAge,

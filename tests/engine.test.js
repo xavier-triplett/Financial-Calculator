@@ -41,6 +41,15 @@ check('taxable-heavy plan secures the bridge', taxHeavy.summary.bridgeFailureAge
 check('never broke with defaults', base.summary.ranOutOfMoneyAge === null);
 check('NW at retirement plausible (>1M)', base.summary.netWorthAtRetirement > 1e6, '=' + Math.round(base.summary.netWorthAtRetirement));
 check('FI number plausible', base.summary.fiNumber > 1e6 && base.summary.fiNumber < 1e7, '=' + Math.round(base.summary.fiNumber));
+const coastYears = DEMO.standardRetireAge - DEMO.currentAge;
+const expectedUnlockTarget = DEMO.expenses * Math.pow(1 + DEMO.inflation / 100, coastYears) / (DEMO.swr / 100);
+const expectedCoast = expectedUnlockTarget / Math.pow(1 + DEMO.marketReturn / 100, coastYears);
+check('coast number is the balance needed today with no further saving',
+    Math.abs(base.summary.coastNumber - expectedCoast) < 0.01,
+    '=' + Math.round(base.summary.coastNumber));
+check('coast target is the inflation-adjusted FI number at unlock',
+    Math.abs(base.summary.fiNumberAtUnlock - expectedUnlockTarget) < 0.01);
+check('coast horizon ends at the unlock age', base.summary.coastYears === coastYears);
 
 // 2. Legacy parity: disable new features -> replicate original algorithm inline
 function legacySim(d, phases) {
