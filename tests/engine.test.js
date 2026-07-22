@@ -1,234 +1,273 @@
-require('C:/source/FIRE-CALCULATOR/js/engine.js');
+require('../js/engine.js');
 const E = globalThis.FireEngine;
 
 let failures = 0;
-function check(name, cond, detail) {
-    if (!cond) { failures++; console.log('FAIL: ' + name + (detail ? ' — ' + detail : '')); }
-    else console.log('ok:   ' + name);
+function check(name, condition, detail) {
+    if (condition) console.log('ok:   ' + name);
+    else {
+        failures++;
+        console.log('FAIL: ' + name + (detail ? ' — ' + detail : ''));
+    }
+}
+function approx(actual, expected, tolerance = 1e-6) {
+    return Math.abs(actual - expected) <= tolerance;
+}
+function finiteResult(result) {
+    return result.rows.every(row => [row.deferred, row.free, row.taxable, row.total, row.expenses]
+        .every(Number.isFinite));
 }
 
-// Shipped defaults hold no personal financial data (all dollar figures are
-// zero), so the behavioral tests run against this demo plan instead.
 const DEMO = Object.assign({}, E.DEFAULTS, {
-    income: 120000, expenses: 60000,
-    balDeferred: 150000, balFree: 40000, balTaxable: 25000
+    income: 120000,
+    expenses: 60000,
+    balDeferred: 150000,
+    balFree: 40000,
+    balTaxable: 25000,
+    mcSims: 100
 });
 
-// 0. Zero defaults stay sane: nothing to spend means nothing ever breaks
 const blank = E.simulate({}, null, { startYear: 2026 });
-check('zero defaults: dollar fields are zero',
-    E.DEFAULTS.income === 0 && E.DEFAULTS.expenses === 0 &&
-    E.DEFAULTS.balDeferred === 0 && E.DEFAULTS.balFree === 0 && E.DEFAULTS.balTaxable === 0);
-check('zero defaults: full age span', blank.rows.length === 95 - 30 + 1);
-check('zero defaults: FI number is zero', blank.summary.fiNumber === 0);
-check('zero defaults: never marked broke', blank.summary.ranOutOfMoneyAge === null && blank.summary.bridgeFailureAge === null);
-check('zero defaults: nothing infeasible', blank.summary.firstInfeasibleAge === null);
-check('zero defaults: no NaN in totals', blank.rows.every(r => Number.isFinite(r.total)));
-check('zero defaults: MC succeeds trivially', E.monteCarlo({}, null, { seed: 1 }).successRate === 1);
+check('blank plan spans current age through 95', blank.rows.length === 66);
+check('blank plan remains finite', finiteResult(blank));
+check('blank plan has no depletion', blank.summary.ranOutOfMoneyAge === null);
 
-// 1. Demo plan runs
-const base = E.simulate(DEMO, null, { startYear: 2026 });
-check('rows span currentAge..95', base.rows.length === 95 - 30 + 1);
-// Default plan underfunds the brokerage bridge (0% taxable contributions in
-// phase 1) — failure between retireAge and standardRetireAge is the correct read.
-check('bridge failure lands inside bridge window if present',
-    base.summary.bridgeFailureAge === null ||
-    (base.summary.bridgeFailureAge >= 50 && base.summary.bridgeFailureAge < 60),
-    'failAge=' + base.summary.bridgeFailureAge);
-const taxHeavy = E.simulate(DEMO, [{ id: 1, age: 30, deferred: 20, free: 20, taxable: 60 }], {});
-check('taxable-heavy plan secures the bridge', taxHeavy.summary.bridgeFailureAge === null,
-    'failAge=' + taxHeavy.summary.bridgeFailureAge);
-check('never broke with defaults', base.summary.ranOutOfMoneyAge === null);
-check('NW at retirement plausible (>1M)', base.summary.netWorthAtRetirement > 1e6, '=' + Math.round(base.summary.netWorthAtRetirement));
-check('FI number plausible', base.summary.fiNumber > 1e6 && base.summary.fiNumber < 1e7, '=' + Math.round(base.summary.fiNumber));
-const coastYears = DEMO.standardRetireAge - DEMO.currentAge;
-const expectedUnlockTarget = DEMO.expenses * Math.pow(1 + DEMO.inflation / 100, coastYears) / (DEMO.swr / 100);
-const expectedCoast = expectedUnlockTarget / Math.pow(1 + DEMO.marketReturn / 100, coastYears);
-check('coast number is the balance needed today with no further saving',
-    Math.abs(base.summary.coastNumber - expectedCoast) < 0.01,
-    '=' + Math.round(base.summary.coastNumber));
-check('coast target is the inflation-adjusted FI number at unlock',
-    Math.abs(base.summary.fiNumberAtUnlock - expectedUnlockTarget) < 0.01);
-check('coast horizon ends at the unlock age', base.summary.coastYears === coastYears);
+const normalized = E.normalizeInputs({
+    currentAge: 110,
+    income: -1,
+    expenses: Infinity,
+    savingsRate: 75,
+    maxSavingsRate: 50,
+    taxTaxableRate: -20,
+    swr: 0,
+    marketReturn: -150,
+    mcSims: 50.5
+});
+check('input domains clamp unsafe values',
+    normalized.currentAge === 95 && normalized.income === 0 && normalized.expenses === E.DEFAULTS.expenses &&
+    normalized.savingsRate === 50 && normalized.taxTaxableRate === 0 && normalized.swr === 0.1 &&
+    normalized.marketReturn === -99 && normalized.mcSims === 51);
+check('draw sets normalize to exactly 100', E.DRAW_SETS.every(keys =>
+    approx(keys.reduce((sum, key) => sum + normalized[key], 0), 100)));
 
-// 2. Legacy parity: disable new features -> replicate original algorithm inline
-function legacySim(d, phases) {
-    let curD = d.balDeferred, curF = d.balFree, curT = d.balTaxable;
-    let inc = d.income, exp = d.expenses, sr = d.savingsRate / 100;
-    let bridgeFail = null, broke = null;
-    const rows = [];
-    for (let age = d.currentAge; age <= 95; age++) {
-        const isRet = age >= d.retireAge, isStd = age >= d.standardRetireAge;
-        const g = d.marketReturn / 100;
-        curD *= 1 + g; curF *= 1 + g; curT *= 1 + g;
-        if (!isRet) {
-            let ph = phases.concat().sort((a, b) => b.age - a.age).find(p => p.age <= age) || phases[0];
-            const tot = inc * sr;
-            curD += tot * ph.deferred / 100; curF += tot * ph.free / 100; curT += tot * ph.taxable / 100;
-            if (sr < d.maxSavingsRate / 100) sr = Math.min(d.maxSavingsRate / 100, sr + d.savingsRateIncrease / 100);
-            inc *= 1 + d.incomeGrowth / 100; exp *= 1 + d.inflation / 100;
-        } else {
-            const need = exp, tw = curD + curF + curT;
-            if (tw <= 0) { if (!broke) broke = age; }
-            else {
-                let wT, wD, wF;
-                if (!isStd) { wT = need * d.drawTaxableBridge / 100; wD = need * d.drawDeferredBridge / 100; wF = need * d.drawFreeBridge / 100; }
-                else { wT = need * d.drawTaxableStd / 100; wD = need * d.drawDeferredStd / 100; wF = need * d.drawFreeStd / 100; }
-                let tT = Math.min(wT, curT), tD = Math.min(wD, curD), tF = Math.min(wF, curF);
-                curT -= tT; curD -= tD; curF -= tF;
-                let shortfall = need - (tT + tD + tF);
-                if (shortfall > 0.01) {
-                    let stillNeed = shortfall, guard = 0;
-                    while (stillNeed > 1 && guard < 10) {
-                        const srcs = [];
-                        if (curT > 0) srcs.push('t'); if (curD > 0) srcs.push('d'); if (curF > 0) srcs.push('f');
-                        if (!srcs.length) break;
-                        const chunk = stillNeed / srcs.length;
-                        srcs.forEach(s => {
-                            if (s === 't') { const t = Math.min(chunk, curT); curT -= t; stillNeed -= t; }
-                            else if (s === 'd') { const t = Math.min(chunk, curD); curD -= t; stillNeed -= t; }
-                            else { const t = Math.min(chunk, curF); curF -= t; stillNeed -= t; }
-                        });
-                        guard++;
-                    }
-                }
-                if (!isStd && curT <= 0 && shortfall > 0.01 && bridgeFail === null) bridgeFail = age;
-            }
-            exp *= 1 + d.inflation / 100;
-        }
-        if (curD < 0) curD = 0; if (curF < 0) curF = 0; if (curT < 0) curT = 0;
-        rows.push({ age, total: curD + curF + curT });
-    }
-    return { rows, bridgeFail, broke };
-}
+const oldAge = E.simulate(Object.assign({}, DEMO, { currentAge: 97 }), null, {});
+const oldAgeMc = E.monteCarlo(Object.assign({}, DEMO, { currentAge: 97, mcSims: 50 }), null, { seed: 1 });
+check('age beyond horizon is handled defensively', oldAge.rows.length === 1 && oldAge.rows[0].age === 95);
+check('old-age Monte Carlo stays well shaped', oldAgeMc.bands.ages.length === 1 && oldAgeMc.bands.ages[0] === 95);
 
-const legacyInputs = Object.assign({}, DEMO, {
-    employerMatchRate: 0, employerMatchCap: 0,
-    limit401k: 1e9, limitIRA: 1e9, catchUp401k: 0, catchUpIRA: 0,
+const drawBase = Object.assign({}, E.DEFAULTS, {
+    currentAge: 30, retireAge: 30, standardRetireAge: 30,
+    marketReturn: 0, inflation: 0, expenses: 100,
+    balDeferred: 1000, balFree: 1000, balTaxable: 1000,
     taxDeferredRate: 0, taxTaxableRate: 0, earlyPenaltyRate: 0
 });
-const phases = [{ id: 1, age: 30, deferred: 50, free: 50, taxable: 0 }];
-const mine = E.simulate(legacyInputs, phases, { startYear: 2026 });
-const legacy = legacySim(legacyInputs, phases);
-let maxDiff = 0;
-for (let i = 0; i < mine.rows.length; i++) {
-    maxDiff = Math.max(maxDiff, Math.abs(mine.rows[i].total - legacy.rows[i].total));
+const overdraw = E.simulate(Object.assign({}, drawBase, {
+    drawTaxableStd: 110, drawDeferredStd: 0, drawFreeStd: 0
+}), null, {});
+check('over-100 draw mix cannot overdraw spending', approx(overdraw.rows[0].wd.net, 100));
+const decimalDraw = E.simulate(Object.assign({}, drawBase, {
+    drawTaxableStd: 33.9, drawDeferredStd: 33.9, drawFreeStd: 34.2
+}), null, {});
+check('decimal draw mix meets need once', approx(decimalDraw.rows[0].wd.net, 100));
+check('draws are never negative', decimalDraw.rows[0].wd.taxable >= 0 && decimalDraw.rows[0].wd.deferred >= 0 && decimalDraw.rows[0].wd.free >= 0);
+
+const infeasible = E.simulate(Object.assign({}, E.DEFAULTS, {
+    currentAge: 30, retireAge: 60, standardRetireAge: 60,
+    income: 100000, incomeTaxRate: 25, expenses: 70000,
+    savingsRate: 80, savingsRateIncrease: 0, maxSavingsRate: 80,
+    incomeGrowth: 0, marketReturn: 0, inflation: 0, employerMatchRate: 0
+}), [{ age: 30, deferred: 50, free: 50, taxable: 0 }], {});
+const infeasibleRow = infeasible.rows[0];
+check('infeasible request is flagged', infeasible.summary.firstInfeasibleAge === 30);
+check('infeasible saving is capped to take-home surplus',
+    approx(infeasibleRow.contrib.deferred + infeasibleRow.contrib.free + infeasibleRow.contrib.taxable, 5000));
+check('row reports the savings rate actually used', approx(infeasibleRow.savingsRate, 0.05));
+
+const cappedRate = E.simulate(Object.assign({}, E.DEFAULTS, {
+    currentAge: 30, retireAge: 32, standardRetireAge: 32,
+    income: 100000, incomeTaxRate: 0, expenses: 0,
+    savingsRate: 75, maxSavingsRate: 50, savingsRateIncrease: 0,
+    incomeGrowth: 0, marketReturn: 0, inflation: 0, employerMatchRate: 0
+}), [{ age: 30, deferred: 0, free: 0, taxable: 100 }], {});
+check('starting savings rate obeys its cap', approx(cappedRate.rows[0].contrib.taxable, 50000));
+check('cap is reflected in the row', approx(cappedRate.rows[0].savingsRate, 0.5));
+
+const rampedRate = E.simulate(Object.assign({}, E.DEFAULTS, {
+    currentAge: 30, retireAge: 32, standardRetireAge: 32,
+    income: 100000, incomeTaxRate: 0, expenses: 0,
+    savingsRate: 25, maxSavingsRate: 50, savingsRateIncrease: 1,
+    incomeGrowth: 0, marketReturn: 0, inflation: 0, employerMatchRate: 0
+}), [{ age: 30, deferred: 0, free: 0, taxable: 100 }], {});
+check('ramp rows report the rate used that year',
+    approx(rampedRate.rows[0].savingsRate, 0.25) && approx(rampedRate.rows[1].savingsRate, 0.26));
+
+function vehiclePlan(split) {
+    return E.simulate(Object.assign({}, E.DEFAULTS, {
+        currentAge: 30, retireAge: 31, standardRetireAge: 31,
+        income: 200000, incomeTaxRate: 0, expenses: 0,
+        savingsRate: 20, savingsRateIncrease: 0, maxSavingsRate: 20,
+        incomeGrowth: 0, marketReturn: 0, inflation: 0,
+        employerMatchRate: 50, employerMatchCap: 6
+    }), [Object.assign({ age: 30 }, split)], {});
 }
-check('legacy parity: totals match within $1', maxDiff < 1, 'maxDiff=' + maxDiff.toFixed(2));
-check('legacy parity: bridge status', (mine.summary.bridgeFailureAge === legacy.bridgeFail));
+const mixedVehicle = vehiclePlan({ deferred: 50, free: 50, taxable: 0 }).rows[0].contrib;
+check('401k and IRA caps are shared across tax treatments',
+    approx(mixedVehicle.workplace, 24500) && approx(mixedVehicle.ira, 7500) &&
+    approx(mixedVehicle.deferred, 16000) && approx(mixedVehicle.free, 16000) &&
+    approx(mixedVehicle.taxable, 8000));
+check('employee contribution dollars are conserved',
+    approx(mixedVehicle.deferred + mixedVehicle.free + mixedVehicle.taxable, 40000));
+check('match is based on workplace contributions', approx(mixedVehicle.match, 6000));
 
-// 3. New features move numbers the right direction
-const withMatch = E.simulate(DEMO, phases, {});
-const noMatch = E.simulate(Object.assign({}, DEMO, { employerMatchRate: 0 }), phases, {});
-check('employer match increases retirement NW', withMatch.summary.netWorthAtRetirement > noMatch.summary.netWorthAtRetirement);
-check('match total positive', withMatch.summary.totalMatch > 0, '=' + Math.round(withMatch.summary.totalMatch));
+const rothVehicle = vehiclePlan({ deferred: 0, free: 100, taxable: 0 }).rows[0].contrib;
+check('Roth workplace contributions earn match',
+    approx(rothVehicle.free, 32000) && approx(rothVehicle.match, 6000) && approx(rothVehicle.deferred, 0));
+const deferredVehicle = vehiclePlan({ deferred: 100, free: 0, taxable: 0 }).rows[0].contrib;
+check('traditional IRA capacity follows the workplace limit',
+    approx(deferredVehicle.deferred, 32000) && approx(deferredVehicle.taxable, 8000));
 
-const highTax = E.simulate(Object.assign({}, DEMO, { taxDeferredRate: 40, taxTaxableRate: 30 }), phases, {});
-check('higher taxes lower ending NW', highTax.summary.endingNetWorth < withMatch.summary.endingNetWorth);
-check('taxes tracked', highTax.summary.totalTaxes > withMatch.summary.totalTaxes);
-
-// Contribution limits: someone saving 50% of 400k into deferred should hit the cap
-const capped = E.simulate(Object.assign({}, DEMO, { income: 400000, savingsRate: 50 }), [{ id: 1, age: 30, deferred: 100, free: 0, taxable: 0 }], {});
-const row0 = capped.rows[0];
-check('401k limit enforced year 1', Math.abs(row0.contrib.deferred - E.DEFAULTS.limit401k) < 1, '=' + row0.contrib.deferred);
-check('overflow spills to taxable', row0.contrib.taxable > 150000, '=' + Math.round(row0.contrib.taxable));
-
-// SECURE 2.0 super catch-up: ages 60-63 get the larger 401k catch-up
-const at60 = E.simulate(
-    Object.assign({}, DEMO, { currentAge: 60, retireAge: 70, standardRetireAge: 70, income: 800000, savingsRate: 50 }),
-    [{ id: 1, age: 60, deferred: 100, free: 0, taxable: 0 }], {});
-check('super catch-up applies at 60',
-    Math.abs(at60.rows[0].contrib.deferred - (E.DEFAULTS.limit401k + E.DEFAULTS.superCatchUp401k)) < 1,
-    '=' + at60.rows[0].contrib.deferred);
+const catchups = E.simulate(Object.assign({}, E.DEFAULTS, {
+    currentAge: 60, retireAge: 70, standardRetireAge: 70,
+    income: 400000, incomeTaxRate: 0, expenses: 0,
+    savingsRate: 20, savingsRateIncrease: 0, maxSavingsRate: 20,
+    incomeGrowth: 0, marketReturn: 0, inflation: 3, employerMatchRate: 0
+}), [{ age: 60, deferred: 100, free: 0, taxable: 0 }], {});
+check('super catch-up and IRA catch-up combine at 60',
+    approx(catchups.rows[0].contrib.workplace, 24500 + 11250) &&
+    approx(catchups.rows[0].contrib.ira, 7500 + 1100));
+const factor64 = Math.pow(1.03, 4);
 check('regular catch-up resumes at 64',
-    Math.abs(at60.rows[4].contrib.deferred - (E.DEFAULTS.limit401k + E.DEFAULTS.catchUp401k) * Math.pow(1.03, 4)) < 1,
-    '=' + at60.rows[4].contrib.deferred);
+    approx(catchups.rows[4].contrib.workplace, (24500 + 8000) * factor64) &&
+    approx(catchups.rows[4].contrib.ira, (7500 + 1100) * factor64));
 
-// 3e. Early-withdrawal penalty on pre-access-age deferred draws
-{
-    const draws = { drawTaxableBridge: 0, drawDeferredBridge: 100, drawFreeBridge: 0 };
-    const pen = E.simulate(Object.assign({}, DEMO, draws), phases, {});
-    const noPen = E.simulate(Object.assign({}, DEMO, draws, { earlyPenaltyRate: 0 }), phases, {});
-    check('early penalty raises bridge taxes', pen.summary.totalTaxes > noPen.summary.totalTaxes);
-    check('early penalty lowers ending NW', pen.summary.endingNetWorth < noPen.summary.endingNetWorth);
-    const firstBridge = pen.rows.find(r => r.phase === 'bridge' && r.wd.deferred > 0 && r.wd.taxable === 0);
-    check('bridge deferred draw taxed at rate + penalty',
-        firstBridge && Math.abs(firstBridge.wd.taxes / firstBridge.wd.deferred - 0.25) < 1e-9,
-        firstBridge && String(firstBridge.wd.taxes / firstBridge.wd.deferred));
-    const post = pen.rows.find(r => r.phase === 'standard' && r.wd.deferred > 0);
-    check('standard-age deferred draw pays no penalty',
-        post && post.wd.taxes < post.wd.deferred * 0.25);
-}
+const coastInputs = Object.assign({}, E.DEFAULTS, {
+    currentAge: 30, retireAge: 60, standardRetireAge: 60,
+    income: 0, expenses: 60000, inflation: 3, marketReturn: 7, swr: 4,
+    employerMatchRate: 0, taxDeferredRate: 15
+});
+const coastNumber = E.simulate(coastInputs, null, {}).summary.coastNumber;
+const rothCoast = E.simulate(Object.assign({}, coastInputs, { balFree: coastNumber }), null, {});
+const deferredCoast = E.simulate(Object.assign({}, coastInputs, { balDeferred: coastNumber / 0.85 }), null, {});
+check('coast number reaches exactly 100% in Roth', approx(rothCoast.summary.standardCoverage, 100, 1e-8));
+check('tax-adjusted deferred coast balance reaches 100%', approx(deferredCoast.summary.standardCoverage, 100, 1e-8));
+check('coast readiness is measured before the first retirement flow',
+    approx(rothCoast.summary.netWorthAtRetirement, coastNumber * Math.pow(1.07, 30), 0.01));
 
-// 3f. Feasibility: savings + expenses must fit inside income after tax
-check('DEMO plan flags infeasible saving at 31', base.summary.firstInfeasibleAge === 31,
-    '=' + base.summary.firstInfeasibleAge);
-check('modest plan stays feasible',
-    E.simulate(Object.assign({}, DEMO, { expenses: 30000 }), phases, {}).summary.firstInfeasibleAge === null);
+const immediate = E.simulate(Object.assign({}, coastInputs, {
+    currentAge: 60, retireAge: 60, standardRetireAge: 60,
+    inflation: 0, balFree: 1500000
+}), null, {});
+check('immediate retirement snapshot uses starting balances', approx(immediate.summary.netWorthAtRetirement, 1500000));
 
-// 3c. Cash on hand is inert net worth: never grown, never drawn
-{
-    const noCash = E.simulate(DEMO, phases, {});
-    const withCash = E.simulate(Object.assign({}, DEMO, { balCash: 50000 }), phases, {});
-    check('cash defaults to zero', E.DEFAULTS.balCash === 0);
-    check('cash lifts every year by exactly itself (no growth, no draws)',
-        withCash.rows.every((r, i) => Math.abs(r.total - noCash.rows[i].total - 50000) < 1e-6));
-    check('cash constant in rows', withCash.rows.every(r => r.cash === 50000));
-    check('cash in NW at retirement',
-        Math.abs(withCash.summary.netWorthAtRetirement - noCash.summary.netWorthAtRetirement - 50000) < 1e-6);
-    check('cash in estate', Math.abs(withCash.summary.endingNetWorth - noCash.summary.endingNetWorth - 50000) < 1e-6);
-    check('cash cannot rescue a broke plan', withCash.summary.ranOutOfMoneyAge === noCash.summary.ranOutOfMoneyAge);
-    check('cash does not change coverage', withCash.summary.standardCoverage === noCash.summary.standardCoverage);
-}
+const futurePhase = E.simulate(Object.assign({}, E.DEFAULTS, {
+    currentAge: 30, retireAge: 41, standardRetireAge: 41,
+    income: 100000, incomeTaxRate: 0, expenses: 0,
+    savingsRate: 10, savingsRateIncrease: 0, maxSavingsRate: 10,
+    incomeGrowth: 0, marketReturn: 0, inflation: 0, employerMatchRate: 0,
+    limit401k: 1e9, limitIRA: 1e9
+}), [{ age: 40, deferred: 0, free: 0, taxable: 100 }], {});
+check('a future-only phase does not apply early',
+    approx(futurePhase.rows[0].contrib.deferred, 5000) && approx(futurePhase.rows[0].contrib.free, 5000));
+check('future phase applies at its stated age', approx(futurePhase.rows[10].contrib.taxable, 10000));
 
-// 3d. Already past both target ages: readiness is measured at the first
-// simulated year instead of never firing
-{
-    const late = E.simulate(
-        Object.assign({}, DEMO, { currentAge: 65, retireAge: 50, standardRetireAge: 60, balDeferred: 1500000, balFree: 500000 }),
-        [{ id: 1, age: 65, deferred: 50, free: 50, taxable: 0 }], {});
-    check('past-standard-age coverage computed', late.summary.standardCoverage > 0, '=' + late.summary.standardCoverage);
-    check('past-standard-age well-funded plan reads secure', late.summary.standardSuccess === true);
-    check('past-retire-age NW recorded', late.summary.netWorthAtRetirement > 0);
-    check('past-retire-age FI number set', late.summary.fiNumber > 0);
-}
+const regressionPhases = [{ id: 1, age: 30, deferred: 50, free: 50, taxable: 0 }];
+const bridgeBase = E.simulate(DEMO, regressionPhases, {});
+const fundedBridge = E.simulate(DEMO, [
+    { id: 1, age: 30, deferred: 20, free: 20, taxable: 60 }
+], {});
+check('an underfunded taxable bridge is reported during the bridge window',
+    bridgeBase.summary.bridgeFailureAge >= DEMO.retireAge &&
+    bridgeBase.summary.bridgeFailureAge < DEMO.standardRetireAge);
+check('taxable-heavy saving can fund the bridge', fundedBridge.summary.bridgeFailureAge === null);
 
-// 3b. Lean mode (Monte Carlo fast path) must match the full run exactly
-{
-    const years = 95 - 30 + 1;
-    const R = new Float64Array(years);
-    for (let i = 0; i < years; i++) R[i] = 0.03 + 0.001 * i; // varied returns
-    const full = E.simulate(DEMO, phases, { returns: R });
-    const totals = new Float64Array(years);
-    const lean = E.simulate(DEMO, phases, { returns: R, lean: true, totalsOut: totals });
-    let leanDiff = 0;
-    for (let i = 0; i < years; i++) leanDiff = Math.max(leanDiff, Math.abs(full.rows[i].total - totals[i]));
-    check('lean totals match full run', leanDiff < 1e-6, 'maxDiff=' + leanDiff);
-    check('lean summary matches (ranOut)', lean.summary.ranOutOfMoneyAge === full.summary.ranOutOfMoneyAge);
-    check('lean summary matches (ending NW)', Math.abs(lean.summary.endingNetWorth - full.summary.endingNetWorth) < 1e-6);
-    check('lean summary matches (bridge)', lean.summary.bridgeFailureAge === full.summary.bridgeFailureAge);
-    check('lean skips row building', lean.rows === null && full.rows.length === years);
-}
+const noMatch = E.simulate(Object.assign({}, DEMO, { employerMatchRate: 0 }), regressionPhases, {});
+check('employer match increases retirement net worth',
+    bridgeBase.summary.netWorthAtRetirement > noMatch.summary.netWorthAtRetirement);
+check('employer match is tracked', bridgeBase.summary.totalMatch > 0 && noMatch.summary.totalMatch === 0);
 
-// 4. Monte Carlo
-// Median calibration: with no cashflows, the median simulated estate should
-// track the deterministic compound path (lognormal draws, median = mean input)
-{
-    const growOnly = Object.assign({}, E.DEFAULTS, { retireAge: 96, standardRetireAge: 96, balDeferred: 100000 });
-    const det = E.simulate(growOnly, null, {}).summary.endingNetWorth;
-    const mcGrow = E.monteCarlo(growOnly, null, { seed: 7 });
-    check('MC median tracks deterministic growth',
-        mcGrow.endBalance.p50 > det * 0.85 && mcGrow.endBalance.p50 < det * 1.15,
-        'p50=' + Math.round(mcGrow.endBalance.p50) + ' det=' + Math.round(det));
-}
+const highWithdrawalTax = E.simulate(Object.assign({}, DEMO, {
+    taxDeferredRate: 40,
+    taxTaxableRate: 30
+}), regressionPhases, {});
+check('higher withdrawal taxes lower ending net worth',
+    highWithdrawalTax.summary.endingNetWorth < bridgeBase.summary.endingNetWorth);
+check('higher withdrawal taxes increase tracked taxes',
+    highWithdrawalTax.summary.totalTaxes > bridgeBase.summary.totalTaxes);
 
-const mc = E.monteCarlo(DEMO, phases, { seed: 42 });
-check('MC success rate in (0,1]', mc.successRate > 0 && mc.successRate <= 1, '=' + mc.successRate);
-check('MC bands ordered p10<=p50<=p90', mc.bands.p10.every((v, i) => v <= mc.bands.p50[i] + 1 && mc.bands.p50[i] <= mc.bands.p90[i] + 1));
-const mc2 = E.monteCarlo(DEMO, phases, { seed: 42 });
-check('MC deterministic for same seed', mc.successRate === mc2.successRate);
-const mc3 = E.monteCarlo(Object.assign({}, DEMO, { volatility: 40 }), phases, { seed: 42 });
-check('higher volatility lowers success', mc3.successRate <= mc.successRate, mc3.successRate + ' vs ' + mc.successRate);
+const deferredBridgeDraw = {
+    drawTaxableBridge: 0,
+    drawDeferredBridge: 100,
+    drawFreeBridge: 0
+};
+const withPenalty = E.simulate(Object.assign({}, DEMO, deferredBridgeDraw), regressionPhases, {});
+const withoutPenalty = E.simulate(Object.assign({}, DEMO, deferredBridgeDraw, {
+    earlyPenaltyRate: 0
+}), regressionPhases, {});
+const firstDeferredBridge = withPenalty.rows.find(row =>
+    row.phase === 'bridge' && row.wd.deferred > 0 && row.wd.taxable === 0);
+const firstDeferredStandard = withPenalty.rows.find(row =>
+    row.phase === 'standard' && row.wd.deferred > 0);
+check('early penalty raises bridge taxes',
+    withPenalty.summary.totalTaxes > withoutPenalty.summary.totalTaxes);
+check('early penalty lowers ending net worth',
+    withPenalty.summary.endingNetWorth < withoutPenalty.summary.endingNetWorth);
+check('bridge deferred draws pay deferred tax plus the early penalty',
+    firstDeferredBridge && approx(firstDeferredBridge.wd.taxes / firstDeferredBridge.wd.deferred, 0.25));
+check('standard-age deferred draws do not pay the early penalty',
+    firstDeferredStandard && firstDeferredStandard.wd.taxes < firstDeferredStandard.wd.deferred * 0.25);
 
-console.log('\nDefault plan: NW@50=' + Math.round(base.summary.netWorthAtRetirement / 1000) + 'k, FI#=' + Math.round(base.summary.fiNumber / 1000) + 'k, coverage=' + base.summary.standardCoverage.toFixed(0) + '%, MC success=' + (mc.successRate * 100).toFixed(0) + '%');
+const withoutCash = E.simulate(DEMO, regressionPhases, {});
+const withCash = E.simulate(Object.assign({}, DEMO, { balCash: 50000 }), regressionPhases, {});
+check('cash is constant and excluded from market growth and withdrawals',
+    withCash.rows.every((row, index) => row.cash === 50000 &&
+        approx(row.total - withoutCash.rows[index].total, 50000)));
+check('cash is included in retirement and ending net worth',
+    approx(withCash.summary.netWorthAtRetirement - withoutCash.summary.netWorthAtRetirement, 50000) &&
+    approx(withCash.summary.endingNetWorth - withoutCash.summary.endingNetWorth, 50000));
+check('cash does not change standard account coverage',
+    approx(withCash.summary.standardCoverage, withoutCash.summary.standardCoverage));
+const cashOnlyRetirement = E.simulate(Object.assign({}, E.DEFAULTS, {
+    currentAge: 50, retireAge: 50, standardRetireAge: 60,
+    expenses: 10000, balCash: 1000000, marketReturn: 0, inflation: 0
+}), null, {});
+check('inert cash cannot rescue an empty retirement portfolio',
+    cashOnlyRetirement.summary.ranOutOfMoneyAge === 50 && cashOnlyRetirement.rows[0].cash === 1000000);
+
+const years = E.MAX_AGE - DEMO.currentAge + 1;
+const returns = new Float64Array(years);
+for (let i = 0; i < years; i++) returns[i] = 0.02 + i * 0.0005;
+const full = E.simulate(DEMO, null, { returns });
+const totals = new Float64Array(years);
+const lean = E.simulate(DEMO, null, { returns, lean: true, totalsOut: totals });
+check('lean mode matches full totals', full.rows.every((row, i) => approx(row.total, totals[i])));
+check('lean mode matches summary', approx(full.summary.endingNetWorth, lean.summary.endingNetWorth));
+
+const fractionalMc = E.monteCarlo(Object.assign({}, DEMO, { mcSims: 50.1 }), null, { seed: 9 });
+check('Monte Carlo simulation count is integral', fractionalMc.sims === 50);
+check('Monte Carlo success is a probability', fractionalMc.successRate >= 0 && fractionalMc.successRate <= 1);
+check('Monte Carlo bands stay ordered', fractionalMc.bands.p10.every((v, i) =>
+    v <= fractionalMc.bands.p50[i] && fractionalMc.bands.p50[i] <= fractionalMc.bands.p90[i]));
+
+const calibrated = E.monteCarlo(Object.assign({}, DEMO, {
+    marketReturn: 7, volatility: 40, mcSims: 50
+}), null, { seed: 11 });
+const model = calibrated.returnModel;
+const impliedMean = Math.exp(model.logMean + model.logStandardDeviation ** 2 / 2) - 1;
+const impliedVariance = (Math.exp(model.logStandardDeviation ** 2) - 1) *
+    Math.exp(2 * model.logMean + model.logStandardDeviation ** 2);
+check('lognormal calibration preserves arithmetic mean', approx(impliedMean, 0.07, 1e-12));
+check('lognormal calibration preserves arithmetic volatility', approx(Math.sqrt(impliedVariance), 0.40, 1e-12));
+
+const zeroVolInputs = Object.assign({}, E.DEFAULTS, {
+    currentAge: 30, retireAge: 95, standardRetireAge: 95,
+    income: 0, expenses: 0, balFree: 100000,
+    marketReturn: 7, volatility: 0, mcSims: 50
+});
+const deterministicEnd = E.simulate(zeroVolInputs, null, {}).summary.endingNetWorth;
+const zeroVolMc = E.monteCarlo(zeroVolInputs, null, { seed: 1 });
+check('zero-volatility Monte Carlo equals fixed projection', approx(zeroVolMc.endBalance.p50, deterministicEnd, 1e-5));
+const repeatMc = E.monteCarlo(Object.assign({}, DEMO, { mcSims: 50 }), null, { seed: 42 });
+const repeatMc2 = E.monteCarlo(Object.assign({}, DEMO, { mcSims: 50 }), null, { seed: 42 });
+check('Monte Carlo is deterministic for a seed',
+    repeatMc.successRate === repeatMc2.successRate && approx(repeatMc.endBalance.p50, repeatMc2.endBalance.p50));
+
 process.exit(failures ? 1 : 0);

@@ -40,9 +40,9 @@
 
             '<section class="gd-card">' +
                 '<div class="gd-card-title">The coast number</div>' +
-                '<p>The Planner calculates the balance you need <em>today</em> for market growth alone, with no new savings, ' +
-                'to reach your full retirement target when your accounts unlock. Compare that coast number with your current ' +
-                'invested balance to see whether the retirement seed is already planted.</p>' +
+                '<p>The Planner calculates the after-tax value your tax-advantaged accounts need <em>today</em> for market growth alone, ' +
+                'with no new savings, to reach your full retirement target when those accounts unlock. Compare it with your Roth balance ' +
+                'plus your deferred balance after estimated withdrawal tax; brokerage and cash belong to the bridge instead.</p>' +
             '</section>' +
 
             '<section class="gd-card">' +
@@ -98,7 +98,7 @@
                     dt('SECURE', 'For the bridge: the brokerage lasts until your accounts unlock. For the coast: your tax-advantaged accounts alone cover full-retirement spending at the unlock age, and the projection never runs dry before 95.') +
                     dt('DEPLETED / Broke at &hellip;', 'The projection runs dry, and the age it happens. Save more, spend less, retire later, or rebalance the buckets.') +
                     dt('&hellip;% funded', 'Your projected <em>tax-advantaged</em> balances (401k + Roth, after estimated withdrawal tax &mdash; brokerage and cash are deliberately not counted) at the unlock age, versus the nest egg the safe-withdrawal rule says a full retirement needs. 100% or more earns the SECURE stamp; below that, the stamp shows the percentage even if the whole portfolio still lasts to 95.') +
-                    dt('Resilience %', 'The share of 2,000 randomized market futures (booms, crashes, flat decades) where you still have money at 95. The single average-return projection can look fine while many bad-luck futures fail &mdash; this number tells you how lucky you&rsquo;d need to be. The simulation is calibrated so the typical (median) future compounds at your market-return assumption; the spread around it is what varies.') +
+                    dt('Resilience %', 'The share of 2,000 randomized market futures (booms, crashes, flat decades) where you still have money at 95. Annual returns are calibrated so their arithmetic average and standard deviation match your market-return and volatility assumptions. A typical compounded path can be lower because volatility compounds unevenly.') +
                 '</dl>' +
             '</section>' +
 
@@ -106,7 +106,7 @@
                 '<div class="gd-card-title">Glossary</div>' +
                 '<dl class="gd-gloss">' +
                     dt('Net worth', 'Everything you own (cash, investments, property) minus everything you owe (loans, cards). The single number the trackers watch.') +
-                    dt('Savings rate', 'The share of your gross income you put away rather than spend. The most powerful dial in the whole plan. ' +
+                    dt('Savings rate', 'The share of your gross income you plan to put away. The projection caps actual saving at take-home pay left after expenses and flags the first year your requested rate is not feasible. ' +
                         'In the Cashbook, transactions in savings-kind categories count as deliberate contributions &mdash; when you mark them, ' +
                         'the observed rate uses those actuals instead of assuming every surplus dollar was saved.') +
                     dt('Compounding', 'Growth on top of growth: returns earned by past returns. The reason money saved at 25 counts several times more than money saved at 45.') +
@@ -114,8 +114,8 @@
                     dt('IRA', 'An Individual Retirement Account you open yourself &mdash; same tax-deferred idea as a 401k, with its own (lower) contribution limit.') +
                     dt('Roth', 'The tax-free flavor of a 401k or IRA: contributions are taxed going in, then never again.') +
                     dt('Brokerage account', 'An ordinary taxable investment account. No tax perks, no age locks.') +
-                    dt('Employer match', 'Free money: your employer contributes to your 401k in proportion to what you contribute, up to a cap. The plan models both the rate and the cap.') +
-                    dt('Contribution limits', 'The IRS caps how much can go into a 401k or IRA each year. The caps rise with inflation, and people 50+ may add an extra &ldquo;catch-up&rdquo; amount (ages 60&ndash;63 get a larger &ldquo;super catch-up&rdquo;). Savings past the caps spill into the brokerage.') +
+                    dt('Employer match', 'Free money: your employer contributes in proportion to traditional or Roth workplace-plan contributions, up to a cap. The match is deposited into the tax-deferred bucket.') +
+                    dt('Contribution limits', 'Traditional and Roth workplace contributions share the 401k limit; traditional and Roth IRAs share the IRA limit. The model fills the workplace plan first, then the IRA, while preserving your deferred/Roth split. The caps rise with inflation, ages 50+ get catch-up room, and excess savings spill into brokerage.') +
                     dt('Penalty-free access age', 'The age your tax-advantaged accounts unlock &mdash; usually 59&frac12; (the app models 60). Some employer plans allow access at 55 if you leave the job then (the &ldquo;Rule of 55&rdquo;).') +
                     dt('Effective tax rate', 'Your total tax as a share of the money in question &mdash; a blend of all the brackets, not your top bracket. The app applies one effective rate to deferred withdrawals and another to the full amount of each brokerage withdrawal.') +
                     dt('Capital gains', 'Profit from selling an investment for more than you paid. In real life only this profit is taxed, typically at lower rates than income. The app instead applies your brokerage-draw rate to the <em>entire</em> withdrawal, so enter a blended rate lower than the statutory one (e.g. 15% on the half of a draw that is gains &asymp; 7&ndash;8%).') +

@@ -43,56 +43,56 @@
                 id: 'baseline', title: 'Income & spending', icon: ICONS.dollar,
                 blurb: 'What comes in and what goes out today.',
                 fields: [
-                    { key: 'income', label: 'Annual gross income', unit: '$', step: 1000 },
+                    { key: 'income', label: 'Annual gross income', unit: '$', step: 1000, min: 0, max: 1000000000000000 },
                     { key: 'incomeTaxRate', label: 'Effective income tax', unit: '%', step: 1, min: 0, max: 60, hint: 'All payroll and income taxes as a share of gross pay. The Cashbook uses it to estimate monthly take-home when a month has no income transactions.' },
-                    { key: 'expenses', label: 'Current annual expenses', unit: '$', step: 1000 }
+                    { key: 'expenses', label: 'Current annual expenses', unit: '$', step: 1000, min: 0, max: 1000000000000000 }
                 ]
             },
             {
                 id: 'savings', title: 'Savings behavior', icon: ICONS.trendingUp,
                 blurb: 'How much you keep, and how it grows.',
                 fields: [
-                    { key: 'savingsRate', label: 'Starting savings rate', unit: '%', step: 1 },
-                    { key: 'savingsRateIncrease', label: 'Savings rate increase / yr', unit: '%', step: 0.5 },
-                    { key: 'maxSavingsRate', label: 'Savings rate cap', unit: '%', step: 1 },
-                    { key: 'incomeGrowth', label: 'Income growth rate', unit: '%', step: 0.1 }
+                    { key: 'savingsRate', label: 'Starting savings rate', unit: '%', step: 1, min: 0, max: 100 },
+                    { key: 'savingsRateIncrease', label: 'Savings rate increase / yr', unit: '%', step: 0.5, min: 0, max: 100 },
+                    { key: 'maxSavingsRate', label: 'Savings rate cap', unit: '%', step: 1, min: 0, max: 100 },
+                    { key: 'incomeGrowth', label: 'Income growth rate', unit: '%', step: 0.1, min: -99, max: 100 }
                 ]
             },
             {
                 id: 'buckets', title: 'Current buckets', icon: ICONS.layers,
                 blurb: 'Where your money sits today.',
                 fields: [
-                    { key: 'balDeferred', label: 'Tax-deferred (401k / IRA)', unit: '$', step: 1000, bucket: 'deferred' },
-                    { key: 'balFree', label: 'Tax-free (Roth)', unit: '$', step: 1000, bucket: 'free' },
-                    { key: 'balTaxable', label: 'After-tax (brokerage)', unit: '$', step: 1000, bucket: 'taxable' },
-                    { key: 'balCash', label: 'Cash on hand', unit: '$', step: 500, bucket: 'cash', hint: 'Counts toward net worth but sits outside the market — the projection never grows it and never draws it down.' }
+                    { key: 'balDeferred', label: 'Tax-deferred (401k / IRA)', unit: '$', step: 1000, min: 0, max: 1000000000000000, bucket: 'deferred' },
+                    { key: 'balFree', label: 'Tax-free (Roth)', unit: '$', step: 1000, min: 0, max: 1000000000000000, bucket: 'free' },
+                    { key: 'balTaxable', label: 'After-tax (brokerage)', unit: '$', step: 1000, min: 0, max: 1000000000000000, bucket: 'taxable' },
+                    { key: 'balCash', label: 'Cash on hand', unit: '$', step: 500, min: 0, max: 1000000000000000, bucket: 'cash', hint: 'Counts toward net worth but sits outside the market — the projection never grows it and never draws it down.' }
                 ]
             },
             {
                 id: 'employer', title: 'Employer match', icon: ICONS.plusCircle,
                 blurb: 'Free money from your employer.',
                 fields: [
-                    { key: 'employerMatchRate', label: 'Match rate', unit: '%', step: 5, hint: '% of your 401k contribution your employer matches' },
-                    { key: 'employerMatchCap', label: 'Match cap', unit: '%', step: 0.5, hint: 'Matched on contributions up to this % of salary' }
+                    { key: 'employerMatchRate', label: 'Match rate', unit: '%', step: 5, min: 0, max: 100, hint: '% of traditional or Roth workplace-plan contributions your employer matches' },
+                    { key: 'employerMatchCap', label: 'Match cap', unit: '%', step: 0.5, min: 0, max: 100, hint: 'Matched on workplace-plan contributions up to this % of salary' }
                 ]
             },
             {
                 id: 'irs', title: 'IRS contribution limits', icon: ICONS.landmark,
-                blurb: 'The 2026 statutory ceilings on tax-advantaged saving — update them when the IRS does.',
+                blurb: 'Shared 2026 workplace-plan and IRA ceilings; the model fills the workplace plan first, then the IRA.',
                 fields: [
-                    { key: 'limit401k', label: '401k employee limit', unit: '$', step: 500, hint: '2026 IRS cap. Indexed to inflation each projection year; update when the IRS changes it.' },
-                    { key: 'limitIRA', label: 'IRA / Roth limit', unit: '$', step: 500, hint: '2026 IRS cap, indexed to inflation in the projection.' },
-                    { key: 'catchUp401k', label: '401k catch-up (50+)', unit: '$', step: 500, hint: '2026 IRS catch-up for ages 50+. Ages 60–63 use the super catch-up instead.' },
-                    { key: 'superCatchUp401k', label: '401k super catch-up (60–63)', unit: '$', step: 250, hint: '2026 IRS cap under SECURE 2.0; replaces the regular 401k catch-up for ages 60–63.' },
-                    { key: 'catchUpIRA', label: 'IRA catch-up (50+)', unit: '$', step: 100, hint: '2026 IRS catch-up.' }
+                    { key: 'limit401k', label: '401k employee limit', unit: '$', step: 500, min: 0, max: 1000000000, hint: 'Shared by traditional and Roth workplace contributions; indexed to inflation.' },
+                    { key: 'limitIRA', label: 'IRA employee limit', unit: '$', step: 500, min: 0, max: 1000000000, hint: 'Shared by traditional and Roth IRA contributions; indexed to inflation.' },
+                    { key: 'catchUp401k', label: '401k catch-up (50+)', unit: '$', step: 500, min: 0, max: 1000000000, hint: '2026 IRS catch-up for ages 50+. Ages 60–63 use the super catch-up instead.' },
+                    { key: 'superCatchUp401k', label: '401k super catch-up (60–63)', unit: '$', step: 250, min: 0, max: 1000000000, hint: '2026 IRS cap under SECURE 2.0; replaces the regular 401k catch-up for ages 60–63.' },
+                    { key: 'catchUpIRA', label: 'IRA catch-up (50+)', unit: '$', step: 100, min: 0, max: 1000000000, hint: '2026 IRS catch-up.' }
                 ]
             },
             {
                 id: 'taxes', title: 'Withdrawal taxes', icon: ICONS.percent,
                 blurb: 'Effective rates applied when you draw money out.',
                 fields: [
-                    { key: 'taxDeferredRate', label: 'Tax-deferred draws', unit: '%', step: 1, hint: 'Effective income tax on 401k / IRA withdrawals' },
-                    { key: 'taxTaxableRate', label: 'Brokerage draws', unit: '%', step: 1, hint: 'Applied to the whole withdrawal, not just the gain. If about half of a typical draw is gains taxed at 15%, enter 7-8%. Roth draws are tax-free.' },
+                    { key: 'taxDeferredRate', label: 'Tax-deferred draws', unit: '%', step: 1, min: 0, max: 99, hint: 'Effective income tax on 401k / IRA withdrawals' },
+                    { key: 'taxTaxableRate', label: 'Brokerage draws', unit: '%', step: 1, min: 0, max: 99, hint: 'Applied to the whole withdrawal, not just the gain. If about half of a typical draw is gains taxed at 15%, enter 7-8%. Roth draws are tax-free.' },
                     { key: 'earlyPenaltyRate', label: 'Early-withdrawal penalty', unit: '%', step: 1, min: 0, max: 50, hint: 'Extra charge on tax-deferred draws before the penalty-free access age (the IRS rate is 10%). Set 0 for Rule of 55 or 72(t)/SEPP plans. Roth draws are modeled penalty-free, as contribution withdrawals.' }
                 ]
             },
@@ -100,16 +100,16 @@
                 id: 'market', title: 'Market assumptions', icon: ICONS.activity,
                 blurb: 'The world your plan lives in.',
                 fields: [
-                    { key: 'marketReturn', label: 'Market return', unit: '%', step: 0.1 },
-                    { key: 'inflation', label: 'Inflation rate', unit: '%', step: 0.1 },
-                    { key: 'swr', label: 'Safe withdrawal rate', unit: '%', step: 0.1 }
+                    { key: 'marketReturn', label: 'Average market return', unit: '%', step: 0.1, min: -99, max: 100 },
+                    { key: 'inflation', label: 'Inflation rate', unit: '%', step: 0.1, min: -99, max: 100 },
+                    { key: 'swr', label: 'Safe withdrawal rate', unit: '%', step: 0.1, min: 0.1, max: 100 }
                 ]
             },
             {
                 id: 'montecarlo', title: 'Monte Carlo', icon: ICONS.shuffle,
                 blurb: 'How the resilience check stress-tests your plan against random market futures.',
                 fields: [
-                    { key: 'volatility', label: 'Return volatility', unit: '%', step: 1, hint: 'Annual std-dev used by the Monte Carlo simulation' },
+                    { key: 'volatility', label: 'Return volatility', unit: '%', step: 1, min: 0, max: 100, hint: 'Arithmetic annual standard deviation used by the Monte Carlo simulation' },
                     { key: 'mcSims', label: 'Simulations', step: 100, min: 50, max: 2000, hint: '50–2,000. More runs are steadier but slower.' }
                 ]
             }

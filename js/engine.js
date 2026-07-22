@@ -57,8 +57,7 @@
         employerMatchRate: 50,    // %
         employerMatchCap: 6,      // % of salary
 
-        // IRS contribution limits — 2026 statutory caps, indexed to
-        // inflation in the projection. Editable so they can track the IRS.
+        // Shared traditional/Roth account limits, indexed to inflation.
         limit401k: 24500,
         limitIRA: 7500,
         catchUp401k: 8000,
@@ -79,11 +78,55 @@
         mcSims: 2000
     };
 
+    var INPUT_RULES = {
+        currentAge: { min: 0, max: MAX_AGE, integer: true },
+        retireAge: { min: 0, max: MAX_AGE, integer: true },
+        standardRetireAge: { min: 0, max: MAX_AGE, integer: true },
+        income: { min: 0, max: 1e15 },
+        incomeTaxRate: { min: 0, max: 99 },
+        savingsRate: { min: 0, max: 100 },
+        savingsRateIncrease: { min: 0, max: 100 },
+        maxSavingsRate: { min: 0, max: 100 },
+        expenses: { min: 0, max: 1e15 },
+        incomeGrowth: { min: -99, max: 100 },
+        balDeferred: { min: 0, max: 1e15 },
+        balFree: { min: 0, max: 1e15 },
+        balTaxable: { min: 0, max: 1e15 },
+        balCash: { min: 0, max: 1e15 },
+        marketReturn: { min: -99, max: 100 },
+        inflation: { min: -99, max: 100 },
+        swr: { min: 0.1, max: 100 },
+        drawTaxableBridge: { min: 0, max: 100 },
+        drawDeferredBridge: { min: 0, max: 100 },
+        drawFreeBridge: { min: 0, max: 100 },
+        drawTaxableStd: { min: 0, max: 100 },
+        drawDeferredStd: { min: 0, max: 100 },
+        drawFreeStd: { min: 0, max: 100 },
+        employerMatchRate: { min: 0, max: 100 },
+        employerMatchCap: { min: 0, max: 100 },
+        limit401k: { min: 0, max: 1e9 },
+        limitIRA: { min: 0, max: 1e9 },
+        catchUp401k: { min: 0, max: 1e9 },
+        superCatchUp401k: { min: 0, max: 1e9 },
+        catchUpIRA: { min: 0, max: 1e9 },
+        catchUpAge: { min: 0, max: MAX_AGE, integer: true },
+        taxDeferredRate: { min: 0, max: 99 },
+        taxTaxableRate: { min: 0, max: 99 },
+        earlyPenaltyRate: { min: 0, max: 99 },
+        volatility: { min: 0, max: 100 },
+        mcSims: { min: 50, max: 2000, integer: true }
+    };
+
+    var DRAW_SETS = [
+        ['drawTaxableBridge', 'drawDeferredBridge', 'drawFreeBridge'],
+        ['drawTaxableStd', 'drawDeferredStd', 'drawFreeStd']
+    ];
+
     var DEFAULT_PHASES = [
         { id: 1, age: 30, deferred: 50, free: 50, taxable: 0, isLocked: true }
     ];
 
-    var ZERO_CONTRIB = { deferred: 0, free: 0, taxable: 0, match: 0, overflow: 0 };
+    var ZERO_CONTRIB = { deferred: 0, free: 0, taxable: 0, match: 0, overflow: 0, workplace: 0, ira: 0 };
 
     /* ---------------------------------------------------------------------
      * Seeded RNG (mulberry32) + Box-Muller normal draw, so Monte Carlo
@@ -112,8 +155,78 @@
         };
     }
 
-    function pct(v) { return (Number(v) || 0) / 100; }
-    function num(v) { return Number(v) || 0; }
+    function pct(v) { return Number(v) / 100; }
+
+    function normalizeValue(key, value, fallback) {
+        var rule = INPUT_RULES[key];
+        var n = Number(value);
+        if (!Number.isFinite(n)) n = fallback;
+        if (rule.integer) n = Math.round(n);
+        if (n < rule.min) n = rule.min;
+        if (n > rule.max) n = rule.max;
+        return n;
+    }
+
+    function normalizeDrawSet(d, keys) {
+        var total = d[keys[0]] + d[keys[1]] + d[keys[2]];
+        if (!(total > 0)) {
+            d[keys[0]] = DEFAULTS[keys[0]];
+            d[keys[1]] = DEFAULTS[keys[1]];
+            d[keys[2]] = DEFAULTS[keys[2]];
+            total = 100;
+        }
+        var scale = 100 / total;
+        d[keys[0]] *= scale;
+        d[keys[1]] *= scale;
+        if (d[keys[0]] + d[keys[1]] > 100) d[keys[1]] = 100 - d[keys[0]];
+        d[keys[2]] = 100 - d[keys[0]] - d[keys[1]];
+    }
+
+    function normalizeInputs(inputs) {
+        var d = {};
+        inputs = inputs && typeof inputs === 'object' ? inputs : {};
+        for (var k in DEFAULTS) {
+            var value = Object.prototype.hasOwnProperty.call(inputs, k) ? inputs[k] : DEFAULTS[k];
+            d[k] = normalizeValue(k, value, DEFAULTS[k]);
+        }
+        if (d.savingsRate > d.maxSavingsRate) d.savingsRate = d.maxSavingsRate;
+        DRAW_SETS.forEach(function (keys) { normalizeDrawSet(d, keys); });
+        return d;
+    }
+
+    function normalizePhases(phases, currentAge) {
+        var source = phases && phases.length ? phases : DEFAULT_PHASES;
+        var list = [];
+        for (var i = 0; i < source.length; i++) {
+            var phase = source[i];
+            var age = Number(phase && phase.age);
+            if (!Number.isFinite(age)) continue;
+            age = Math.max(0, Math.min(MAX_AGE, Math.round(age)));
+            var deferred = Number(phase.deferred);
+            var free = Number(phase.free);
+            var taxable = Number(phase.taxable);
+            deferred = Number.isFinite(deferred) ? Math.max(0, deferred) : 0;
+            free = Number.isFinite(free) ? Math.max(0, free) : 0;
+            taxable = Number.isFinite(taxable) ? Math.max(0, taxable) : 0;
+            var total = deferred + free + taxable;
+            if (!(total > 0)) continue;
+            var normalizedDeferred = deferred * 100 / total;
+            var normalizedFree = free * 100 / total;
+            if (normalizedDeferred + normalizedFree > 100) normalizedFree = 100 - normalizedDeferred;
+            list.push({
+                id: phase.id,
+                age: age,
+                deferred: normalizedDeferred,
+                free: normalizedFree,
+                taxable: 100 - normalizedDeferred - normalizedFree
+            });
+        }
+        list.sort(function (a, b) { return a.age - b.age; });
+        if (!list.length || list[0].age > currentAge) {
+            list.unshift({ id: 0, age: currentAge, deferred: 50, free: 50, taxable: 0 });
+        }
+        return list;
+    }
 
     /* ---------------------------------------------------------------------
      * simulate(inputs, phases, options)
@@ -126,12 +239,8 @@
      * ------------------------------------------------------------------- */
     function simulate(inputs, phases, options) {
         options = options || {};
-        var d = {};
-        for (var k in DEFAULTS) d[k] = (inputs && inputs[k] !== undefined) ? num(inputs[k]) : DEFAULTS[k];
-
-        var phaseList = (phases && phases.length ? phases : DEFAULT_PHASES)
-            .slice()
-            .sort(function (a, b) { return a.age - b.age; });
+        var d = normalizeInputs(inputs);
+        var phaseList = normalizePhases(phases, d.currentAge);
         var phaseCount = phaseList.length;
 
         var lean = !!options.lean;
@@ -188,13 +297,32 @@
             var isRetired = age >= d.retireAge;
             var isStandardAge = age >= d.standardRetireAge;
 
-            // 1. Market growth (original model grows balances before flows)
-            var r = returns ? returns[yearIndex] : growth;
+            var yearExpenses = curExpenses;
+            if (age === d.retireAge || (age === d.currentAge && d.currentAge > d.retireAge)) {
+                netWorthAtRetirement = curDeferred + curFree + curTaxable + cash;
+                expensesAtRetirement = curExpenses;
+            }
+
+            if (age === d.standardRetireAge || (age === d.currentAge && d.currentAge > d.standardRetireAge)) {
+                var safeAmount = (curDeferred * keepD + curFree) * swr;
+                if (curExpenses <= 0) {
+                    standardCoverage = 100;
+                    standardSuccess = true;
+                } else {
+                    standardCoverage = (safeAmount / curExpenses) * 100;
+                    standardSuccess = safeAmount >= curExpenses;
+                }
+            }
+
+            var r = returns ? Number(returns[yearIndex]) : growth;
+            if (!Number.isFinite(r)) r = growth;
+            if (r < -1) r = -1;
             curDeferred *= (1 + r);
             curFree *= (1 + r);
             curTaxable *= (1 + r);
 
             var contrib = ZERO_CONTRIB;
+            var usedSavingsRate = 0;
             var wdGross = 0, wdNet = 0, wdTaxes = 0, wdT = 0, wdD = 0, wdF = 0;
             var g;
 
@@ -205,10 +333,18 @@
                     if (phaseList[p].age <= age) { activePhase = phaseList[p]; break; }
                 }
 
-                var totalSavings = curIncome * curSavingsRate;
+                var plannedSavings = curIncome * curSavingsRate;
+                var availableSavings = Math.max(0, curIncome * keepIncome - curExpenses);
+                var totalSavings = Math.min(plannedSavings, availableSavings);
+                usedSavingsRate = curIncome > 0 ? totalSavings / curIncome : 0;
+                if (firstInfeasibleAge === null && plannedSavings > availableSavings + 1) {
+                    firstInfeasibleAge = age;
+                }
+
                 var wantD = totalSavings * pct(activePhase.deferred);
                 var wantF = totalSavings * pct(activePhase.free);
                 var wantT = totalSavings * pct(activePhase.taxable);
+                var wantAdvantaged = wantD + wantF;
 
                 // IRS limits, indexed to inflation, with catch-up at 50+.
                 // SECURE 2.0: ages 60-63 use the larger 401k super catch-up.
@@ -217,35 +353,36 @@
                 var lim401k = (d.limit401k + catchUp401) * inflFactor;
                 var limIRA = (d.limitIRA + (catchUpEligible ? d.catchUpIRA : 0)) * inflFactor;
 
-                var cD = wantD < lim401k ? wantD : lim401k;
-                var cF = wantF < limIRA ? wantF : limIRA;
-                var overflow = (wantD - cD) + (wantF - cF);
-                var cT = wantT + overflow; // excess spills into brokerage
+                var workplace = Math.min(wantAdvantaged, lim401k);
+                var ira = Math.min(wantAdvantaged - workplace, limIRA);
+                var acceptedAdvantaged = workplace + ira;
+                var deferredShare = wantAdvantaged > 0 ? wantD / wantAdvantaged : 0;
+                var cD = acceptedAdvantaged * deferredShare;
+                var cF = acceptedAdvantaged - cD;
+                var overflow = wantAdvantaged - acceptedAdvantaged;
+                var cT = wantT + overflow;
 
                 // Employer match: matchRate% of your contributions,
                 // up to matchCap% of salary — free money into Deferred.
-                var matchable = curIncome * matchCap;
-                if (cD < matchable) matchable = cD;
+                var matchable = Math.min(workplace, curIncome * matchCap);
                 var match = matchable * matchRate;
 
                 curDeferred += cD + match;
                 curFree += cF;
                 curTaxable += cT;
 
-                if (!lean) contrib = { deferred: cD, free: cF, taxable: cT, match: match, overflow: overflow };
+                if (!lean) {
+                    contrib = {
+                        deferred: cD, free: cF, taxable: cT, match: match,
+                        overflow: overflow, workplace: workplace, ira: ira
+                    };
+                }
                 totalMatch += match;
                 totalContributed += cD + cF + cT;
 
-                // Feasibility: gross splits into taxes, savings and spending,
-                // so savings + expenses must fit inside income after tax.
-                if (firstInfeasibleAge === null && totalSavings + curExpenses > curIncome * keepIncome + 1) {
-                    firstInfeasibleAge = age;
-                }
-
                 // Ramp savings rate
                 if (curSavingsRate < maxSavingsRate) {
-                    curSavingsRate += savingsRateStep;
-                    if (curSavingsRate > maxSavingsRate) curSavingsRate = maxSavingsRate;
+                    curSavingsRate = Math.min(maxSavingsRate, curSavingsRate + savingsRateStep);
                 }
 
                 curIncome *= (1 + incomeGrowth);
@@ -334,24 +471,6 @@
             var portfolio = curDeferred + curFree + curTaxable;
             var totalNW = portfolio + cash;
 
-            // Someone already past an age gets measured at the first
-            // simulated year instead of never.
-            if (age === d.retireAge || (age === d.currentAge && d.currentAge > d.retireAge)) {
-                netWorthAtRetirement = totalNW;
-                expensesAtRetirement = curExpenses / (1 + inflation);
-            }
-
-            // Traditional readiness check at the standard access age: can
-            // tax-advantaged money alone cover expenses at SWR? Deferred is
-            // weighted by its withdrawal tax so 100% means 100% after tax.
-            if (age === d.standardRetireAge || (age === d.currentAge && d.currentAge > d.standardRetireAge)) {
-                var safeAmount = (curDeferred * keepD + curFree) * swr;
-                var expenseNeed = curExpenses / (1 + inflation);
-                if (expenseNeed < 1) expenseNeed = 1;
-                standardCoverage = (safeAmount / expenseNeed) * 100;
-                standardSuccess = safeAmount >= expenseNeed;
-            }
-
             if (totalsOut) totalsOut[yearIndex] = totalNW;
 
             if (!lean) {
@@ -363,10 +482,10 @@
                     taxable: curTaxable,
                     cash: cash,
                     total: totalNW,
-                    expenses: curExpenses,
+                    expenses: yearExpenses,
                     isRetired: isRetired,
                     phase: !isRetired ? 'working' : (isStandardAge ? 'standard' : 'bridge'),
-                    savingsRate: isRetired ? 0 : curSavingsRate,
+                    savingsRate: isRetired ? 0 : usedSavingsRate,
                     contrib: contrib,
                     wd: { gross: wdGross, net: wdNet, taxes: wdTaxes, taxable: wdT, deferred: wdD, free: wdF },
                     broke: isRetired && portfolio <= 0
@@ -382,6 +501,7 @@
         var fiNumberAtUnlock = swr > 0 ? unlockExpenses / swr : 0;
         var coastGrowth = 1 + growth;
         var coastNumber = coastGrowth > 0 ? fiNumberAtUnlock / Math.pow(coastGrowth, coastYears) : 0;
+        var coastBalanceToday = d.balDeferred * keepD + d.balFree;
         var endingNetWorth = curDeferred + curFree + curTaxable + cash;
 
         return {
@@ -390,6 +510,7 @@
                 fiNumber: fiNumber,
                 fiNumberAtUnlock: fiNumberAtUnlock,
                 coastNumber: coastNumber,
+                coastBalanceToday: coastBalanceToday,
                 coastYears: coastYears,
                 netWorthAtRetirement: netWorthAtRetirement,
                 expensesAtRetirement: expensesAtRetirement,
@@ -410,7 +531,7 @@
 
     /* ---------------------------------------------------------------------
      * monteCarlo(inputs, phases, options)
-     *   Runs N lean simulations with normally-distributed annual returns.
+     *   Runs N lean simulations with lognormally-distributed gross returns.
      *   options.seed — RNG seed (change it to re-roll).
      * Returns { successRate, sims, bands, endBalance }
      *   bands: per-age percentile envelope of total net worth
@@ -418,15 +539,16 @@
      * ------------------------------------------------------------------- */
     function monteCarlo(inputs, phases, options) {
         options = options || {};
-        var sims = Math.max(50, Math.min(2000, num(inputs && inputs.mcSims) || DEFAULTS.mcSims));
-        var vol = pct(inputs && inputs.volatility !== undefined ? inputs.volatility : DEFAULTS.volatility);
-        var mean = pct(inputs && inputs.marketReturn !== undefined ? inputs.marketReturn : DEFAULTS.marketReturn);
+        var d = normalizeInputs(inputs);
+        var sims = d.mcSims;
+        var vol = pct(d.volatility);
+        var mean = pct(d.marketReturn);
         var seed = options.seed !== undefined ? options.seed : 1337;
 
         var rand = mulberry32(seed);
         var normal = makeNormal(rand);
 
-        var currentAge = num(inputs && inputs.currentAge) || DEFAULTS.currentAge;
+        var currentAge = d.currentAge;
         var years = MAX_AGE - currentAge + 1;
 
         var successes = 0;
@@ -436,21 +558,17 @@
 
         var simOpts = { returns: returnsArr, lean: true, totalsOut: null, startYear: options.startYear };
 
-        // Lognormal draws calibrated so the MEDIAN path compounds at exactly
-        // marketReturn: without this, i.i.d. arithmetic draws make the median
-        // simulation trail the flat projection by ~vol^2/2 per year (volatility
-        // drag), a gap the user cannot tell apart from bad luck. Also keeps
-        // every draw above -100%.
-        if (mean < -0.99) mean = -0.99;
-        var lnMean = Math.log(1 + mean);
-        var lnVol = vol / (1 + mean);
+        var grossMean = 1 + mean;
+        var lnVariance = Math.log(1 + Math.pow(vol / grossMean, 2));
+        var lnVol = Math.sqrt(lnVariance);
+        var lnMean = Math.log(grossMean) - lnVariance / 2;
 
         for (var i = 0; i < sims; i++) {
             for (var j = 0; j < years; j++) {
                 returnsArr[j] = Math.exp(lnMean + lnVol * normal()) - 1;
             }
             simOpts.totalsOut = matrix.subarray(i * years, (i + 1) * years);
-            var result = simulate(inputs, phases, simOpts);
+            var result = simulate(d, phases, simOpts);
             if (result.summary.ranOutOfMoneyAge === null) successes++;
             endBalances[i] = result.summary.endingNetWorth;
         }
@@ -480,6 +598,12 @@
         return {
             successRate: successes / sims,
             sims: sims,
+            returnModel: {
+                arithmeticMean: mean,
+                standardDeviation: vol,
+                logMean: lnMean,
+                logStandardDeviation: lnVol
+            },
             bands: bands,
             endBalance: {
                 p10: percentile(endBalances, 0.10),
@@ -492,7 +616,10 @@
     global.FireEngine = {
         DEFAULTS: DEFAULTS,
         DEFAULT_PHASES: DEFAULT_PHASES,
+        INPUT_RULES: INPUT_RULES,
+        DRAW_SETS: DRAW_SETS,
         MAX_AGE: MAX_AGE,
+        normalizeInputs: normalizeInputs,
         simulate: simulate,
         monteCarlo: monteCarlo
     };
