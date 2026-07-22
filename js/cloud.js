@@ -85,7 +85,10 @@
             // so a shared machine's leftovers never leak into a new account.
             var hasLocal = !FireStore.isDefault() || !TrackerStore.isEmpty();
             if (hasLocal && global.FireApp && FireApp.confirm) {
+                // strict: only the explicit Cancel button declines (and signs
+                // out); a stray backdrop click or Escape must not.
                 FireApp.confirm('This device already holds data. Save it to this new account?', seed, 'Save it', {
+                    strict: true,
                     onCancel: function () {
                         toast('Nothing was saved — clear this device’s data first for a blank account');
                         auth.signOut();
