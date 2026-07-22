@@ -11,6 +11,10 @@ your retirement accounts, and all the way to 95 — then stamps a verdict on the
 New to the finance side of this? Open the **Guide** tab inside the app — it explains
 Coast FIRE, the three buckets, and every term the app uses, in plain language.
 
+Use **Beginner** mode for the essential inputs and results, or **Expert** mode to
+open every tax, contribution, allocation, drawdown, and simulation control. Both
+modes use the same saved plan and calculation engine.
+
 ## Getting started
 
 1. **Profile tab — enter your baseline.** Date of birth, gross income, annual
@@ -30,6 +34,8 @@ Coast FIRE, the three buckets, and every term the app uses, in plain language.
    - **Resilience:** your plan is also re-run against 2,000 randomized market
      futures (booms, crashes, flat decades) — the percentage shown is how many of
      those futures still leave you with money at 95.
+   - **Coast number:** the invested balance needed today for growth alone, with no
+     new savings, to reach the full retirement target when your accounts unlock.
 4. **Adjust and watch.** Every field recalculates the plan instantly. Drag your
    savings rate or retirement age around and watch the stamps flip.
 

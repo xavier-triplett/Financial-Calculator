@@ -1,6 +1,6 @@
-# Beginner / Expert mode: design for later
+# Beginner / Expert mode
 
-A saved design, not yet built. It came out of a design study that drafted three
+This is the implemented design. It came out of a design study that drafted three
 competing approaches (a global mode switch, per-tab progressive disclosure, and
 a separate beginner dashboard tab) and judged them against this codebase. The
 recommendation below is the winning hybrid: a global mode switch, corrected by

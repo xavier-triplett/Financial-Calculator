@@ -34,6 +34,12 @@ underwriter's stamp that reads SECURE or DEPLETED at a glance.
 Plans persist in `localStorage`. Saved data carries no compatibility guarantees —
 if the format changes, old saves are simply discarded and the plan starts from defaults.
 
+The coast number is the inflation-adjusted FI target at the account-unlock age,
+discounted back to today at the configured market return.
+
+The Beginner / Expert control is progressive disclosure over this same model.
+It does not fork or rewrite plan data; hidden expert assumptions remain active.
+
 ## The trackers
 
 Alongside the planner sit two independent trackers — actuals to the planner's
