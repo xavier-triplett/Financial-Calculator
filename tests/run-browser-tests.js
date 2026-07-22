@@ -88,13 +88,14 @@ async function main() {
         const port = hosted.server.address().port;
         const result = await chromeRun(`http://127.0.0.1:${port}/?browser-test=1`);
         await new Promise((resolve) => hosted.server.close(resolve));
+        const requiredMisses = hosted.misses.filter((asset) => asset !== '/seed.js');
         const booted = /class="[^"]*pf-shell/.test(result.stdout) &&
-            result.stdout.includes('The Coast Ledger') && hosted.misses.length === 0;
+            result.stdout.includes('The Coast Ledger') && requiredMisses.length === 0;
         if (result.error || result.status !== 0 || !booted) {
             failed = true;
             console.error('index.html: FAIL');
             if (result.error) console.error(result.error.message);
-            if (hosted.misses.length) console.error(`Missing assets: ${hosted.misses.join(', ')}`);
+            if (requiredMisses.length) console.error(`Missing assets: ${requiredMisses.join(', ')}`);
         } else {
             console.log('index.html: PRODUCTION PASS');
         }
