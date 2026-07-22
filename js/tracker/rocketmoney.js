@@ -36,15 +36,17 @@
         return rows;
     }
 
-    function norm(s) { return String(s || '').trim().toLowerCase().replace(/[^a-z]/g, ''); }
+    function norm(s) { return String(s || '').trim().toLowerCase().replace(/[^a-z0-9]/g, ''); }
 
     var COLS = {
         date:        ['date'],
         origDate:    ['originaldate'],
         acctType:    ['accounttype'],
         account:     ['accountname'],
+        accountNumber: ['accountnumber'],
         institution: ['institutionname'],
-        name:        ['name', 'customname'],
+        name:        ['name'],
+        customName:  ['customname'],
         amount:      ['amount'],
         description: ['description'],
         category:    ['category'],
@@ -54,9 +56,10 @@
     /* custom: { field: 'Header Name' } from the Categories tab — a custom
      * header claims its field before the built-in aliases are consulted. */
     function headerMap(headerRow, custom) {
-        var map = {};
-        var customByNorm = {}, owned = {};
+        var map = Object.create(null);
+        var customByNorm = Object.create(null), owned = Object.create(null);
         for (var field in custom || {}) {
+            if (!Object.prototype.hasOwnProperty.call(COLS, field)) continue;
             var cn = norm(custom[field]);
             if (cn) { customByNorm[cn] = field; owned[field] = true; }
         }
@@ -73,23 +76,52 @@
         return map;
     }
 
+    function validISO(s) {
+        var m = String(s || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (!m) return false;
+        var y = Number(m[1]), mo = Number(m[2]), day = Number(m[3]);
+        return mo >= 1 && mo <= 12 && day >= 1 && day <= new Date(Date.UTC(y, mo, 0)).getUTCDate();
+    }
+
+    function isoParts(y, mo, day) {
+        var out = String(y).padStart(4, '0') + '-' + String(mo).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+        return validISO(out) ? out : null;
+    }
+
     function toISO(dateStr) {
         var s = String(dateStr || '').trim();
-        if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
-        var m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/); // M/D/YYYY
-        if (m) return m[3] + '-' + m[1].padStart(2, '0') + '-' + m[2].padStart(2, '0');
+        var iso = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:$|[T\s])/);
+        if (iso) return isoParts(iso[1], iso[2], iso[3]);
+        var m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/); // M/D/YYYY
+        if (m) return isoParts(m[3], m[1], m[2]);
         var d = new Date(s);
-        if (!isNaN(d)) return d.toISOString().slice(0, 10);
+        if (!isNaN(d)) return isoParts(d.getFullYear(), d.getMonth() + 1, d.getDate());
         return null;
+    }
+
+    function amountValue(raw) {
+        var s = String(raw === undefined || raw === null ? '' : raw).trim();
+        var paren = /^\(.*\)$/.test(s);
+        if (paren) s = s.slice(1, -1).trim();
+        s = s.replace(/[$,\s]/g, '');
+        if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(s)) return null;
+        var n = Number(s);
+        if (!Number.isFinite(n)) return null;
+        return paren ? -Math.abs(n) : n;
     }
 
     /* Stable id from the fields that identify a transaction, so re-importing
      * an overlapping export is a no-op. */
-    function txnId(t) {
-        var s = t.date + '|' + t.name + '|' + t.amount.toFixed(2) + '|' + (t.account || '');
-        var h = 5381;
-        for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
-        return 'rm' + h.toString(36) + s.length.toString(36);
+    function importKey(t) {
+        var s = [t.date, t.origDate, t.name, t.amount.toFixed(2), t.category, t.account,
+            t.accountNumber, t.institution, t.description].join('|');
+        var a = 5381, b = 2166136261;
+        for (var i = 0; i < s.length; i++) {
+            a = ((a << 5) + a + s.charCodeAt(i)) >>> 0;
+            b ^= s.charCodeAt(i);
+            b = Math.imul(b, 16777619) >>> 0;
+        }
+        return 'rm' + a.toString(36) + b.toString(36) + s.length.toString(36);
     }
 
     /* parse(text, opts) → { txns, skipped, flipped }
@@ -106,43 +138,80 @@
         }
 
         var kindOf = global.TrackerEngine.categoryKind;
-        var txns = [], skipped = 0;
+        var txns = [], skipped = 0, ignoredCount = 0, issues = [];
+        var customNameMapped = !!(opts && opts.columns && String(opts.columns.name || '').trim());
 
         for (var i = 1; i < rows.length; i++) {
             var r = rows[i];
-            var date = toISO(r[map.date] !== undefined && r[map.date] !== '' ? r[map.date] : r[map.origDate]);
-            var amount = parseFloat(String(r[map.amount] || '').replace(/[$,]/g, ''));
-            if (!date || isNaN(amount)) { skipped++; continue; }
+            var rawDate = r[map.date] !== undefined && String(r[map.date]).trim() !== '' ? r[map.date] : r[map.origDate];
+            var date = toISO(rawDate);
+            var amount = amountValue(r[map.amount]);
+            if (!date || amount === null) {
+                skipped++;
+                issues.push({ row: i + 1, reason: !date ? 'invalid date' : 'invalid amount' });
+                continue;
+            }
             var ignored = map.ignored !== undefined ? String(r[map.ignored] || '').trim().toLowerCase() : '';
-            if (ignored && ignored !== 'none') { skipped++; continue; }
+            if (ignored && ['none', 'false', 'no', '0'].indexOf(ignored) === -1) { skipped++; ignoredCount++; continue; }
+
+            var rawName = map.name !== undefined ? r[map.name] : '';
+            var customName = map.customName !== undefined ? r[map.customName] : '';
+            var chosenName = customNameMapped ? rawName : (customName || rawName);
 
             txns.push({
                 date: date,
-                name: String((map.name !== undefined && r[map.name]) || r[map.description] || '').trim() || 'Unknown',
+                origDate: toISO(r[map.origDate]) || date,
+                name: String(chosenName || r[map.description] || '').trim() || 'Unknown',
                 amount: amount,
                 category: String(r[map.category] || '').trim() || 'Uncategorized',
                 account: String(r[map.account] || '').trim(),
+                accountNumber: String(r[map.accountNumber] || '').trim(),
                 institution: String(r[map.institution] || '').trim(),
                 description: String(r[map.description] || '').trim()
             });
         }
 
-        // Sign heuristic: if the expense-side rows sum negative, the export
-        // uses debit-negative convention — flip so expenses are positive.
-        var expenseSum = 0;
+        var incomePositive = 0, incomeNegative = 0, expensePositive = 0, expenseNegative = 0;
         txns.forEach(function (t) {
-            var k = kindOf(t.category);
-            if (k !== 'income' && k !== 'transfer') expenseSum += t.amount;
+            var kind = kindOf(t.category);
+            if (!t.amount || kind === 'transfer') return;
+            if (kind === 'income') {
+                if (t.amount > 0) incomePositive++;
+                else incomeNegative++;
+            } else {
+                if (t.amount > 0) expensePositive++;
+                else expenseNegative++;
+            }
         });
-        var flipped = expenseSum < 0;
+        var forced = opts && opts.sign;
+        var debitNegative = incomePositive > 0 && incomeNegative === 0 &&
+            expenseNegative > 0 && expensePositive === 0;
+        var expensePositiveConvention = incomeNegative > 0 && incomePositive === 0 &&
+            expensePositive > 0 && expenseNegative === 0;
+        var ambiguous = !forced && !debitNegative && !expensePositiveConvention;
+        var flipped = forced === 'debit-negative' || (!forced && debitNegative);
         txns.forEach(function (t) {
             if (flipped) t.amount = -t.amount;
             if (kindOf(t.category) === 'income') t.amount = Math.abs(t.amount);
             t.amount = Math.round(t.amount * 100) / 100;
-            t.id = txnId(t);
         });
 
-        return { txns: txns, skipped: skipped, flipped: flipped };
+        var occurrences = {};
+        txns.forEach(function (t) {
+            t.importKey = importKey(t);
+            occurrences[t.importKey] = (occurrences[t.importKey] || 0) + 1;
+            t.id = t.importKey + 'o' + occurrences[t.importKey].toString(36);
+        });
+
+        return {
+            txns: txns,
+            skipped: skipped,
+            ignored: ignoredCount,
+            issues: issues,
+            flipped: flipped,
+            signAmbiguous: ambiguous,
+            signConvention: ambiguous ? 'as written' : (flipped ? 'debit-negative' : 'expense-positive')
+        };
     }
 
     /* Example export in the expected shape — downloadable from the Cashbook
@@ -159,6 +228,13 @@
         ].join('\n') + '\n';
     }
 
-    global.RocketMoney = { parse: parse, parseCSV: parseCSV, template: template, COLS: COLS };
+    global.RocketMoney = {
+        parse: parse,
+        parseCSV: parseCSV,
+        template: template,
+        COLS: COLS,
+        toISO: toISO,
+        amountValue: amountValue
+    };
 
 })(typeof window !== 'undefined' ? window : globalThis);

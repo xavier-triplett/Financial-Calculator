@@ -1,6 +1,14 @@
-require('C:/source/FIRE-CALCULATOR/js/tracker/engine.js');
-require('C:/source/FIRE-CALCULATOR/js/tracker/rocketmoney.js');
-require('C:/source/FIRE-CALCULATOR/js/tracker/store.js');
+const savedItems = {};
+let failStorage = false;
+globalThis.localStorage = {
+    getItem(key) { return Object.prototype.hasOwnProperty.call(savedItems, key) ? savedItems[key] : null; },
+    setItem(key, value) { if (failStorage) throw new Error('quota exceeded'); savedItems[key] = value; },
+    removeItem(key) { delete savedItems[key]; }
+};
+
+require('../js/tracker/engine.js');
+require('../js/tracker/rocketmoney.js');
+require('../js/tracker/store.js');
 const T = globalThis.TrackerEngine;
 const RM = globalThis.RocketMoney;
 const S = globalThis.TrackerStore;
@@ -13,6 +21,8 @@ function check(name, cond, detail) {
 
 // ---------- month helpers ----------
 check('monthKey from ISO', T.monthKey('2025-01-13') === '2025-01');
+check('monthKey rejects impossible ISO dates', T.monthKey('2025-02-29') === null);
+check('monthKey rejects missing dates', T.monthKey(null) === null);
 check('monthKey year rollover', T.nextMonth('2024-12') === '2025-01');
 check('monthLabel', T.monthLabel('2024-03') === 'Mar 2024');
 
@@ -23,6 +33,7 @@ check('Dining is spending', T.categoryKind('Dining & Drinks') === 'spending');
 check('Paychecks is income', T.categoryKind('Paychecks') === 'income');
 check('Credit Card Payment is transfer', T.categoryKind('Credit Card Payment') === 'transfer');
 check('unknown category is spending', T.categoryKind('Snowboarding') === 'spending');
+check('prototype-named category is spending', T.categoryKind('constructor') === 'spending');
 
 // ---------- net worth series ----------
 const state = {
@@ -82,12 +93,13 @@ check('trailing savings rate', Math.abs(trail.savingsRate - (10000 - 2830) / 100
 
 const top = T.topMerchants(txns, '2025-01', 3);
 check('top merchant is mortgage', top[0].name === 'Mr. Cooper');
+check('top merchants ignore nonfinite amounts', T.topMerchants([{ date: '2025-01-01', name: 'Bad', amount: Infinity, category: 'Coffee' }], '2025-01', 3).length === 0);
 
-// A month holding only transfers never materializes as an aggregate, so it
-// cannot dilute trailing() or read as a "+$0" month
+// A transfer-only month is zero-spend coverage for annualization, while still
+// remaining absent from the statement aggregate.
 const transferOnly = txns.concat([{ date: '2025-03-10', name: 'CC Payment', amount: 900, category: 'Credit Card Payment' }]);
 check('transfer-only month has no aggregate', T.spendByMonth(transferOnly)['2025-03'] === undefined);
-check('transfer-only month absent from trailing', T.trailing(transferOnly, 12).months === 2);
+check('transfer-only month counts as calendar coverage', T.trailing(transferOnly, 12).months === 3);
 
 // ---------- PAW / AAW / UAW benchmarks (The Millionaire Next Door: age × income / 10) ----------
 const b25 = T.benchmarks(25, 170000);
@@ -166,6 +178,7 @@ check('quoted comma preserved', parsed.txns[0].name === 'ALMA, Therapy');
 check('escaped quotes preserved', parsed.txns[2].name === 'Quote "Test"');
 check('income normalized positive', parsed.txns[3].amount === 4600);
 check('stable ids', parsed.txns[0].id === RM.parse(csv).txns[0].id);
+check('false ignored marker is retained', RM.parse('Date,Name,Amount,Category,Ignored From\n2025-01-01,A,5,Coffee,false\n').txns.length === 1);
 
 // debit-negative convention flips
 const csvNeg =
@@ -234,8 +247,10 @@ check('setting the default clears the override', S.get().categoryKinds['Consulti
 check('cleared override falls back', T.categoryKind('Consulting') === 'spending');
 S.setCsvColumn('amount', 'Value');
 check('csv column stored', S.get().csvColumns.amount === 'Value');
+check('settings count as tracker data', S.isEmpty() === false);
 S.setCsvColumn('amount', ' ');
 check('blank csv column cleared', S.get().csvColumns.amount === undefined);
+check('unknown csv field rejected', S.setCsvColumn('toString', 'Header') === false);
 
 // ---------- custom CSV columns ----------
 const csvCustom =
@@ -257,6 +272,87 @@ check('template rows all imported', tmpl.txns.length === 6 && tmpl.skipped === 0
 check('template keeps expense-positive convention', tmpl.flipped === false);
 check('template income positive', tmpl.txns[0].amount === 4600 && T.categoryKind(tmpl.txns[0].category) === 'income');
 check('template quoted merchant preserved', tmpl.txns.some(t => t.name === 'Corner Cafe, The'));
+
+// ---------- calendar coverage + mixed savings ----------
+const sparseYear = [
+    { date: '2025-01-02', name: 'Rent', amount: 1000, category: 'Rent' },
+    { date: '2025-12-02', name: 'Rent', amount: 1000, category: 'Rent' }
+];
+const sparseTrail = T.trailing(sparseYear, 12);
+check('trailing uses elapsed calendar months', sparseTrail.months === 12);
+check('sparse calendar is not over-annualized', sparseTrail.annualExpenses === 2000, '=' + sparseTrail.annualExpenses);
+
+const mixedTxns = [];
+for (let month = 1; month <= 12; month++) {
+    const mo = String(month).padStart(2, '0');
+    mixedTxns.push({ date: '2025-' + mo + '-01', name: 'Paycheck', amount: 5000, category: 'Paychecks' });
+    mixedTxns.push({ date: '2025-' + mo + '-02', name: 'Living', amount: 4000, category: 'Rent' });
+}
+mixedTxns.push({ date: '2025-12-03', name: 'Ally', amount: 100, category: 'Savings' });
+const mixedTrail = T.trailing(mixedTxns, 12);
+check('partial marked coverage uses mixed policy', mixedTrail.savedMethod === 'mixed' && mixedTrail.markedMonths === 1);
+check('one marked txn does not erase other months surplus', mixedTrail.annualSaved === 11100, '=' + mixedTrail.annualSaved);
+
+// ---------- strict parser validation + import identity ----------
+check('calendar validation accepts leap day', T.validDate('2024-02-29'));
+check('calendar validation rejects impossible dates', !T.validDate('2025-02-29') && !T.validDate('2025-13-01'));
+const invalidRows = RM.parse('Date,Name,Amount,Category\n2025-02-29,Bad date,10,Groceries\n2025-02-01,Bad amount,Infinity,Groceries\n');
+check('invalid dates and nonfinite amounts are skipped', invalidRows.txns.length === 0 && invalidRows.skipped === 2 && invalidRows.issues.length === 2);
+check('parenthesized amount parses negative', RM.amountValue('($1,234.50)') === -1234.5);
+
+const customName = RM.parse('Date,Name,Custom Name,Amount,Category\n2025-01-03,RAW NAME,Friendly Name,10,Groceries\n');
+check('Rocket Money Custom Name wins', customName.txns[0].name === 'Friendly Name');
+const refundHeavy = RM.parse('Date,Name,Amount,Category\n2025-01-03,Purchase,10,Groceries\n2025-01-04,Refund,-100,Groceries\n');
+check('refund-heavy file is not inverted', refundHeavy.signAmbiguous === true && refundHeavy.flipped === false && refundHeavy.txns[0].amount === 10 && refundHeavy.txns[1].amount === -100);
+const allPositive = RM.parse('Date,Name,Amount,Category\n2025-01-01,Pay 1,1000,Paychecks\n2025-01-15,Pay 2,1000,Paychecks\n2025-01-16,Grocer,100,Groceries\n');
+check('same-sign income and expenses remain as written',
+    allPositive.signAmbiguous === true && allPositive.flipped === false && allPositive.txns[2].amount === 100);
+
+const exactDupes = RM.parse('Date,Account Name,Name,Amount,Category\n2025-01-03,Visa,Cafe,5,Dining & Drinks\n2025-01-03,Visa,Cafe,5,Dining & Drinks\n').txns;
+check('identical legitimate rows get distinct ids', exactDupes.length === 2 && exactDupes[0].importKey === exactDupes[1].importKey && exactDupes[0].id !== exactDupes[1].id);
+S.replace({ accounts: [], snapshots: {}, txns: [] });
+const firstMerge = S.importTxns(exactDupes);
+const secondMerge = S.importTxns(exactDupes);
+check('first multiset import preserves identical rows', firstMerge.added === 2 && S.get().txns.length === 2);
+check('multiset re-import remains idempotent', secondMerge.added === 0 && secondMerge.duplicates === 2 && S.get().txns.length === 2);
+
+// ---------- store boundaries, scoped operations, persistence ----------
+let malformedThrew = false;
+try { S.replace({ accounts: {}, snapshots: [], txns: {}, csvColumns: { toString: 'Bad', amount: 'Value' } }); } catch (e) { malformedThrew = true; }
+check('malformed adopted state is sanitized', !malformedThrew && Array.isArray(S.get().accounts) && Array.isArray(S.get().txns));
+check('adopt accepts only explicit CSV fields',
+    S.get().csvColumns.amount === 'Value' && !Object.prototype.hasOwnProperty.call(S.get().csvColumns, 'toString'));
+check('store rejects invalid manual values',
+    S.addTxn({ date: '2025-02-29', amount: 1 }) === null && S.addTxn({ date: '2025-02-01', amount: Infinity }) === null);
+
+S.replace({
+    accounts: [], snapshots: {},
+    txns: [{ id: 'keep-cash', date: '2025-01-01', name: 'Keep cash', amount: 10, category: 'Groceries' }]
+});
+S.seedFrom({ accounts: [{ id: 'seed-a', name: 'Cash', group: 'cash' }], snapshots: { '2025-01': { 'seed-a': 50 } }, txns: [] }, 'networth');
+check('networth seed preserves cashbook', S.get().txns.length === 1 && S.get().txns[0].name === 'Keep cash');
+S.seedFrom({ accounts: [], snapshots: {}, txns: [{ id: 'seed-t', date: '2025-02-01', name: 'Seed txn', amount: 20, category: 'Groceries' }] }, 'cashflow');
+check('cashbook seed preserves networth', S.get().accounts.length === 1 && S.get().snapshots['2025-01']['seed-a'] === 50);
+check('cashbook-only seed shape is accepted', S.seedFrom({ txns: [{ id: 'seed-only', date: '2025-02-02', name: 'Cash only', amount: 5, category: 'Coffee' }] }, 'cashflow') === true && S.get().txns.length === 1);
+S.resetCash();
+check('scoped cash reset preserves networth', S.get().txns.length === 0 && S.get().accounts.length === 1);
+S.resetNetWorth();
+check('scoped networth reset preserves settings shape', S.get().accounts.length === 0 && Array.isArray(S.get().txns));
+
+S.setCategoryKind('Groceries', 'fixed');
+S.setCategoryKind('groceries', 'spending');
+check('category overrides canonicalize case', Object.keys(S.get().categoryKinds).length === 1 && T.categoryKind('GROCERIES') === 'spending');
+
+S.replace({ accounts: [], snapshots: {}, txns: [{ id: 'roundtrip', date: '2025-02-01', name: 'Persisted', amount: 12.34, category: 'Coffee' }] });
+S.init();
+check('persisted tracker state round-trips', S.get().txns.length === 1 && S.get().txns[0].name === 'Persisted' && S.get().txns[0].amount === 12.34);
+
+failStorage = true;
+const memoryOnly = S.addTxn({ date: '2025-03-01', name: 'Memory only', amount: 10, category: 'Groceries' });
+check('persistence failure is exposed', !!memoryOnly && /quota/.test(S.persistenceError()));
+failStorage = false;
+S.reset();
+check('successful persistence clears error', S.persistenceError() === null);
 
 console.log(failures ? '\n' + failures + ' failure(s)' : '\nAll tracker tests passed');
 process.exit(failures ? 1 : 0);
