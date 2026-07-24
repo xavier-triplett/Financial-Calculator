@@ -5,6 +5,7 @@
     var PREF_KEY = 'uiPref_v3';
 
     var results = { sim: null, mc: null };
+    var effective = { inputs: null, phases: null };
     var toastEl, toastTimer;
     var startYear = new Date().getFullYear();
 
@@ -21,17 +22,25 @@
         });
     }
 
+    /* Beginner and Expert are two different simulations, not one simulation
+     * behind two levels of detail. Beginner projects the stored plan onto a
+     * fixed model (see FireEngine.BEGINNER_MODEL) so no expert customization
+     * survives into it. Everything on screen must read these inputs rather
+     * than the store's, or the labels describe a run that never happened. */
     function compute() {
         var state = FireStore.get();
-        results.sim = FireEngine.simulate(state.inputs, state.phases, { startYear: startYear });
-        results.mc = FireEngine.monteCarlo(state.inputs, state.phases, { seed: state.mcSeed, startYear: startYear });
+        var beginner = pref.mode === 'beginner';
+        effective.inputs = beginner ? FireEngine.beginnerInputs(state.inputs) : state.inputs;
+        effective.phases = beginner ? FireEngine.BEGINNER_PHASES : state.phases;
+        results.sim = FireEngine.simulate(effective.inputs, effective.phases, { startYear: startYear });
+        results.mc = FireEngine.monteCarlo(effective.inputs, effective.phases, { seed: beginner ? 1337 : state.mcSeed, startYear: startYear });
         return results;
     }
 
     /* Plan verdicts, stated once so every part of the UI agrees on the facts. */
     function verdicts() {
         var s = results.sim.summary;
-        var inputs = FireStore.get().inputs;
+        var inputs = effective.inputs;
         var bridge;
         if (inputs.retireAge >= inputs.standardRetireAge) {
             bridge = { code: 'na', label: 'N/A' };
@@ -194,8 +203,11 @@
         applyMode();
         pref.view = currentEntry().ui.id;
         savePref();
+        compute();
         mountActive();
-        toast(mode === 'beginner' ? 'Beginner view on' : 'Expert view on');
+        toast(mode === 'beginner'
+            ? "Beginner mode: standard assumptions, today's dollars"
+            : 'Expert mode: your own assumptions, future dollars');
     }
 
     function escapeHtml(s) {
@@ -473,6 +485,10 @@
         verdicts: verdicts,
         results: function () { return results; },
         mode: function () { return pref.mode; },
+        isBeginner: function () { return pref.mode === 'beginner'; },
+        // The inputs the current mode actually simulated, never the raw store.
+        inputs: function () { return effective.inputs || FireStore.get().inputs; },
+        phases: function () { return effective.phases || FireStore.get().phases; },
         setMode: setMode,
         startYear: function () { return startYear; },
         confirmReset: function () {

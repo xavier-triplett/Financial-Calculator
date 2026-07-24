@@ -451,13 +451,28 @@
                 document.querySelector('#app-nav .nav-menu').hidden === true);
             nav('[data-view="ledger"]');
 
-            // Beginner is a view over the same state, not a second model.
+            // Beginner is a second model, not a filtered view of the expert one.
             var preservedIncome = FireStore.get().inputs.income;
+            FireStore.setInputs({ swr: 9, marketReturn: 30, standardRetireAge: 70 });
             FireApp.setMode('beginner');
             check('beginner mode stamped on document', document.documentElement.dataset.mode === 'beginner');
             check('categories absent in beginner nav', document.querySelector('[data-view="categories"]') === null);
             check('expert controls hidden in beginner',
                 getComputedStyle(document.querySelector('.lg-expert')).display === 'none');
+
+            // The customizations above must not reach the beginner simulation.
+            check('beginner simulates the fixed model, not stored expert values',
+                FireApp.inputs().swr === 4 && FireApp.inputs().standardRetireAge === 60 &&
+                FireApp.inputs().marketReturn === FireEngine.BEGINNER_MODEL.marketReturn);
+            check('beginner holds the savings rate flat',
+                FireApp.inputs().savingsRateIncrease === 0 &&
+                FireApp.inputs().maxSavingsRate === FireApp.inputs().savingsRate);
+            check('frozen assumptions are not editable in beginner',
+                document.querySelector('[data-key="swr"]') === null &&
+                document.querySelector('[data-key="inflation"]') === null &&
+                document.querySelector('[data-key="marketReturn"]') === null);
+            check('beginner states its dollar basis', /today/i.test(text('.lg-basis')));
+
             var matchToggle = document.querySelector('.ff-beginner-toggle input');
             check('employer match toggle rendered', matchToggle !== null);
             matchToggle.click();
@@ -469,7 +484,20 @@
                 FireStore.get().inputs.employerMatchRate === FireEngine.DEFAULTS.employerMatchRate);
             check('Monte Carlo rate remains visible', /^\d+%$/.test(text('[data-el="mcRate"]')));
             check('switching mode preserves plan data', FireStore.get().inputs.income === preservedIncome);
+
+            // The assumptions are pointed at, not quietly applied. (The Profile
+            // panel that lists them needs profile.js, which this harness does
+            // not mount; its contents are covered in engine.test.js.)
+            check('beginner points at its fixed assumptions',
+                /fixed in Beginner mode/.test(text('.lg-controls .mode-note')));
+
             FireApp.setMode('expert');
+            check('expert drops the beginner note', document.querySelector('.lg-controls .mode-note') === null);
+            check('expert restores the stored assumptions', FireApp.inputs().swr === 9);
+            check('expert exposes the frozen dials', document.querySelector('[data-key="swr"]') !== null);
+            check('expert states its dollar basis', /future/i.test(text('.lg-basis')));
+            FireStore.setInputs({ swr: FireEngine.DEFAULTS.swr, marketReturn: FireEngine.DEFAULTS.marketReturn,
+                standardRetireAge: FireEngine.DEFAULTS.standardRetireAge });
 
             FireTest.storage.clear();
         } catch (e) {

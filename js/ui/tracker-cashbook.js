@@ -92,7 +92,7 @@
         if (!agg || agg.count === 0 || agg.incomeCount > 0) return agg;
         var ai = E.ageIncomeAt(state, mo, K.sharedProfile());
         if (!ai) return agg;
-        var keep = 1 - (Number(FireStore.get().inputs.incomeTaxRate) || 0) / 100;
+        var keep = 1 - (Number(FireApp.inputs().incomeTaxRate) || 0) / 100;
         if (keep < 0) keep = 0;
         var inc = Math.round(ai.income * keep / 12);
         return Object.assign({}, agg, { income: inc, saved: inc - agg.expenses, estIncome: true });

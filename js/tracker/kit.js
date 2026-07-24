@@ -82,7 +82,7 @@
 
     function planContext() {
         var results = FireApp.results();
-        var inputs = FireStore.get().inputs;
+        var inputs = FireApp.inputs();
         var s = results.sim.summary;
         return {
             inputs: inputs,
@@ -96,7 +96,7 @@
     /* FI target in today's dollars (today's expenses at SWR), so it can be
      * compared against today's tracked balances without an inflation gap. */
     function fiTargetToday() {
-        var inputs = FireStore.get().inputs;
+        var inputs = FireApp.inputs();
         var swr = (Number(inputs.swr) || 0) / 100;
         return swr > 0 ? (Number(inputs.expenses) || 0) / swr : 0;
     }
@@ -124,7 +124,7 @@
                 if (t.annualIncome > 0 && t.months >= 3) {
                     // Transaction income is take-home; the planner wants gross,
                     // so gross it back up with the Profile's effective tax rate.
-                    var keep = 1 - (Number(inputs.incomeTaxRate) || 0) / 100;
+                    var keep = 1 - (Number(FireApp.inputs().incomeTaxRate) || 0) / 100;
                     var gross = keep > 0 ? t.annualIncome / keep : t.annualIncome;
                     var takeHomeHint = 'Bank transactions only see take-home pay: 401k / HSA payroll deductions are invisible here. Log them as Savings transactions, or set the plan input by hand.';
                     out.push({ key: 'income', label: 'Annual gross income' + span, from: inputs.income, to: Math.round(gross), hint: takeHomeHint });
