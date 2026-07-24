@@ -99,8 +99,22 @@ saving splits are normalized, duplicate or invalid phases are repaired, and malf
 stored tracker records are discarded field by field. Stored formats have no migration or
 backward-compatibility promise; incompatible data may reset to defaults.
 
-Beginner and Expert are presentation modes over this same state. Hidden Expert settings
-remain active, and switching modes does not rewrite the plan.
+Beginner and Expert are two models over this same state, not two levels of detail. Beginner
+projects the stored inputs onto `FireEngine.BEGINNER_MODEL`, a published constant for every
+assumption the beginner does not enter, so no Expert customization reaches a beginner run.
+`FireEngine.BEGINNER_OWNED` lists the keys the beginner does enter, and the input schema
+derives its beginner fields from it so the UI cannot offer a field the model ignores.
+
+Beginner needs no special case in the simulation loop. It sets `inflation` to 0 and derives
+`marketReturn` and `incomeGrowth` as real rates from the same nominal pair Expert runs on
+(`FireEngine.BEGINNER_NOMINAL`), which puts every figure in today's dollars: expenses stay
+flat in real terms and the inflation-indexed IRS limits stay constant, which is what those
+limits mean in real terms. `engine.test.js` pins the equivalence by running a growth-only
+plan through both modes and deflating the nominal result.
+
+`FireApp.inputs()` returns the inputs the current mode actually simulated. Every UI reads it
+rather than `FireStore.get().inputs`, or a label would describe a run that never happened.
+Switching modes never rewrites the plan.
 
 ## Trackers
 

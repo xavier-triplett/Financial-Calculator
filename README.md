@@ -16,7 +16,7 @@ on an output.
 1. In **Profile**, choose a retirement path and enter your date of birth, gross income,
    annual expenses, and milestone ages. Coast FIRE stops new retirement contributions at
    the coast age while modeled employment continues until full retirement. The
-   account-access age defaults to 60; switch to **Expert** to change it.
+   account-access age is fixed at 60 in Beginner mode; switch to **Expert** to change it.
 2. In **Planner**, review your savings rate, account balances, allocation, employer
    match, market return, inflation, and drawdown strategy.
    The default match assumes an employer contributes 50% of eligible workplace-plan
@@ -33,9 +33,16 @@ on an output.
      part of this particular measure.
 4. Adjust the inputs and watch the projection update immediately.
 
-Use **Beginner** mode for the essential inputs and results. **Expert** mode exposes tax,
-contribution-limit, allocation, drawdown, and simulation controls. Both modes use the
-same saved plan and calculation engine; settings hidden in Beginner mode remain active.
+**Beginner** and **Expert** are two different simulations, not one simulation at two levels
+of detail. Beginner runs a fixed model that is the same for every plan and printed in full
+on the Profile tab: one savings rate that never ramps, growth after inflation, standard
+taxes and contribution limits, and the 4% withdrawal rule. Because inflation is removed
+rather than modeled, every beginner figure reads in today's dollars. **Expert** exposes
+every rate, saving phase, drawdown rule and diagnostic, projected in future dollars.
+
+A value customized in Expert mode never leaks into a beginner run, so the same saved plan
+reports different numbers in the two modes. Both read and write one saved plan; switching
+modes never rewrites it.
 The in-app **Guide** explains Coast FIRE, the account buckets, and every result in plain
 language.
 
