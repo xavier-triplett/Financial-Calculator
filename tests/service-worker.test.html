@@ -40,11 +40,13 @@
 
             check('worker activates and claims the page',
                 registration.active && navigator.serviceWorker.controller);
+            // Read the release name from the worker itself, so bumping the
+            // cache for a new release does not fail this test.
+            var release = (await (await fetch('/sw.js')).text()).match(/CACHE = '([^']+)'/)[1];
             cacheNames = await caches.keys();
             check('new cache replaces old releases',
-                cacheNames.indexOf('coast-ledger-2026-07-22-paths') >= 0 &&
-                cacheNames.indexOf('coast-ledger-old') < 0);
-            var cache = await caches.open('coast-ledger-2026-07-22-paths');
+                cacheNames.indexOf(release) >= 0 && cacheNames.indexOf('coast-ledger-old') < 0);
+            var cache = await caches.open(release);
             check('application shell is precached',
                 !!(await cache.match('/index.html')) && !!(await cache.match('/js/app.js')));
 
