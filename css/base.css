@@ -137,7 +137,6 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
 }
 .nav-mode button.active { background: #17604A; color: #fff; }
 
-html[data-mode="beginner"] .ff-expert,
 html[data-mode="beginner"] .lg-expert { display: none !important; }
 .ff-beginner-toggle { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink); margin-bottom: 10px; }
 .ff-beginner-toggle input { accent-color: var(--green); }

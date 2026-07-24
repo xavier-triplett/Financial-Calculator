@@ -89,6 +89,24 @@ html[data-theme="dark"] .ui-profile {
     padding-bottom: 8px; margin-bottom: 10px;
 }
 .pf-help { font-size: 11.5px; color: var(--muted); margin: 0 0 14px; }
+.pf-help button {
+    border: 0; background: none; color: var(--green);
+    font: inherit; font-weight: 600; padding: 0; text-decoration: underline;
+}
+
+/* ---------- Beginner assumptions ---------- */
+.pf-assumptions { margin-top: 22px; }
+.pf-assume-list { margin: 0; display: grid; grid-template-columns: repeat(2, 1fr); gap: 1px; background: var(--rule); }
+.pf-assume { background: var(--panel); padding: 12px 14px; }
+.pf-assume dt {
+    font: 600 9.5px/1 "Public Sans", sans-serif;
+    letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
+    margin-bottom: 5px;
+}
+.pf-assume dd { margin: 0; }
+.pf-assume-value { display: block; font-size: 13px; color: var(--ink); font-weight: 600; }
+.pf-assume-note { display: block; font-size: 11px; color: var(--muted); line-height: 1.45; margin-top: 3px; }
+@media (max-width: 640px) { .pf-assume-list { grid-template-columns: 1fr; } }
 .pf-paths { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .pf-path {
     min-height: 112px; padding: 14px; text-align: left;

@@ -40,11 +40,16 @@
             '</section>' +
 
             '<section class="gd-card">' +
-                '<div class="gd-card-title">Two modes</div>' +
-                '<p><strong>Beginner</strong> keeps the core decisions visible and runs the detailed tax, contribution-limit, ' +
-                'inflation and withdrawal assumptions in the background. <strong>Expert</strong> exposes every dial, saving phase, ' +
-                'drawdown rule and diagnostic. Switching modes never changes your plan; customized expert settings remain in effect.</p>' +
-                '<p>Use the Beginner / Expert control in the top bar whenever you want more or less detail.</p>' +
+                '<div class="gd-card-title">Two models</div>' +
+                '<p><strong>Beginner</strong> is a simpler simulation, not a shorter version of the expert one. It runs a fixed set ' +
+                'of assumptions that is the same for every plan and printed in full on the Profile tab: one savings rate that never ' +
+                'ramps, growth after inflation, standard taxes and contribution limits, and the 4% withdrawal rule. Because inflation ' +
+                'is taken out rather than modeled, every figure reads in today\'s dollars.</p>' +
+                '<p><strong>Expert</strong> hands you all of it: every rate, saving phase, drawdown rule and diagnostic, projected in ' +
+                'future dollars. A value you set in Expert mode never leaks into a beginner run, so the same plan will report two ' +
+                'different numbers in the two modes. That is the two models disagreeing, not an error, and the biggest reason is the ' +
+                'unit: a target in today\'s dollars is a much smaller number than the same target decades of inflation later.</p>' +
+                '<p>Use the Beginner / Expert control in the top bar to switch.</p>' +
             '</section>' +
 
             '<section class="gd-card">' +

@@ -16,6 +16,26 @@
         }).join('');
     }
 
+    /* Beginner states its assumptions instead of hiding them: the model is
+     * fixed, so it can be read off the page in full. */
+    function assumptionsHtml() {
+        return '<section class="pf-card pf-assumptions">' +
+            '<div class="pf-card-title">The standard assumptions</div>' +
+            '<p class="pf-help">Beginner mode runs one simple model, the same one for everybody. ' +
+                'These are not editable here &mdash; that is the point. ' +
+                '<button type="button" data-mode-set="expert">Switch to Expert</button> to set your own.</p>' +
+            '<dl class="pf-assume-list">' +
+                FireEngine.beginnerAssumptions().map(function (a) {
+                    return '<div class="pf-assume">' +
+                        '<dt>' + a.label + '</dt>' +
+                        '<dd><span class="pf-assume-value">' + a.value + '</span>' +
+                        '<span class="pf-assume-note">' + a.note + '</span></dd>' +
+                    '</div>';
+                }).join('') +
+            '</dl>' +
+        '</section>';
+    }
+
     function template() {
         var beginner = FireApp.mode() === 'beginner';
         return '' +
@@ -52,11 +72,12 @@
             '<section class="pf-card">' +
                 '<div class="pf-card-title">Baseline factors</div>' +
                 '<p class="pf-help">' + (beginner
-                    ? 'Enter the few facts that shape your plan. Standard tax and contribution assumptions keep the rest ready for you.'
+                    ? 'The handful of facts the simple model needs. Everything else is fixed, and listed below.'
                     : 'Income, spending, your target ages, withdrawal tax rates and the IRS contribution limits. The trackers measure against these; the Planner projects from them.') + '</p>' +
                 '<div data-el="groups"></div>' +
-                '<p class="mode-note" data-el="assumptions"' + (beginner ? '' : ' hidden') + '></p>' +
             '</section>' +
+
+            (beginner ? assumptionsHtml() : '') +
         '</div>';
     }
 
@@ -88,17 +109,18 @@
     }
 
     function update(state) {
+        var inputs = FireApp.inputs();
         var dob = state.profile.birthDate || '';
         if (els.dobPicker && !els.dobPicker.isOpen && els.dob.value !== dob) els.dobPicker.setDate(dob || null, false);
 
         var age = U.ageFromDOB(dob);
         els.age.textContent = age === null ? '—' : age;
 
-        var plan = FireSchema.planType(state.inputs.planType);
-        var coast = state.inputs.planType === FireEngine.PLAN_TYPES.COAST;
-        els.root.setAttribute('data-plan-type', state.inputs.planType);
+        var plan = FireSchema.planType(inputs.planType);
+        var coast = inputs.planType === FireEngine.PLAN_TYPES.COAST;
+        els.root.setAttribute('data-plan-type', inputs.planType);
         els.root.querySelectorAll('[data-plan-type]').forEach(function (button) {
-            var selected = Number(button.getAttribute('data-plan-type')) === state.inputs.planType;
+            var selected = Number(button.getAttribute('data-plan-type')) === inputs.planType;
             button.classList.toggle('selected', selected);
             button.setAttribute('aria-checked', String(selected));
         });
@@ -108,24 +130,24 @@
         var retirementLabel = els.root.querySelector('.ff-field[data-key="retireAge"] .ff-label-text');
         if (retirementLabel) {
             retirementLabel.textContent = coast ? 'Full retirement age' :
-                (state.inputs.planType === FireEngine.PLAN_TYPES.EARLY ? 'Early retirement age' : 'Retirement age');
+                (inputs.planType === FireEngine.PLAN_TYPES.EARLY ? 'Early retirement age' : 'Retirement age');
         }
 
         if (coast) {
-            els.pathNote.textContent = 'Save through age ' + (state.inputs.coastAge - 1) + ', coast from ' +
-                state.inputs.coastAge + ' to ' + state.inputs.retireAge + ', then retire fully.';
-        } else if (state.inputs.planType === FireEngine.PLAN_TYPES.EARLY) {
-            els.pathNote.textContent = 'Save until age ' + state.inputs.retireAge + ', then use the bridge until accounts unlock at ' +
-                state.inputs.standardRetireAge + '.';
+            els.pathNote.textContent = 'Save through age ' + (inputs.coastAge - 1) + ', coast from ' +
+                inputs.coastAge + ' to ' + inputs.retireAge + ', then retire fully.';
+        } else if (inputs.planType === FireEngine.PLAN_TYPES.EARLY) {
+            els.pathNote.textContent = 'Save until age ' + inputs.retireAge + ', then use the bridge until accounts unlock at ' +
+                inputs.standardRetireAge + '.';
         } else {
-            els.pathNote.textContent = 'Keep contributing until retirement at age ' + state.inputs.retireAge + '.';
+            els.pathNote.textContent = 'Keep contributing until retirement at age ' + inputs.retireAge + '.';
         }
 
         if (age === null) {
             els.ageNote.textContent = 'Set your birth date to place yourself on the timeline.';
         } else {
-            var nextAge = coast && age < state.inputs.coastAge ? state.inputs.coastAge : state.inputs.retireAge;
-            var milestone = coast && age < state.inputs.coastAge ? 'Coasting' : 'Retirement';
+            var nextAge = coast && age < inputs.coastAge ? inputs.coastAge : inputs.retireAge;
+            var milestone = coast && age < inputs.coastAge ? 'Coasting' : 'Retirement';
             var years = nextAge - age;
             els.ageNote.textContent = years > 0
                 ? milestone + ' at ' + nextAge + ' is ' + years + ' year' + (years === 1 ? '' : 's') + ' away.'
@@ -133,10 +155,6 @@
         }
 
         FireForms.syncInputs(els.root);
-        if (FireApp.mode() === 'beginner') {
-            els.assumptions.innerHTML = FireSchema.assumptionsText(state) +
-                ' <button type="button" data-mode-set="expert">Open Expert mode</button> to change them.';
-        }
     }
 
     function unmount() { if (els.dobPicker) els.dobPicker.destroy(); els = {}; }

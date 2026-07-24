@@ -22,6 +22,11 @@
                 '</div>' +
                 '<div class="lg-mast-right">' +
                     '<span class="lg-prepared">Prepared ' + FireApp.startYear() + '</span>' +
+                    // Stated on every figure: the two modes report in different
+                    // units, so the same plan yields two very different numbers.
+                    '<span class="lg-basis">' + (beginner
+                        ? "All figures in today's dollars"
+                        : 'All figures in future dollars') + '</span>' +
                     '<button class="lg-reset" type="button">Reset plan</button>' +
                 '</div>' +
             '</header>' +
@@ -68,7 +73,11 @@
                     '<div class="lg-panel-title lg-expert">Drawdown order</div>' +
                     '<p class="lg-help lg-expert">Which buckets fund each retirement phase.</p>' +
                     '<div class="lg-expert" data-el="drawdown"></div>' +
-                    '<p class="mode-note" data-el="assumptions"' + (beginner ? '' : ' hidden') + '></p>' +
+                    (beginner
+                        ? '<p class="mode-note">Growth, taxes, contribution limits and the withdrawal rate are fixed in Beginner mode. ' +
+                            'They are listed in full on the Profile tab. ' +
+                            '<button type="button" data-mode-set="expert">Switch to Expert</button> to set your own.</p>'
+                        : '') +
                 '</aside>' +
 
                 '<main class="lg-main">' +
@@ -224,7 +233,7 @@
 
         var s = results.sim.summary;
         var v = FireApp.verdicts();
-        var inp = state.inputs;
+        var inp = FireApp.inputs();
         var plan = FireSchema.planType(inp.planType);
         var coastPlan = inp.planType === FireEngine.PLAN_TYPES.COAST;
         var earlyPlan = inp.planType === FireEngine.PLAN_TYPES.EARLY;
@@ -309,11 +318,6 @@
         els.fiTarget.textContent = U.compact(s.fiNumberAtUnlock);
         els.nwAtRetire.textContent = U.money(s.coastBalanceToday);
 
-        if (FireApp.mode() === 'beginner') {
-            els.assumptions.innerHTML = FireSchema.assumptionsText(state) +
-                ' <button type="button" data-mode-set="expert">Open Expert mode</button> to change them.';
-        }
-
         els.figMatch.textContent = U.money(s.totalMatch);
         els.figTaxes.textContent = U.money(s.totalTaxes);
         els.figEstate.textContent = U.money(s.endingNetWorth);
@@ -335,7 +339,7 @@
     function updateCharts(results) {
         var rows = results.sim.rows;
         var labels = rows.map(function (r) { return r.age; });
-        var swr = FireStore.get().inputs.swr / 100;
+        var swr = FireApp.inputs().swr / 100;
 
         charts.wealth.data.labels = labels;
         charts.wealth.data.datasets[0].data = rows.map(function (r) { return r.cash; });

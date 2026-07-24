@@ -59,6 +59,10 @@ html[data-theme="dark"] .ui-ledger .ff-phase-cell input:read-only { background: 
 .lg-sub { font-size: 12.5px; color: var(--muted); }
 .lg-mast-right { display: flex; align-items: center; gap: 16px; }
 .lg-prepared { font: 500 12px/1 "IBM Plex Mono", monospace; color: var(--muted); }
+.lg-basis {
+    font: 600 9.5px/1 "Public Sans", sans-serif;
+    letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
+}
 .lg-reset {
     border: 1px solid var(--rule-dark); background: transparent; color: var(--muted);
     font: 500 12px/1 "Public Sans", sans-serif;
