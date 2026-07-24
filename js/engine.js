@@ -134,6 +134,78 @@
     var ZERO_CONTRIB = { deferred: 0, free: 0, taxable: 0, match: 0, overflow: 0, workplace: 0, ira: 0 };
 
     /* ---------------------------------------------------------------------
+     * Beginner model: a second, simpler simulation rather than a filtered
+     * view of the expert one. Every assumption below is a published constant:
+     * a value the user customized in Expert mode can never leak into a
+     * beginner run, so the same answers always come from the same inputs.
+     *
+     * Inflation is folded out instead of modeled, which puts every figure in
+     * today's dollars. The engine loop needs no special case for this: at
+     * inflation 0 expenses stay flat in real terms and the IRS limits stop
+     * being indexed, which is what an inflation-indexed limit means in real
+     * terms anyway. The nominal pair each real rate is derived from is kept
+     * here so the two modes provably describe the same world.
+     * ------------------------------------------------------------------- */
+    var BEGINNER_NOMINAL = { marketReturn: 7, inflation: 3, incomeGrowth: 3 };
+
+    function realRate(nominal, inflation) {
+        return ((1 + nominal / 100) / (1 + inflation / 100) - 1) * 100;
+    }
+
+    // Keys the beginner enters. Everything else is frozen at BEGINNER_MODEL.
+    var BEGINNER_OWNED = [
+        'planType', 'currentAge', 'coastAge', 'retireAge',
+        'income', 'expenses', 'savingsRate',
+        'balDeferred', 'balFree', 'balTaxable', 'balCash'
+    ];
+
+    var BEGINNER_MODEL = Object.assign({}, DEFAULTS, {
+        standardRetireAge: 60,
+        incomeTaxRate: 25,
+        // The savings rate never ramps: one rate for the whole working life.
+        savingsRateIncrease: 0,
+        maxSavingsRate: 100,      // replaced by savingsRate in beginnerInputs
+        inflation: 0,
+        marketReturn: realRate(BEGINNER_NOMINAL.marketReturn, BEGINNER_NOMINAL.inflation),
+        incomeGrowth: realRate(BEGINNER_NOMINAL.incomeGrowth, BEGINNER_NOMINAL.inflation),
+        swr: 4,
+        employerMatchRate: 50,
+        employerMatchCap: 6,
+        volatility: 15,
+        mcSims: 2000
+    });
+
+    // Beginner contributions always split evenly between the two tax-advantaged
+    // buckets; there are no saving phases to edit.
+    var BEGINNER_PHASES = [{ id: 1, age: 0, deferred: 50, free: 50, taxable: 0, isLocked: true }];
+
+    /* Project a stored input set onto the beginner model. The employer match
+     * is a yes/no answer in beginner, so the rate is frozen rather than owned. */
+    function beginnerInputs(inputs) {
+        var d = normalizeInputs(inputs);
+        var out = Object.assign({}, BEGINNER_MODEL);
+        BEGINNER_OWNED.forEach(function (key) { out[key] = d[key]; });
+        out.maxSavingsRate = out.savingsRate;
+        out.employerMatchRate = d.employerMatchRate > 0 ? BEGINNER_MODEL.employerMatchRate : 0;
+        return normalizeInputs(out);
+    }
+
+    /* The assumptions beginner mode states on screen. Shown, not hidden:
+     * a simple simulation is the point, not a simulation with secrets. */
+    function beginnerAssumptions() {
+        return [
+            { label: 'Dollars', value: "Today's dollars", note: 'Inflation is removed, so every figure reads in money you can feel now.' },
+            { label: 'Market growth', value: BEGINNER_MODEL.marketReturn.toFixed(1) + '% a year after inflation', note: BEGINNER_NOMINAL.marketReturn + '% growth less ' + BEGINNER_NOMINAL.inflation + '% inflation.' },
+            { label: 'Savings rate', value: 'Fixed for every year', note: 'The rate you enter is the rate the whole projection uses. It never ramps.' },
+            { label: 'Where savings go', value: '50% tax-deferred, 50% Roth', note: 'Overflow past the IRS limits lands in a brokerage account.' },
+            { label: 'Withdrawal rate', value: BEGINNER_MODEL.swr + '% a year', note: 'The standard safe-withdrawal guideline.' },
+            { label: 'Retirement accounts unlock', value: 'Age ' + BEGINNER_MODEL.standardRetireAge, note: 'Draws before then pay a ' + BEGINNER_MODEL.earlyPenaltyRate + '% early-withdrawal penalty.' },
+            { label: 'Taxes', value: BEGINNER_MODEL.incomeTaxRate + '% on pay, ' + BEGINNER_MODEL.taxDeferredRate + '% on tax-deferred draws', note: BEGINNER_MODEL.taxTaxableRate + '% on brokerage draws. Roth draws are tax-free.' },
+            { label: 'Contribution limits', value: '2026 IRS limits', note: 'The workplace plan fills first, then the IRA.' }
+        ];
+    }
+
+    /* ---------------------------------------------------------------------
      * Seeded RNG (mulberry32) + Box-Muller normal draw, so Monte Carlo
      * results are stable for a given plan until the user re-rolls.
      * ------------------------------------------------------------------- */
@@ -653,6 +725,12 @@
         INPUT_RULES: INPUT_RULES,
         DRAW_SETS: DRAW_SETS,
         MAX_AGE: MAX_AGE,
+        BEGINNER_MODEL: BEGINNER_MODEL,
+        BEGINNER_OWNED: BEGINNER_OWNED,
+        BEGINNER_PHASES: BEGINNER_PHASES,
+        BEGINNER_NOMINAL: BEGINNER_NOMINAL,
+        beginnerInputs: beginnerInputs,
+        beginnerAssumptions: beginnerAssumptions,
         normalizeInputs: normalizeInputs,
         simulate: simulate,
         monteCarlo: monteCarlo

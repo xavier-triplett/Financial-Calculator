@@ -312,4 +312,90 @@ const repeatMc2 = E.monteCarlo(Object.assign({}, DEMO, { mcSims: 50 }), null, { 
 check('Monte Carlo is deterministic for a seed',
     repeatMc.successRate === repeatMc2.successRate && approx(repeatMc.endBalance.p50, repeatMc2.endBalance.p50));
 
+/* ---------------- Beginner model ---------------- */
+
+// The whole point: a value customized in Expert mode must not survive into a
+// beginner run. Every frozen key here is set to something absurd first.
+const TAMPERED = Object.assign({}, E.DEFAULTS, {
+    income: 120000, expenses: 48000, savingsRate: 20,
+    balDeferred: 90000, balFree: 40000, balTaxable: 25000, balCash: 5000,
+    marketReturn: 42, inflation: 19, swr: 11, savingsRateIncrease: 9,
+    maxSavingsRate: 95, incomeGrowth: 25, incomeTaxRate: 55,
+    standardRetireAge: 72, taxDeferredRate: 90, taxTaxableRate: 80,
+    earlyPenaltyRate: 40, limit401k: 999999, limitIRA: 999999,
+    volatility: 90, mcSims: 51, employerMatchCap: 99,
+    drawTaxableStd: 100, drawDeferredStd: 0, drawFreeStd: 0
+});
+const beg = E.beginnerInputs(TAMPERED);
+
+check('beginner ignores customized growth', beg.marketReturn === E.BEGINNER_MODEL.marketReturn);
+check('beginner ignores customized inflation', beg.inflation === 0);
+check('beginner ignores customized withdrawal rate', beg.swr === 4);
+check('beginner ignores customized access age', beg.standardRetireAge === 60);
+check('beginner ignores customized taxes',
+    beg.taxDeferredRate === E.DEFAULTS.taxDeferredRate &&
+    beg.incomeTaxRate === 25 && beg.earlyPenaltyRate === E.DEFAULTS.earlyPenaltyRate);
+check('beginner ignores customized contribution limits',
+    beg.limit401k === E.DEFAULTS.limit401k && beg.limitIRA === E.DEFAULTS.limitIRA);
+check('beginner ignores customized drawdown order',
+    beg.drawTaxableStd === E.DEFAULTS.drawTaxableStd && beg.drawFreeStd === E.DEFAULTS.drawFreeStd);
+check('beginner ignores customized Monte Carlo settings',
+    beg.volatility === 15 && beg.mcSims === 2000);
+check('beginner keeps the inputs it owns',
+    beg.income === 120000 && beg.expenses === 48000 && beg.savingsRate === 20 &&
+    beg.balDeferred === 90000 && beg.balCash === 5000);
+
+// The savings rate is one number for the whole projection, not a ramp.
+check('beginner savings rate never ramps', beg.savingsRateIncrease === 0);
+check('beginner savings cap equals the entered rate', beg.maxSavingsRate === beg.savingsRate);
+
+// Employer match is a yes/no answer, so the rate itself is not user-set.
+check('beginner match on uses the standard rate',
+    E.beginnerInputs(Object.assign({}, TAMPERED, { employerMatchRate: 3 })).employerMatchRate === 50);
+check('beginner match off stays off',
+    E.beginnerInputs(Object.assign({}, TAMPERED, { employerMatchRate: 0 })).employerMatchRate === 0);
+
+check('every beginner-owned key is a real input',
+    E.BEGINNER_OWNED.every(key => Object.prototype.hasOwnProperty.call(E.DEFAULTS, key)));
+check('the beginner model covers every input',
+    Object.keys(E.DEFAULTS).every(key => Number.isFinite(Number(E.BEGINNER_MODEL[key]))));
+
+const begRun = E.simulate(beg, E.BEGINNER_PHASES, {});
+check('beginner projection is finite', finiteResult(begRun));
+
+// Today's dollars: spending does not drift, so the numbers stay legible.
+const begExpenses = begRun.rows.map(r => r.expenses);
+check('beginner spending stays in today\'s dollars',
+    begExpenses.every(v => approx(v, begExpenses[0], 1e-9)));
+
+// One rate, every working year, checked on a plan with ample take-home so
+// the feasibility cap never bites.
+const roomy = E.beginnerInputs(Object.assign({}, E.DEFAULTS, {
+    planType: E.PLAN_TYPES.TRADITIONAL,
+    income: 200000, expenses: 30000, savingsRate: 25, retireAge: 60
+}));
+const roomyWorking = E.simulate(roomy, E.BEGINNER_PHASES, {}).rows.filter(r => r.phase === 'working');
+check('beginner saves the same share every working year',
+    roomyWorking.length > 1 && roomyWorking.every(r => approx(r.savingsRate, 0.25, 1e-9)));
+
+/* Beginner's real rates are derived from the same nominal pair Expert runs on,
+ * so with no contributions in play the two must agree exactly once the expert
+ * run is deflated. This is what lets the modes claim to describe one world. */
+const GROW_ONLY = {
+    currentAge: 30, retireAge: 95, standardRetireAge: 95,
+    income: 0, expenses: 0, balFree: 250000, savingsRate: 0
+};
+const nominalRun = E.simulate(Object.assign({}, E.DEFAULTS, GROW_ONLY, {
+    marketReturn: E.BEGINNER_NOMINAL.marketReturn, inflation: E.BEGINNER_NOMINAL.inflation
+}), E.BEGINNER_PHASES, {});
+const realRun = E.simulate(E.beginnerInputs(Object.assign({}, E.DEFAULTS, GROW_ONLY)), E.BEGINNER_PHASES, {});
+const deflator = Math.pow(1 + E.BEGINNER_NOMINAL.inflation / 100, realRun.summary.yearsModeled);
+check('beginner real growth matches expert nominal growth, deflated',
+    approx(realRun.summary.endingNetWorth, nominalRun.summary.endingNetWorth / deflator, 1e-5),
+    realRun.summary.endingNetWorth + ' vs ' + nominalRun.summary.endingNetWorth / deflator);
+
+const begAssume = E.beginnerAssumptions();
+check('beginner assumptions are stated for the user',
+    begAssume.length > 0 && begAssume.every(a => a.label && a.value && a.note));
+
 process.exit(failures ? 1 : 0);
