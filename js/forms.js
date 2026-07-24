@@ -26,9 +26,9 @@
         opts = opts || {};
         var wanted = opts.groups || null; // array of group ids, or null for all
         var state = FireStore.get();
+        var beginner = FireApp.mode() === 'beginner';
 
-        FireSchema.groups.forEach(function (group) {
-            if (wanted && wanted.indexOf(group.id) === -1) return;
+        FireSchema.groupsFor(wanted, beginner).forEach(function (group) {
 
             var bodyId = 'ff-group-' + group.id + '-' + Math.random().toString(36).slice(2, 9);
             var open = !opts.collapsed;
@@ -42,13 +42,14 @@
             ]);
             var body = U.el('div', { class: 'ff-group-body', id: bodyId });
             body.hidden = !open;
-            if (group.blurb) body.appendChild(U.el('p', { class: 'ff-group-blurb', text: group.blurb }));
+            var blurb = beginner && group.beginnerBlurb ? group.beginnerBlurb : group.blurb;
+            if (blurb) body.appendChild(U.el('p', { class: 'ff-group-blurb', text: blurb }));
 
             var fieldsWrap = U.el('div', { class: 'ff-fields' });
-            group.fields.forEach(function (f) {
-                fieldsWrap.appendChild(buildField(f, state));
+            FireSchema.fieldsFor(group, beginner).forEach(function (f) {
+                fieldsWrap.appendChild(buildField(f, state, beginner));
             });
-            if (group.beginnerToggle && FireApp.mode() === 'beginner') {
+            if (group.beginnerToggle && beginner) {
                 var toggle = group.beginnerToggle;
                 var checked = Number(state.inputs[toggle.key]) > 0;
                 var check = U.el('input', { type: 'checkbox' });
@@ -64,13 +65,13 @@
             }
             body.appendChild(fieldsWrap);
 
-            var groupEl = U.el('div', { class: 'ff-group' + (group.expert ? ' ff-expert' : '') + (open ? ' open' : ''), 'data-group': group.id }, [head, body]);
+            var groupEl = U.el('div', { class: 'ff-group' + (open ? ' open' : ''), 'data-group': group.id }, [head, body]);
             head.addEventListener('click', function () { setGroupOpen(groupEl, !groupEl.classList.contains('open')); });
             container.appendChild(groupEl);
         });
     }
 
-    function buildField(f, state) {
+    function buildField(f, state, beginner) {
         // Dollar fields render as grouped US currency; the "$" unit chip beside
         // them already supplies the symbol, so the value itself carries commas.
         var money = f.unit === '$';
@@ -105,7 +106,7 @@
             else if (String(val) !== input.value) input.value = val;
         });
 
-        var labelBits = [U.el('span', { class: 'ff-label-text', text: f.label })];
+        var labelBits = [U.el('span', { class: 'ff-label-text', text: FireSchema.fieldLabel(f, beginner) })];
         if (f.hint) {
             labelBits.push(U.el('span', {
                 class: 'ff-hint',
@@ -123,7 +124,7 @@
         ]);
 
         return U.el('label', {
-            class: 'ff-field' + (f.expert ? ' ff-expert' : '') + (f.bucket ? ' ff-bucket-' + f.bucket : ''),
+            class: 'ff-field' + (f.bucket ? ' ff-bucket-' + f.bucket : ''),
             'data-key': f.key
         }, [U.el('span', { class: 'ff-label' }, labelBits), control]);
     }

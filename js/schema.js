@@ -52,6 +52,7 @@
             {
                 id: 'savings', title: 'Savings behavior', icon: ICONS.trendingUp,
                 blurb: 'How much you keep, and how it grows.',
+                beginnerBlurb: 'The share of your pay you save. The same rate every year.',
                 fields: [
                     { key: 'savingsRate', label: 'Starting savings rate', unit: '%', step: 1, min: 0, max: 100 },
                     { key: 'savingsRateIncrease', label: 'Savings rate increase / yr', unit: '%', step: 0.5, min: 0, max: 100 },
@@ -116,38 +117,24 @@
             }
         ],
 
-        expertKeys: function () {
-            var keys = [];
-            this.groups.forEach(function (g) {
-                g.fields.forEach(function (f) { if (g.expert || f.expert) keys.push(f.key); });
+        /* Groups a mode renders, and the fields inside them. Beginner drops a
+         * group entirely rather than rendering it empty. */
+        groupsFor: function (ids, beginner) {
+            return this.groups.filter(function (g) {
+                if (ids && ids.indexOf(g.id) === -1) return false;
+                if (!beginner) return true;
+                return g.beginnerToggle || g.fields.some(function (f) { return f.beginner; });
             });
-            return keys.concat([
-                'drawTaxableBridge', 'drawDeferredBridge', 'drawFreeBridge',
-                'drawTaxableStd', 'drawDeferredStd', 'drawFreeStd'
-            ]);
         },
 
-        hiddenCustomCount: function (state) {
-            var count = this.expertKeys().reduce(function (n, key) {
-                return n + (Number(state.inputs[key]) !== Number(FireEngine.DEFAULTS[key]) ? 1 : 0);
-            }, 0);
-            var phases = state.phases || [];
-            var defaults = FireEngine.DEFAULT_PHASES;
-            var phaseFields = ['age', 'deferred', 'free', 'taxable'];
-            var same = phases.length === defaults.length && phases.every(function (p, i) {
-                return phaseFields.every(function (key) {
-                    var expected = key === 'age' && defaults[i].isLocked ? state.inputs.currentAge : defaults[i][key];
-                    return Number(p[key]) === Number(expected);
-                });
-            });
-            return count + (same ? 0 : 1);
+        fieldsFor: function (group, beginner) {
+            return beginner ? group.fields.filter(function (f) { return f.beginner; }) : group.fields;
         },
 
-        assumptionsText: function (state) {
-            var count = this.hiddenCustomCount(state);
-            return count
-                ? 'Simplified view. ' + count + ' setting' + (count === 1 ? ' was' : 's were') + ' customized in Expert mode and ' + (count === 1 ? 'is' : 'are') + ' still in effect.'
-                : 'Simplified view. Taxes, contribution limits, inflation and the 4% withdrawal rule are running on standard assumptions.';
+        /* Beginner labels differ where the expert wording names a dial that
+         * beginner does not have (a starting rate implies a ramp). */
+        fieldLabel: function (field, beginner) {
+            return beginner && field.beginnerLabel ? field.beginnerLabel : field.label;
         },
 
         bucketMeta: {
@@ -182,18 +169,18 @@
         }
     };
 
-    var expertGroups = { taxes: true, irs: true, montecarlo: true };
-    var expertFields = {
-        standardRetireAge: true, incomeTaxRate: true,
-        savingsRateIncrease: true, maxSavingsRate: true, incomeGrowth: true,
-        inflation: true, swr: true
-    };
+    /* A field is editable in Beginner only if the beginner model actually
+     * reads it. Deriving this from the engine keeps the two from drifting
+     * into a field the user can type into that changes nothing. */
+    var beginnerLabels = { savingsRate: 'Savings rate' };
     schema.groups.forEach(function (group) {
-        if (expertGroups[group.id]) group.expert = true;
         if (group.id === 'employer') {
             group.beginnerToggle = { key: 'employerMatchRate', label: 'My employer matches 401k contributions' };
         }
-        group.fields.forEach(function (field) { if (expertFields[field.key]) field.expert = true; });
+        group.fields.forEach(function (field) {
+            field.beginner = FireEngine.BEGINNER_OWNED.indexOf(field.key) !== -1;
+            if (beginnerLabels[field.key]) field.beginnerLabel = beginnerLabels[field.key];
+        });
     });
 
     global.FireSchema = schema;
