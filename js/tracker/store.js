@@ -1,30 +1,41 @@
-/* TrackerStore — two independent datasets under one key:
- * net worth (accounts + monthly snapshots + benchmark profile) for the
- * Net Worth tab, and transactions (+ manually opened months) for the
- * Cashbook. Starts blank; saved data carries no compatibility guarantees. */
+/* TrackerStore - validated, versioned persistence for net worth and cashbook data. */
 (function (global) {
     'use strict';
 
-    var KEY = 'trackerData_v2';
+    var SCHEMA_VERSION = 3;
+    var KEY = 'trackerData_v3';
+    var LEGACY_KEYS = ['trackerData_v2'];
+    var UNDO_LIMIT = 25;
     var E = global.TrackerEngine;
     var CSV_FIELDS = { date: true, origDate: true, acctType: true, account: true, accountNumber: true,
         institution: true, name: true, customName: true, amount: true, description: true, category: true, ignored: true };
+    var FREQUENCIES = ['weekly', 'biweekly', 'semimonthly', 'monthly', 'quarterly', 'yearly'];
+    var RULE_MODES = ['contains', 'equals', 'startsWith'];
 
     var listeners = [];
     var state = null;
     var idCounter = 0;
     var lastSaveError = null;
     var persistenceWarned = false;
+    var undoStack = [];
 
     function empty() {
+        var now = new Date().toISOString();
         return {
+            schemaVersion: SCHEMA_VERSION,
+            meta: { createdAt: now, updatedAt: now },
             accounts: [],
             snapshots: {},
+            datedSnapshots: {},
             ageIncome: {},
             txns: [],
             cashMonths: [],
             categoryKinds: {},
-            csvColumns: {}
+            csvColumns: {},
+            budgets: [],
+            savingsGoals: [],
+            recurringTemplates: [],
+            merchantRules: []
         };
     }
 
@@ -47,76 +58,291 @@
         return Number.isFinite(n) ? n : null;
     }
 
+    function money(value) {
+        var n = finite(value);
+        return n === null ? null : Math.round(n * 100) / 100;
+    }
+
+    function nonnegative(value) {
+        var n = money(value);
+        return n !== null && n >= 0 ? n : null;
+    }
+
+    function clone(value) {
+        return JSON.parse(JSON.stringify(value));
+    }
+
+    function today() {
+        return new Date().toISOString().slice(0, 10);
+    }
+
+    function timestamp(value) {
+        if (value === undefined || value === null || value === '') return '';
+        var d = new Date(value);
+        return isNaN(d.getTime()) ? '' : d.toISOString();
+    }
+
+    function currentMonth() {
+        var d = new Date();
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    }
+
+    function monthEnd(month) {
+        if (!E.validMonth(month)) return '';
+        var p = month.split('-');
+        var day = new Date(Date.UTC(Number(p[0]), Number(p[1]), 0)).getUTCDate();
+        return month + '-' + String(day).padStart(2, '0');
+    }
+
+    function currency(value) {
+        var code = text(value, 'USD', 3).toUpperCase();
+        return /^[A-Z]{3}$/.test(code) ? code : 'USD';
+    }
+
+    function newId(prefix) {
+        return prefix + Date.now().toString(36) + (idCounter++).toString(36) + Math.random().toString(36).slice(2, 6);
+    }
+
+    function uniqueId(value, prefix, used) {
+        var id = text(value, '', 160) || newId(prefix);
+        while (used[id]) id = newId(prefix);
+        used[id] = true;
+        return id;
+    }
+
+    function cleanFreshness(value) {
+        var source = object(value);
+        var out = { source: text(source.source, 'manual', 80) };
+        var asOf = text(source.asOf || source.asOfDate, '', 10);
+        var updatedAt = timestamp(source.updatedAt || source.lastUpdatedAt || source.lastSyncedAt);
+        if (E.validDate(asOf)) out.asOf = asOf;
+        if (updatedAt) out.updatedAt = updatedAt;
+        return out;
+    }
+
+    function cleanAccount(account, usedIds) {
+        if (!account || !E.GROUP_BY_ID[account.group]) return null;
+        var out = {
+            id: uniqueId(account.id, 'a', usedIds),
+            name: text(account.name, 'New account', 200),
+            group: account.group,
+            institution: text(account.institution, '', 200),
+            currency: currency(account.currency),
+            freshness: cleanFreshness(account.freshness)
+        };
+        if (out.group === 'liability') {
+            var terms = object(account.liability);
+            var apr = finite(account.apr !== undefined ? account.apr : terms.apr);
+            var payment = nonnegative(account.minimumPayment !== undefined ? account.minimumPayment : terms.minimumPayment);
+            var dueDay = finite(account.dueDay !== undefined ? account.dueDay : terms.dueDay);
+            if (apr !== null && apr >= 0 && apr <= 100) out.apr = Math.round(apr * 1000) / 1000;
+            if (payment !== null) out.minimumPayment = payment;
+            if (dueDay !== null && dueDay >= 1 && dueDay <= 31) out.dueDay = Math.round(dueDay);
+        }
+        return out;
+    }
+
+    function accountMap(accounts) {
+        var out = Object.create(null);
+        accounts.forEach(function (account) { out[account.id] = account; });
+        return out;
+    }
+
+    function cleanBalances(source, accountsById) {
+        source = object(source);
+        var out = {};
+        Object.keys(source).forEach(function (id) {
+            var value = money(source[id]);
+            if (accountsById[id] && value !== null) out[id] = value;
+        });
+        return out;
+    }
+
+    function splitResult(splits, amount) {
+        if (splits === undefined || splits === null || (Array.isArray(splits) && !splits.length)) {
+            return { valid: true, value: undefined };
+        }
+        if (!Array.isArray(splits) || splits.length > 100) return { valid: false };
+        var out = [], totalCents = 0;
+        for (var i = 0; i < splits.length; i++) {
+            var source = splits[i];
+            var partAmount = source && money(source.amount);
+            var category = source && text(source.category, '', 200);
+            if (!source || partAmount === null || !category) return { valid: false };
+            var part = { category: category, amount: partAmount };
+            var note = text(source.note || source.memo, '', 300);
+            if (note) part.note = note;
+            out.push(part);
+            totalCents += Math.round(partAmount * 100);
+        }
+        return { valid: totalCents === Math.round(amount * 100), value: out };
+    }
+
     function sortTxns(a, b) {
         if (a.date !== b.date) return a.date < b.date ? -1 : 1;
         return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
     }
 
-    function cleanTxn(t, usedIds) {
-        if (!t || !E.validDate(t.date)) return null;
-        var amount = finite(t.amount);
+    function cleanTxn(transaction, usedIds, accountsById) {
+        if (!transaction || !E.validDate(transaction.date)) return null;
+        var amount = money(transaction.amount);
         if (amount === null) return null;
-        var id = text(t.id, '', 160) || newId('m');
-        while (usedIds[id]) id = newId('m');
-        usedIds[id] = true;
-        var txn = {
-            id: id,
-            date: t.date,
-            name: text(t.name, 'Unknown', 300),
-            amount: Math.round(amount * 100) / 100,
-            category: text(t.category, 'Uncategorized', 200),
-            account: text(t.account, '', 200)
+        var splits = splitResult(transaction.splits, amount);
+        var out = {
+            id: uniqueId(transaction.id, 'm', usedIds),
+            date: transaction.date,
+            name: text(transaction.name, 'Unknown', 300),
+            amount: amount,
+            category: text(transaction.category, 'Uncategorized', 200),
+            account: text(transaction.account, '', 200),
+            accountId: accountsById[text(transaction.accountId, '', 160)] ? text(transaction.accountId, '', 160) : ''
         };
         ['origDate', 'accountNumber', 'institution', 'description', 'importKey'].forEach(function (key) {
-            var value = text(t[key], '', key === 'description' ? 500 : 200);
-            if (value) txn[key] = value;
+            var value = text(transaction[key], '', key === 'description' ? 500 : 200);
+            if (value) out[key] = value;
         });
-        return txn;
+        if (splits.valid && splits.value) out.splits = splits.value;
+        return out;
     }
 
-    /* Validate and clone persisted or cloud state at the trust boundary. */
+    function cleanBudget(budget, usedIds) {
+        if (!budget) return null;
+        var category = text(budget.category, '', 200);
+        var target = nonnegative(budget.monthlyTarget !== undefined ? budget.monthlyTarget : budget.amount);
+        if (!category || target === null) return null;
+        var out = {
+            id: uniqueId(budget.id, 'b', usedIds),
+            name: text(budget.name, category, 200),
+            category: category,
+            monthlyTarget: target,
+            rollover: budget.rollover === true,
+            currency: currency(budget.currency)
+        };
+        var start = text(budget.startMonth, '', 7), end = text(budget.endMonth, '', 7);
+        if (E.validMonth(start)) out.startMonth = start;
+        if (E.validMonth(end) && (!out.startMonth || end >= out.startMonth)) out.endMonth = end;
+        return out;
+    }
+
+    function cleanGoal(goal, usedIds, accountsById) {
+        if (!goal) return null;
+        var target = nonnegative(goal.targetAmount);
+        if (target === null || target <= 0) return null;
+        var out = {
+            id: uniqueId(goal.id, 'g', usedIds),
+            name: text(goal.name, 'Savings goal', 200),
+            targetAmount: target,
+            currentAmount: nonnegative(goal.currentAmount) || 0,
+            currency: currency(goal.currency),
+            accountId: accountsById[text(goal.accountId, '', 160)] ? text(goal.accountId, '', 160) : ''
+        };
+        var targetDate = text(goal.targetDate, '', 10);
+        var createdDate = text(goal.createdDate, '', 10);
+        if (E.validDate(targetDate)) out.targetDate = targetDate;
+        if (E.validDate(createdDate)) out.createdDate = createdDate;
+        return out;
+    }
+
+    function frequency(value) {
+        var out = text(value, 'monthly', 20).toLowerCase();
+        if (out === 'annual') out = 'yearly';
+        return FREQUENCIES.indexOf(out) === -1 ? 'monthly' : out;
+    }
+
+    function cleanRecurring(template, usedIds, accountsById) {
+        if (!template) return null;
+        var amount = money(template.amount);
+        var startDate = text(template.startDate, '', 10);
+        if (amount === null || !E.validDate(startDate)) return null;
+        var splits = splitResult(template.splits, amount);
+        if (!splits.valid) return null;
+        var out = {
+            id: uniqueId(template.id, 'r', usedIds),
+            name: text(template.name, 'Recurring transaction', 300),
+            amount: amount,
+            category: text(template.category, 'Uncategorized', 200),
+            accountId: accountsById[text(template.accountId, '', 160)] ? text(template.accountId, '', 160) : '',
+            frequency: frequency(template.frequency),
+            startDate: startDate,
+            active: template.active !== false
+        };
+        var nextDate = text(template.nextDate, '', 10), endDate = text(template.endDate, '', 10);
+        if (E.validDate(nextDate) && nextDate >= startDate) out.nextDate = nextDate;
+        else out.nextDate = startDate;
+        if (E.validDate(endDate) && endDate >= startDate) out.endDate = endDate;
+        if (splits.value) out.splits = splits.value;
+        return out;
+    }
+
+    function cleanRule(rule, usedIds, accountsById) {
+        if (!rule) return null;
+        var match = text(rule.match || rule.merchant, '', 200);
+        var category = text(rule.category, '', 200);
+        if (!match || !category) return null;
+        var mode = text(rule.mode, 'contains', 20).toLowerCase();
+        if (mode === 'startswith') mode = 'startsWith';
+        var priority = finite(rule.priority);
+        return {
+            id: uniqueId(rule.id, 'u', usedIds),
+            match: match,
+            mode: RULE_MODES.indexOf(mode) === -1 ? 'contains' : mode,
+            category: category,
+            accountId: accountsById[text(rule.accountId, '', 160)] ? text(rule.accountId, '', 160) : '',
+            priority: priority === null ? 0 : Math.max(-1000, Math.min(1000, Math.round(priority))),
+            enabled: rule.enabled !== false
+        };
+    }
+
+    /* Validate and clone persisted, imported, or cloud state at the trust boundary. */
     function adopt(saved) {
         if (!saved || typeof saved !== 'object') return empty();
-        var out = empty(), ids = Object.create(null);
-        (Array.isArray(saved.accounts) ? saved.accounts : []).forEach(function (a) {
-            if (!a || !E.GROUP_BY_ID[a.group]) return;
-            var id = text(a.id, '', 160);
-            if (!id || ids[id]) return;
-            ids[id] = true;
-            out.accounts.push({ id: id, name: text(a.name, 'New account', 200), group: a.group });
+        var out = empty();
+        var savedMeta = object(saved.meta);
+        var createdAt = timestamp(savedMeta.createdAt);
+        var updatedAt = timestamp(savedMeta.updatedAt);
+        if (createdAt) out.meta.createdAt = createdAt;
+        if (updatedAt) out.meta.updatedAt = updatedAt;
+        else if (createdAt) out.meta.updatedAt = createdAt;
+        var ids = Object.create(null);
+        (Array.isArray(saved.accounts) ? saved.accounts : []).forEach(function (source) {
+            var account = cleanAccount(source, ids);
+            if (account) out.accounts.push(account);
         });
+        var accountsById = accountMap(out.accounts);
 
         var snapshots = object(saved.snapshots);
-        Object.keys(snapshots).forEach(function (mo) {
-            if (!E.validMonth(mo)) return;
-            var source = object(snapshots[mo]), balances = {};
-            out.accounts.forEach(function (a) {
-                var value = finite(source[a.id]);
-                if (value !== null) balances[a.id] = value;
-            });
-            out.snapshots[mo] = balances;
+        Object.keys(snapshots).forEach(function (month) {
+            if (E.validMonth(month)) out.snapshots[month] = cleanBalances(snapshots[month], accountsById);
+        });
+
+        var datedSnapshots = object(saved.datedSnapshots || saved.balanceSnapshots);
+        Object.keys(datedSnapshots).forEach(function (date) {
+            if (E.validDate(date)) out.datedSnapshots[date] = cleanBalances(datedSnapshots[date], accountsById);
         });
 
         var ageIncome = object(saved.ageIncome);
-        Object.keys(ageIncome).forEach(function (mo) {
-            if (!E.validMonth(mo)) return;
-            var source = object(ageIncome[mo]), entry = {};
+        Object.keys(ageIncome).forEach(function (month) {
+            if (!E.validMonth(month)) return;
+            var source = object(ageIncome[month]), entry = {};
             var age = finite(source.age), income = finite(source.income);
             if (age !== null && age >= 0) entry.age = age;
             if (income !== null && income >= 0) entry.income = income;
-            if (Object.keys(entry).length) out.ageIncome[mo] = entry;
+            if (Object.keys(entry).length) out.ageIncome[month] = entry;
         });
 
         var usedTxnIds = Object.create(null);
-        (Array.isArray(saved.txns) ? saved.txns : []).forEach(function (t) {
-            var txn = cleanTxn(t, usedTxnIds);
-            if (txn) out.txns.push(txn);
+        (Array.isArray(saved.txns) ? saved.txns : []).forEach(function (source) {
+            var transaction = cleanTxn(source, usedTxnIds, accountsById);
+            if (transaction) out.txns.push(transaction);
         });
         out.txns.sort(sortTxns);
 
         var cashSeen = Object.create(null);
-        (Array.isArray(saved.cashMonths) ? saved.cashMonths : []).forEach(function (mo) {
-            if (E.validMonth(mo) && !cashSeen[mo]) { cashSeen[mo] = true; out.cashMonths.push(mo); }
+        (Array.isArray(saved.cashMonths) ? saved.cashMonths : []).forEach(function (month) {
+            if (E.validMonth(month) && !cashSeen[month]) {
+                cashSeen[month] = true;
+                out.cashMonths.push(month);
+            }
         });
         out.cashMonths.sort();
 
@@ -136,15 +362,45 @@
             var header = text(columns[field], '', 200);
             if (header) out.csvColumns[field] = header;
         });
+
+        var usedBudgetIds = Object.create(null);
+        (Array.isArray(saved.budgets) ? saved.budgets : []).forEach(function (source) {
+            var budget = cleanBudget(source, usedBudgetIds);
+            if (budget) out.budgets.push(budget);
+        });
+
+        var usedGoalIds = Object.create(null);
+        (Array.isArray(saved.savingsGoals || saved.goals) ? (saved.savingsGoals || saved.goals) : []).forEach(function (source) {
+            var goal = cleanGoal(source, usedGoalIds, accountsById);
+            if (goal) out.savingsGoals.push(goal);
+        });
+
+        var recurringSource = saved.recurringTemplates || saved.recurringTransactions;
+        var usedRecurringIds = Object.create(null);
+        (Array.isArray(recurringSource) ? recurringSource : []).forEach(function (source) {
+            var template = cleanRecurring(source, usedRecurringIds, accountsById);
+            if (template) out.recurringTemplates.push(template);
+        });
+
+        var ruleSource = saved.merchantRules || saved.categoryRules;
+        var usedRuleIds = Object.create(null);
+        (Array.isArray(ruleSource) ? ruleSource : []).forEach(function (source) {
+            var rule = cleanRule(source, usedRuleIds, accountsById);
+            if (rule) out.merchantRules.push(rule);
+        });
+
         return out;
     }
 
     function load() {
-        try {
-            var raw = localStorage.getItem(KEY);
-            if (raw) return adopt(JSON.parse(raw));
-        } catch (e) { /* fall through */ }
-        return empty();
+        var keys = [KEY].concat(LEGACY_KEYS);
+        for (var i = 0; i < keys.length; i++) {
+            try {
+                var raw = localStorage.getItem(keys[i]);
+                if (raw) return { data: adopt(JSON.parse(raw)), migrated: keys[i] !== KEY };
+            } catch (e) { /* try the next compatible key */ }
+        }
+        return { data: empty(), migrated: false };
     }
 
     function save() {
@@ -157,13 +413,16 @@
             lastSaveError = (e && e.message) || 'Browser storage is unavailable';
             if (!persistenceWarned && global.FireApp && FireApp.toast) {
                 persistenceWarned = true;
-                FireApp.toast('Tracker changes are only in memory — browser storage failed');
+                FireApp.toast('Tracker changes are only in memory - browser storage failed');
             }
             return false;
         }
     }
 
-    function commit() {
+    function commit(touchMetadata) {
+        state.meta = object(state.meta);
+        if (!timestamp(state.meta.createdAt)) state.meta.createdAt = new Date().toISOString();
+        if (touchMetadata !== false || !timestamp(state.meta.updatedAt)) state.meta.updatedAt = new Date().toISOString();
         E.setKindOverrides(state.categoryKinds);
         var persisted = save();
         listeners.slice().forEach(function (fn) {
@@ -172,59 +431,122 @@
         return persisted;
     }
 
-    function newId(prefix) {
-        return prefix + Date.now().toString(36) + (idCounter++).toString(36) + Math.random().toString(36).slice(2, 6);
+    function checkpoint() {
+        if (!state) return;
+        undoStack.push(clone(state));
+        if (undoStack.length > UNDO_LIMIT) undoStack.shift();
     }
 
-    function currentMonth() {
-        var d = new Date();
-        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    function findById(list, id) {
+        for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
+        return null;
+    }
+
+    function replaceItem(list, id, item) {
+        for (var i = 0; i < list.length; i++) {
+            if (list[i].id === id) {
+                list[i] = item;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function markFresh(accountId, asOf, source) {
+        var account = findById(state.accounts, accountId);
+        if (!account) return;
+        account.freshness = object(account.freshness);
+        account.freshness.source = text(source || account.freshness.source, 'manual', 80);
+        account.freshness.updatedAt = new Date().toISOString();
+    }
+
+    function cleanNewBudget(source) {
+        return cleanBudget(source, Object.create(null));
+    }
+
+    function cleanNewGoal(source) {
+        return cleanGoal(source, Object.create(null), accountMap(state.accounts));
+    }
+
+    function cleanNewRecurring(source) {
+        return cleanRecurring(source, Object.create(null), accountMap(state.accounts));
+    }
+
+    function cleanNewRule(source) {
+        return cleanRule(source, Object.create(null), accountMap(state.accounts));
     }
 
     global.TrackerStore = {
-        init: function () { state = load(); E.setKindOverrides(state.categoryKinds); },
+        SCHEMA_VERSION: SCHEMA_VERSION,
+        UNDO_LIMIT: UNDO_LIMIT,
+
+        init: function () {
+            var loaded = load();
+            state = loaded.data;
+            undoStack = [];
+            E.setKindOverrides(state.categoryKinds);
+            if (loaded.migrated && save()) {
+                LEGACY_KEYS.forEach(function (key) {
+                    try { localStorage.removeItem(key); } catch (e) { /* the v3 copy is already durable */ }
+                });
+            }
+        },
+
         get: function () { return state; },
+        metadata: function () { return clone(state.meta); },
         persistenceError: function () { return lastSaveError; },
-        hasNetWorth: function () { return Object.keys(state.snapshots).length > 0; },
+        hasNetWorth: function () {
+            return Object.keys(state.snapshots).length > 0 || Object.keys(state.datedSnapshots).length > 0;
+        },
         hasCash: function () { return state.txns.length > 0 || state.cashMonths.length > 0; },
 
-        /* Adopt a full tracker state from outside (a signed-in user's cloud
-         * document). Caches to localStorage and notifies so the UI redraws. */
-        replace: function (obj) { state = adopt(obj); commit(); },
+        /* Cloud/account replacement is a new trust domain, so old undo data is discarded. */
+        replace: function (obj) {
+            state = adopt(obj);
+            undoStack = [];
+            return commit(false);
+        },
+
         isEmpty: function () {
             return !this.hasNetWorth() && !this.hasCash() && state.accounts.length === 0 &&
                 Object.keys(state.ageIncome).length === 0 && Object.keys(state.categoryKinds).length === 0 &&
-                Object.keys(state.csvColumns).length === 0;
+                Object.keys(state.csvColumns).length === 0 && state.budgets.length === 0 &&
+                state.savingsGoals.length === 0 && state.recurringTemplates.length === 0 &&
+                state.merchantRules.length === 0;
         },
 
-        /* Import structured tracker data without replacing the other domain. */
         seedFrom: function (seed, scope) {
             if (!seed || typeof seed !== 'object') return false;
             if (scope === 'networth' && (!Array.isArray(seed.accounts) || !seed.snapshots)) return false;
             if (scope === 'cashflow' && !Array.isArray(seed.txns) && !Array.isArray(seed.cashMonths)) return false;
-            var incoming = adopt({
-                accounts: seed.accounts || [],
-                snapshots: seed.snapshots || {},
-                ageIncome: seed.ageIncome || {},
-                txns: seed.txns || [],
-                cashMonths: seed.cashMonths || []
-            });
+            var incoming = adopt(seed);
+            checkpoint();
             if (scope === 'networth') {
                 state.accounts = incoming.accounts;
                 state.snapshots = incoming.snapshots;
+                state.datedSnapshots = incoming.datedSnapshots;
                 state.ageIncome = incoming.ageIncome;
+                state.savingsGoals = incoming.savingsGoals;
             } else if (scope === 'cashflow') {
                 state.txns = incoming.txns;
                 state.cashMonths = incoming.cashMonths;
+                state.budgets = incoming.budgets;
+                state.recurringTemplates = incoming.recurringTemplates;
+                state.merchantRules = incoming.merchantRules;
             } else {
                 if (!this.hasNetWorth()) {
                     state.accounts = incoming.accounts;
                     state.snapshots = incoming.snapshots;
+                    state.datedSnapshots = incoming.datedSnapshots;
                     state.ageIncome = incoming.ageIncome;
+                    state.savingsGoals = incoming.savingsGoals;
                 }
                 if (!this.hasCash()) {
                     state.txns = incoming.txns;
                     state.cashMonths = incoming.cashMonths;
+                    state.budgets = incoming.budgets;
+                    state.recurringTemplates = incoming.recurringTemplates;
+                    state.merchantRules = incoming.merchantRules;
                 }
             }
             if (scope !== 'cashflow' && seed.profile && global.FireStore) {
@@ -236,87 +558,182 @@
         },
 
         reset: function () {
+            undoStack = [];
             state = empty();
             return commit();
         },
 
         resetNetWorth: function () {
+            checkpoint();
             state.accounts = [];
             state.snapshots = {};
+            state.datedSnapshots = {};
             state.ageIncome = {};
+            state.savingsGoals = [];
+            state.txns.forEach(function (transaction) { transaction.accountId = ''; });
+            state.recurringTemplates.forEach(function (template) { template.accountId = ''; });
+            state.merchantRules.forEach(function (rule) { rule.accountId = ''; });
             return commit();
         },
 
         resetCash: function () {
+            checkpoint();
             state.txns = [];
             state.cashMonths = [];
+            state.budgets = [];
+            state.recurringTemplates = [];
+            state.merchantRules = [];
             return commit();
         },
 
-        /* ---------- net worth: accounts ---------- */
-        addAccount: function (name, group) {
-            if (!E.GROUP_BY_ID[group]) return;
-            var acct = { id: newId('a'), name: text(name, 'New account', 200), group: group };
-            state.accounts.push(acct);
+        /* ---------- undo ---------- */
+        canUndo: function () { return undoStack.length > 0; },
+        undoDepth: function () { return undoStack.length; },
+        clearUndo: function () { undoStack = []; },
+        undo: function () {
+            if (!undoStack.length) return false;
+            state = adopt(undoStack.pop());
             commit();
-            return acct;
+            return true;
+        },
+
+        /* ---------- accounts ---------- */
+        addAccount: function (name, group, options) {
+            var source = Object.assign({}, object(options), { id: newId('a'), name: name, group: group });
+            var account = cleanAccount(source, Object.create(null));
+            if (!account) return;
+            checkpoint();
+            state.accounts.push(account);
+            commit();
+            return account;
+        },
+
+        updateAccount: function (id, patch) {
+            var account = findById(state.accounts, id);
+            if (!account || !patch) return false;
+            if (patch.apr !== undefined) {
+                var apr = finite(patch.apr);
+                if (apr === null || apr < 0 || apr > 100) return false;
+            }
+            if (patch.minimumPayment !== undefined) {
+                var payment = finite(patch.minimumPayment);
+                if (payment === null || payment < 0) return false;
+            }
+            if (patch.dueDay !== undefined) {
+                var dueDay = finite(patch.dueDay);
+                if (dueDay === null || dueDay < 1 || dueDay > 31) return false;
+            }
+            var source = Object.assign({}, account, patch, { id: id });
+            var candidate = cleanAccount(source, Object.create(null));
+            if (!candidate) return false;
+            checkpoint();
+            replaceItem(state.accounts, id, candidate);
+            commit();
+            return true;
         },
 
         renameAccount: function (id, name) {
-            var a = state.accounts.filter(function (a) { return a.id === id; })[0];
+            var account = findById(state.accounts, id);
             var next = text(name, '', 200);
-            if (!a || !next) return false;
-            a.name = next;
+            if (!account || !next) return false;
+            checkpoint();
+            account.name = next;
+            commit();
+            return true;
+        },
+
+        setAccountFreshness: function (id, freshness) {
+            var account = findById(state.accounts, id);
+            if (!account || !freshness || typeof freshness !== 'object') return false;
+            checkpoint();
+            account.freshness = cleanFreshness(freshness);
             commit();
             return true;
         },
 
         removeAccount: function (id) {
-            state.accounts = state.accounts.filter(function (a) { return a.id !== id; });
-            for (var mo in state.snapshots) delete state.snapshots[mo][id];
+            if (!findById(state.accounts, id)) return false;
+            checkpoint();
+            state.accounts = state.accounts.filter(function (account) { return account.id !== id; });
+            Object.keys(state.snapshots).forEach(function (month) { delete state.snapshots[month][id]; });
+            Object.keys(state.datedSnapshots).forEach(function (date) { delete state.datedSnapshots[date][id]; });
+            state.txns.forEach(function (transaction) { if (transaction.accountId === id) transaction.accountId = ''; });
+            state.savingsGoals.forEach(function (goal) { if (goal.accountId === id) goal.accountId = ''; });
+            state.recurringTemplates.forEach(function (template) { if (template.accountId === id) template.accountId = ''; });
+            state.merchantRules.forEach(function (rule) { if (rule.accountId === id) rule.accountId = ''; });
             commit();
+            return true;
         },
 
-        /* ---------- net worth: snapshots ---------- */
-        /* Adds the next month (or the current one when empty), carrying the
-         * previous month's balances forward — the spreadsheet habit. */
+        /* ---------- monthly and dated balance snapshots ---------- */
         addMonth: function () {
             var months = Object.keys(state.snapshots).sort();
-            var mo, base = {};
+            var month, base = {};
             if (months.length) {
                 var last = months[months.length - 1];
-                mo = E.nextMonth(last);
+                month = E.nextMonth(last);
                 base = Object.assign({}, state.snapshots[last]);
             } else {
-                mo = currentMonth();
+                month = currentMonth();
             }
-            state.snapshots[mo] = base;
+            checkpoint();
+            state.snapshots[month] = base;
             commit();
-            return mo;
+            return month;
         },
 
         removeMonth: function (month) {
             if (!E.validMonth(month)) return false;
+            checkpoint();
             delete state.snapshots[month];
             commit();
             return true;
         },
 
         setBalance: function (month, accountId, value) {
-            var v = finite(value);
-            var account = state.accounts.some(function (a) { return a.id === accountId; });
-            if (v === null || !account || !E.validMonth(month) || !owns(state.snapshots, month)) return false;
-            state.snapshots[month][accountId] = v;
+            var amount = money(value);
+            if (amount === null || !findById(state.accounts, accountId) || !E.validMonth(month) || !owns(state.snapshots, month)) return false;
+            checkpoint();
+            state.snapshots[month][accountId] = amount;
+            markFresh(accountId, monthEnd(month), 'manual');
             commit();
             return true;
         },
 
-        /* Annual income recorded against a month, for the PAW/AAW/UAW
-         * benchmarks. Clearing removes the override so the month inherits
-         * from earlier months or the Profile tab again. */
+        addDatedSnapshot: function (date, balances) {
+            if (!E.validDate(date)) return false;
+            var cleaned = cleanBalances(balances, accountMap(state.accounts));
+            checkpoint();
+            state.datedSnapshots[date] = cleaned;
+            Object.keys(cleaned).forEach(function (id) { markFresh(id, date, 'manual'); });
+            commit();
+            return date;
+        },
+
+        setDatedBalance: function (date, accountId, value) {
+            var amount = money(value);
+            if (!E.validDate(date) || amount === null || !findById(state.accounts, accountId)) return false;
+            checkpoint();
+            if (!state.datedSnapshots[date]) state.datedSnapshots[date] = {};
+            state.datedSnapshots[date][accountId] = amount;
+            markFresh(accountId, date, 'manual');
+            commit();
+            return true;
+        },
+
+        removeDatedSnapshot: function (date) {
+            if (!E.validDate(date)) return false;
+            checkpoint();
+            delete state.datedSnapshots[date];
+            commit();
+            return true;
+        },
+
         setAgeIncome: function (month, income) {
             if (!E.validMonth(month)) return false;
-            var v = finite(income);
+            var value = finite(income);
+            if (income !== null && income !== '' && (value === null || value < 0)) return false;
+            checkpoint();
             if (income === null || income === '') {
                 var entry = state.ageIncome[month];
                 if (entry) {
@@ -324,76 +741,246 @@
                     if (Object.keys(entry).length === 0) delete state.ageIncome[month];
                 }
             } else {
-                if (v === null || v < 0) return false;
-                state.ageIncome[month] = Object.assign({}, state.ageIncome[month], { income: v });
+                state.ageIncome[month] = Object.assign({}, state.ageIncome[month], { income: value });
             }
             commit();
             return true;
         },
 
-        /* ---------- cashbook: months + transactions ---------- */
+        /* ---------- cashbook months and transactions ---------- */
         addCashMonth: function () {
             var months = E.txnMonths(state.txns).concat(state.cashMonths).sort();
-            var mo = months.length ? E.nextMonth(months[months.length - 1]) : currentMonth();
-            if (!mo) mo = currentMonth();
-            if (state.cashMonths.indexOf(mo) === -1) state.cashMonths.push(mo);
+            var month = months.length ? E.nextMonth(months[months.length - 1]) : currentMonth();
+            if (!month) month = currentMonth();
+            checkpoint();
+            if (state.cashMonths.indexOf(month) === -1) state.cashMonths.push(month);
             state.cashMonths.sort();
             commit();
-            return mo;
+            return month;
         },
 
-        /* Delete a cashbook month: its transactions and its open-page marker. */
         removeCashMonth: function (month) {
             if (!E.validMonth(month)) return false;
-            state.cashMonths = state.cashMonths.filter(function (mo) { return mo !== month; });
-            state.txns = state.txns.filter(function (t) { return E.monthKey(t.date) !== month; });
+            checkpoint();
+            state.cashMonths = state.cashMonths.filter(function (candidate) { return candidate !== month; });
+            state.txns = state.txns.filter(function (transaction) { return E.monthKey(transaction.date) !== month; });
             commit();
             return true;
         },
 
-        addTxn: function (t) {
-            var amount = t && finite(t.amount);
-            if (!t || !E.validDate(t.date) || amount === null) return null;
-            var txn = {
-                id: newId('m'),
-                date: t.date,
-                name: text(t.name, 'Unknown', 300),
-                amount: Math.round(amount * 100) / 100,
-                category: text(t.category, 'Uncategorized', 200),
-                account: text(t.account, '', 200)
-            };
-            state.txns.push(txn);
+        addTxn: function (source) {
+            var amount = source && money(source.amount);
+            if (!source || !E.validDate(source.date) || amount === null) return null;
+            if (source.accountId && !findById(state.accounts, source.accountId)) return null;
+            var splits = splitResult(source.splits, amount);
+            if (!splits.valid) return null;
+            var transaction = cleanTxn(Object.assign({}, source, { id: newId('m') }), Object.create(null), accountMap(state.accounts));
+            if (!transaction) return null;
+            checkpoint();
+            state.txns.push(transaction);
             state.txns.sort(sortTxns);
             commit();
-            return txn;
+            return transaction;
         },
 
         updateTxn: function (id, patch) {
-            var t = state.txns.filter(function (t) { return t.id === id; })[0];
-            if (!t || !patch) return false;
-            if (patch.date !== undefined && !E.validDate(patch.date)) return false;
-            if (patch.amount !== undefined && finite(patch.amount) === null) return false;
-            if (patch.date !== undefined) t.date = patch.date;
-            if (patch.name !== undefined) t.name = text(patch.name, t.name, 300);
-            if (patch.amount !== undefined) t.amount = Math.round(finite(patch.amount) * 100) / 100;
-            if (patch.category !== undefined) t.category = text(patch.category, 'Uncategorized', 200);
-            if (patch.account !== undefined) t.account = text(patch.account, '', 200);
+            var transaction = findById(state.txns, id);
+            if (!transaction || !patch) return false;
+            var merged = Object.assign({}, transaction, patch, { id: id });
+            if (patch.name !== undefined && !text(patch.name, '', 300)) merged.name = transaction.name;
+            var amount = money(merged.amount);
+            if (!E.validDate(merged.date) || amount === null) return false;
+            if (patch.accountId && !findById(state.accounts, patch.accountId)) return false;
+            var splits = splitResult(merged.splits, amount);
+            if (!splits.valid) return false;
+            var candidate = cleanTxn(merged, Object.create(null), accountMap(state.accounts));
+            if (!candidate) return false;
+            checkpoint();
+            replaceItem(state.txns, id, candidate);
             state.txns.sort(sortTxns);
             commit();
             return true;
         },
 
-        removeTxn: function (id) {
-            state.txns = state.txns.filter(function (t) { return t.id !== id; });
+        updateTxns: function (ids, patch) {
+            if (!Array.isArray(ids) || !patch || typeof patch !== 'object') return false;
+            var wanted = Object.create(null);
+            ids.forEach(function (id) {
+                id = text(id, '', 160);
+                if (id) wanted[id] = true;
+            });
+            var matches = state.txns.filter(function (transaction) { return wanted[transaction.id]; });
+            if (!matches.length || matches.length !== Object.keys(wanted).length) return false;
+            var accountsById = accountMap(state.accounts), candidates = [];
+            for (var i = 0; i < matches.length; i++) {
+                var merged = Object.assign({}, matches[i], patch, { id: matches[i].id });
+                if (patch.name !== undefined && !text(patch.name, '', 300)) merged.name = matches[i].name;
+                var amount = money(merged.amount);
+                if (!E.validDate(merged.date) || amount === null) return false;
+                if (patch.accountId && !accountsById[patch.accountId]) return false;
+                var splits = splitResult(merged.splits, amount);
+                if (!splits.valid) return false;
+                var candidate = cleanTxn(merged, Object.create(null), accountsById);
+                if (!candidate) return false;
+                candidates.push(candidate);
+            }
+            checkpoint();
+            candidates.forEach(function (candidate) { replaceItem(state.txns, candidate.id, candidate); });
+            state.txns.sort(sortTxns);
             commit();
+            return candidates.length;
         },
 
-        /* ---------- configuration: category kinds + CSV columns ---------- */
-        /* Override a category's kind. Passing the built-in default (or '')
-         * clears the override so the category follows the built-ins again. */
+        removeTxn: function (id) {
+            if (!findById(state.txns, id)) return false;
+            checkpoint();
+            state.txns = state.txns.filter(function (transaction) { return transaction.id !== id; });
+            commit();
+            return true;
+        },
+
+        removeTxns: function (ids) {
+            if (!Array.isArray(ids)) return 0;
+            var wanted = Object.create(null);
+            ids.forEach(function (id) {
+                id = text(id, '', 160);
+                if (id) wanted[id] = true;
+            });
+            var before = state.txns.length;
+            var next = state.txns.filter(function (transaction) { return !wanted[transaction.id]; });
+            var removed = before - next.length;
+            if (!removed) return 0;
+            checkpoint();
+            state.txns = next;
+            commit();
+            return removed;
+        },
+
+        /* ---------- budgets ---------- */
+        addBudget: function (source) {
+            source = Object.assign({ startMonth: currentMonth() }, object(source), { id: newId('b') });
+            var budget = cleanNewBudget(source);
+            if (!budget) return null;
+            checkpoint();
+            state.budgets.push(budget);
+            commit();
+            return budget;
+        },
+
+        updateBudget: function (id, patch) {
+            var budget = findById(state.budgets, id);
+            if (!budget || !patch) return false;
+            var candidate = cleanNewBudget(Object.assign({}, budget, patch, { id: id }));
+            if (!candidate) return false;
+            checkpoint();
+            replaceItem(state.budgets, id, candidate);
+            commit();
+            return true;
+        },
+
+        removeBudget: function (id) {
+            if (!findById(state.budgets, id)) return false;
+            checkpoint();
+            state.budgets = state.budgets.filter(function (budget) { return budget.id !== id; });
+            commit();
+            return true;
+        },
+
+        /* ---------- savings goals ---------- */
+        addSavingsGoal: function (source) {
+            source = Object.assign({ createdDate: today() }, object(source), { id: newId('g') });
+            var goal = cleanNewGoal(source);
+            if (!goal) return null;
+            checkpoint();
+            state.savingsGoals.push(goal);
+            commit();
+            return goal;
+        },
+
+        updateSavingsGoal: function (id, patch) {
+            var goal = findById(state.savingsGoals, id);
+            if (!goal || !patch) return false;
+            var candidate = cleanNewGoal(Object.assign({}, goal, patch, { id: id }));
+            if (!candidate) return false;
+            checkpoint();
+            replaceItem(state.savingsGoals, id, candidate);
+            commit();
+            return true;
+        },
+
+        removeSavingsGoal: function (id) {
+            if (!findById(state.savingsGoals, id)) return false;
+            checkpoint();
+            state.savingsGoals = state.savingsGoals.filter(function (goal) { return goal.id !== id; });
+            commit();
+            return true;
+        },
+
+        /* ---------- recurring transaction templates ---------- */
+        addRecurringTemplate: function (source) {
+            source = Object.assign({}, object(source), { id: newId('r') });
+            var template = cleanNewRecurring(source);
+            if (!template) return null;
+            checkpoint();
+            state.recurringTemplates.push(template);
+            commit();
+            return template;
+        },
+
+        updateRecurringTemplate: function (id, patch) {
+            var template = findById(state.recurringTemplates, id);
+            if (!template || !patch) return false;
+            var candidate = cleanNewRecurring(Object.assign({}, template, patch, { id: id }));
+            if (!candidate) return false;
+            checkpoint();
+            replaceItem(state.recurringTemplates, id, candidate);
+            commit();
+            return true;
+        },
+
+        removeRecurringTemplate: function (id) {
+            if (!findById(state.recurringTemplates, id)) return false;
+            checkpoint();
+            state.recurringTemplates = state.recurringTemplates.filter(function (template) { return template.id !== id; });
+            commit();
+            return true;
+        },
+
+        /* ---------- merchant/category rules ---------- */
+        addMerchantRule: function (source) {
+            source = Object.assign({}, object(source), { id: newId('u') });
+            var rule = cleanNewRule(source);
+            if (!rule) return null;
+            checkpoint();
+            state.merchantRules.push(rule);
+            commit();
+            return rule;
+        },
+
+        updateMerchantRule: function (id, patch) {
+            var rule = findById(state.merchantRules, id);
+            if (!rule || !patch) return false;
+            var candidate = cleanNewRule(Object.assign({}, rule, patch, { id: id }));
+            if (!candidate) return false;
+            checkpoint();
+            replaceItem(state.merchantRules, id, candidate);
+            commit();
+            return true;
+        },
+
+        removeMerchantRule: function (id) {
+            if (!findById(state.merchantRules, id)) return false;
+            checkpoint();
+            state.merchantRules = state.merchantRules.filter(function (rule) { return rule.id !== id; });
+            commit();
+            return true;
+        },
+
+        /* ---------- category kinds, CSV columns, and import ---------- */
         setCategoryKind: function (category, kind) {
             var cat = text(category, '', 200);
             if (!cat || E.KINDS.indexOf(kind) === -1) return false;
+            checkpoint();
             var folded = cat.toLowerCase();
             Object.keys(state.categoryKinds).forEach(function (existing) {
                 if (existing.toLowerCase() === folded) delete state.categoryKinds[existing];
@@ -403,38 +990,41 @@
             return true;
         },
 
-        /* Point an importer field at a differently-named CSV column.
-         * Blank restores the built-in header aliases. */
         setCsvColumn: function (field, header) {
             if (!owns(CSV_FIELDS, field)) return false;
-            var h = text(header, '', 200);
-            if (h) state.csvColumns[field] = h;
+            checkpoint();
+            var value = text(header, '', 200);
+            if (value) state.csvColumns[field] = value;
             else delete state.csvColumns[field];
             commit();
             return true;
         },
 
-        /* Merge imported rows as a multiset so exact purchases are preserved. */
         importTxns: function (txns) {
             var seenIds = Object.create(null), existingCounts = Object.create(null), incomingCounts = Object.create(null);
-            state.txns.forEach(function (t) {
-                seenIds[t.id] = true;
-                if (t.importKey) existingCounts[t.importKey] = (existingCounts[t.importKey] || 0) + 1;
+            state.txns.forEach(function (transaction) {
+                seenIds[transaction.id] = true;
+                if (transaction.importKey) existingCounts[transaction.importKey] = (existingCounts[transaction.importKey] || 0) + 1;
             });
-            var added = 0, duplicates = 0;
-            var incoming = Array.isArray(txns) ? txns : [];
-            incoming.forEach(function (t) {
-                var key = t && text(t.importKey, '', 200);
-                if (!key || !E.validDate(t.date) || finite(t.amount) === null) return;
+            var added = 0, duplicates = 0, incoming = Array.isArray(txns) ? txns : [];
+            var accepted = [];
+            incoming.forEach(function (source) {
+                var key = source && text(source.importKey, '', 200);
+                if (!key || !E.validDate(source.date) || money(source.amount) === null) return;
                 incomingCounts[key] = (incomingCounts[key] || 0) + 1;
-                if (incomingCounts[key] <= (existingCounts[key] || 0)) { duplicates++; return; }
-                var source = Object.assign({}, t, { importKey: key });
-                var copy = cleanTxn(source, seenIds);
-                if (!copy) return;
-                state.txns.push(copy);
-                added++;
+                if (incomingCounts[key] <= (existingCounts[key] || 0)) {
+                    duplicates++;
+                    return;
+                }
+                var copy = cleanTxn(Object.assign({}, source, { importKey: key }), seenIds, accountMap(state.accounts));
+                if (copy) accepted.push(copy);
             });
-            state.txns.sort(sortTxns);
+            if (accepted.length) {
+                checkpoint();
+                accepted.forEach(function (transaction) { state.txns.push(transaction); });
+                added = accepted.length;
+                state.txns.sort(sortTxns);
+            }
             var persisted = added ? commit() : !lastSaveError;
             return { added: added, duplicates: duplicates, rejected: incoming.length - added - duplicates, persisted: persisted };
         },
@@ -442,8 +1032,8 @@
         subscribe: function (fn) {
             listeners.push(fn);
             return function () {
-                var i = listeners.indexOf(fn);
-                if (i >= 0) listeners.splice(i, 1);
+                var index = listeners.indexOf(fn);
+                if (index >= 0) listeners.splice(index, 1);
             };
         }
     };

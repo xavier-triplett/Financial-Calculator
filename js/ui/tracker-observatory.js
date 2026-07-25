@@ -11,6 +11,7 @@
     var charts = { bench: null, comp: null };
     var els = {};
     var pendingUpdate = false;
+    var detailsOpen = false;
 
     function template() {
         return '' +
@@ -34,6 +35,18 @@
         var addMonth = U.el('button', { class: 'trk-btn trk-btn-primary', type: 'button', text: '+ Month' });
         addMonth.addEventListener('click', function () { TrackerStore.addMonth(); });
         els.actions.appendChild(addMonth);
+        var pointDate = U.el('input', { class: 'trk-search trk-snapshot-date', type: 'date',
+            value: new Date().toISOString().slice(0, 10), 'aria-label': 'Point-in-time snapshot date' });
+        els.actions.appendChild(pointDate);
+        var addSnapshot = U.el('button', { class: 'trk-btn', type: 'button', text: '+ Dated snapshot' });
+        addSnapshot.addEventListener('click', function () {
+            if (!E.validDate(pointDate.value)) { FireApp.toast('Choose a valid snapshot date'); return; }
+            var balances = balancesThrough(TrackerStore.get(), pointDate.value);
+            if (TrackerStore.addDatedSnapshot(pointDate.value, balances)) {
+                FireApp.toast('Dated snapshot added');
+            }
+        });
+        els.actions.appendChild(addSnapshot);
         var clear = U.el('button', { class: 'trk-btn trk-btn-danger', type: 'button', text: 'Clear net worth' });
         clear.addEventListener('click', function () {
             FireApp.confirm('Clear all net worth accounts and monthly balances? Cashbook data will be kept.', function () {
@@ -87,13 +100,14 @@
         var note = 'UAW ' + U.compact(bench.uaw) + ' · AAW ' + U.compact(bench.aaw) + ' · PAW ' + U.compact(bench.paw);
         if (nw >= bench.paw) return { label: 'PAW', cls: 'pos', note: 'Prodigious accumulator — above 2× expected. ' + note };
         if (nw >= bench.aaw) return { label: 'Above AAW', cls: 'pos', note: 'Ahead of the average accumulator. ' + note };
-        if (nw >= bench.uaw) return { label: 'Below AAW', cls: '', note: 'Between under- and average accumulator. ' + note };
-        return { label: 'UAW', cls: 'neg', note: 'Under-accumulator — below half of expected. ' + note };
+        if (nw >= bench.uaw) return { label: 'Building', cls: '', note: 'Between the lower and average reference lines. ' + note };
+        return { label: 'Early stage', cls: 'neg', note: 'Below the lower reference line today. This is a benchmark, not a grade. ' + note };
     }
 
     function kpisHTML(state, s) {
         var n = s.months.length;
-        var nw = n ? s.netWorth[n - 1] : 0;
+        var latestBuckets = E.buckets(state);
+        var nw = n ? s.netWorth[n - 1] : latestBuckets ? latestBuckets.netWorth : 0;
         var priorKey = n ? E.previousMonth(s.months[n - 1]) : null;
         var priorIndex = priorKey ? s.months.indexOf(priorKey) : -1;
         var d1 = priorIndex >= 0 ? nw - s.netWorth[priorIndex] : null;
@@ -103,10 +117,11 @@
         var ctx = K.planContext();
         // Market buckets vs a today's-dollar target: cash is excluded (the
         // plan holds it inert) and both sides share today's units.
-        var market = n ? s.byGroup.taxFree[n - 1] + s.byGroup.taxDeferred[n - 1] + s.byGroup.afterTax[n - 1] : 0;
+        var market = latestBuckets ? K.spendableInvested(state) : 0;
         var target = K.fiTargetToday();
         var fiPct = n && target > 0 ? (market / target) * 100 : null;
-        var ai = n ? E.ageIncomeAt(state, s.months[n - 1], K.sharedProfile()) : null;
+        var aiMonth = n ? s.months[n - 1] : latestBuckets ? latestBuckets.month : null;
+        var ai = aiMonth ? E.ageIncomeAt(state, aiMonth, K.sharedProfile()) : null;
         var verdict = wealthVerdict(nw, ai && E.benchmarks(ai.age, ai.income));
         var nwNotes = [];
         if (d1 !== null) nwNotes.push((d1 >= 0 ? '+' : '') + U.compact(d1) + ' this month');
@@ -117,14 +132,16 @@
 
         var beginner = FireApp.mode() === 'beginner';
         var html = '<section class="trk-kpis' + (beginner ? ' trk-kpis-3' : '') + '" data-el="kpis-inner">';
-        html += kpi('Net worth', n ? U.compact(nw) : '—', nwNotes.join(' · '),
+        html += kpi('Net worth', latestBuckets ? U.compact(nw) : '—',
+            n ? nwNotes.join(' · ') : latestBuckets ? 'as of ' + latestBuckets.asOfDate : 'no snapshots yet',
             d1 !== null && d1 < 0 ? 'neg' : '');
-        html += kpi('Investable', n ? U.compact(s.investable[n - 1]) : '—',
-            n ? 'against ' + U.compact(s.liabilities[n - 1]) + ' of liabilities' : 'no months yet');
+        html += kpi('Investable', latestBuckets ? U.compact(latestBuckets.investable) : '—',
+            n ? 'against ' + U.compact(s.liabilities[n - 1]) + ' of liabilities' :
+                latestBuckets ? 'latest point-in-time snapshot' : 'no snapshots yet');
         if (!beginner) html += kpi('Accumulator', verdict.label, verdict.note, verdict.cls);
         html += kpi('Progress to FI', fiPct === null ? '—' : fiPct.toFixed(1) + '%',
             fiPct === null ? 'the planner sets the target' :
-                U.compact(market) + ' invested of ' + U.compact(target) + ' in today&rsquo;s dollars · plan retires at ' + ctx.retireAge);
+                U.compact(market) + ' spendable invested of ' + U.compact(target) + ' in today&rsquo;s dollars · plan retires at ' + ctx.retireAge);
         return html + '</section>';
     }
 
@@ -142,7 +159,7 @@
         }
 
         // While typing in the grid, refresh derived cells and charts in place.
-        var focused = editingInput(els.body.querySelector('[data-el="grid"]'));
+        var focused = editingInput(els.body);
         if (focused) {
             pendingUpdate = true;
             syncDerived(state);
@@ -171,18 +188,131 @@
                 '<aside class="trk-obs-side"><section class="trk-panel"><div class="trk-panel-head"><h2>Benchmark profile</h2></div>' +
                 '<p class="trk-kpi-note" style="margin:0" data-el="profileSummary">' + profileSummary(state) + '</p></section>' +
                 '<section class="trk-panel trk-bridge" data-el="bridge"></section></aside></div>';
-        els.body.innerHTML =
-            '<div data-el="kpis">' + kpisHTML(state, s) + '</div>' +
-            benchmarkPanel + chartsArea +
-            '<section class="trk-panel">' +
+        var monthlyGrid = s.months.length
+            ? '<section class="trk-panel">' +
                 '<div class="trk-panel-head"><h2>The months</h2>' +
                 '<span class="trk-panel-note">Edit any cell &middot; new months carry the prior balance forward</span></div>' +
                 '<div class="trk-gridwrap" data-el="grid">' + gridHTML(state, s) + '</div>' +
-            '</section>';
+            '</section>'
+            : '<section class="trk-panel"><div class="trk-panel-head"><h2>Monthly history</h2></div>' +
+                '<p class="trk-kpi-note">Use + Month to start a regular monthly series. Dated snapshots still feed your current balances and plan.</p></section>';
+        els.body.innerHTML =
+            '<div data-el="kpis">' + kpisHTML(state, s) + '</div>' +
+            benchmarkPanel + chartsArea +
+            datedSnapshotsHTML(state) +
+            accountDetailsHTML(state) +
+            monthlyGrid;
 
         wireGrid();
+        wireDatedSnapshots();
+        wireAccountDetails();
         K.renderBridge(els.body.querySelector('[data-el="bridge"]'), state, { scope: 'networth', fi: true });
         makeCharts(state, s);
+    }
+
+    function monthEnd(month) {
+        var parts = month.split('-').map(Number);
+        return new Date(Date.UTC(parts[0], parts[1], 0)).toISOString().slice(0, 10);
+    }
+
+    function balancesThrough(state, date) {
+        var events = [];
+        Object.keys(state.snapshots || {}).forEach(function (key) {
+            var asOf = monthEnd(key);
+            if (asOf <= date) events.push({ date: asOf, balances: state.snapshots[key] });
+        });
+        Object.keys(state.datedSnapshots || {}).forEach(function (key) {
+            if (key <= date) events.push({ date: key, balances: state.datedSnapshots[key] });
+        });
+        events.sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+        var out = {};
+        events.forEach(function (event) {
+            Object.keys(event.balances || {}).forEach(function (id) { out[id] = event.balances[id]; });
+        });
+        return out;
+    }
+
+    function datedSnapshotsHTML(state) {
+        var dates = Object.keys(state.datedSnapshots || {}).sort();
+        if (!dates.length) return '';
+        var head = '<tr><th class="trk-sticky" scope="col">Account</th>' + dates.map(function (date) {
+            return '<th class="num" scope="col">' + escapeAttr(date) +
+                '<button class="trk-x" type="button" data-del-date="' + escapeAttr(date) + '" aria-label="Remove snapshot ' + escapeAttr(date) + '">×</button></th>';
+        }).join('') + '</tr>';
+        var rows = state.accounts.map(function (account) {
+            return '<tr><th class="trk-sticky" scope="row">' + escapeAttr(account.name) + '</th>' +
+                dates.map(function (date) {
+                    var value = state.datedSnapshots[date][account.id];
+                    return '<td class="num"><input class="trk-cell" type="text" inputmode="decimal" value="' +
+                        (value === undefined ? '' : Math.round(value)) + '" data-date="' + escapeAttr(date) +
+                        '" data-date-account="' + escapeAttr(account.id) + '" aria-label="' +
+                        escapeAttr(account.name + ', ' + date) + '"></td>';
+                }).join('') + '</tr>';
+        }).join('');
+        return '<section class="trk-panel"><div class="trk-panel-head"><h2>Point-in-time snapshots</h2>' +
+            '<span class="trk-panel-note">any date &middot; partial snapshots carry the last known balances</span></div>' +
+            '<div class="trk-gridwrap" data-el="datedGrid"><table class="trk-grid"><caption class="trk-sr-only">Dated account balance snapshots</caption>' +
+                '<thead>' + head + '</thead><tbody>' + rows + '</tbody></table></div></section>';
+    }
+
+    function accountDetailsHTML(state) {
+        if (!state.accounts.length) return '';
+        var rows = state.accounts.map(function (account) {
+            var liability = account.group === 'liability';
+            return '<tr><td><strong>' + escapeAttr(account.name) + '</strong><small>' +
+                escapeAttr(E.GROUP_BY_ID[account.group].label) + '</small></td>' +
+                '<td><input class="trk-search" data-account-detail="' + escapeAttr(account.id) + '" data-account-field="institution" value="' +
+                    escapeAttr(account.institution || '') + '" placeholder="Institution" aria-label="Institution for ' + escapeAttr(account.name) + '"></td>' +
+                '<td><input class="trk-search" data-account-detail="' + escapeAttr(account.id) + '" data-account-field="currency" value="' +
+                    escapeAttr(account.currency || 'USD') + '" aria-label="Currency for ' + escapeAttr(account.name) + '"></td>' +
+                '<td>' + (liability
+                    ? '<input class="trk-search" inputmode="decimal" data-account-detail="' + escapeAttr(account.id) +
+                        '" data-account-field="apr" value="' + (account.apr || 0) + '" aria-label="APR for ' + escapeAttr(account.name) + '">'
+                    : '<span class="dim">—</span>') + '</td></tr>';
+        }).join('');
+        return '<details class="trk-panel trk-account-details"' + (detailsOpen ? ' open' : '') + '><summary>Account details</summary>' +
+            '<p class="trk-kpi-note">Institution and currency travel with each account. Liability APR also powers payoff estimates on Goals.</p>' +
+            '<div class="trk-regwrap"><table class="trk-register"><caption class="trk-sr-only">Canonical account details</caption>' +
+                '<thead><tr><th>Account</th><th>Institution</th><th>Currency</th><th>APR %</th></tr></thead><tbody>' +
+                rows + '</tbody></table></div></details>';
+    }
+
+    function wireDatedSnapshots() {
+        var grid = els.body.querySelector('[data-el="datedGrid"]');
+        if (!grid) return;
+        grid.querySelectorAll('.trk-cell').forEach(function (input) { U.bindCurrency(input, { prefix: true }); });
+        grid.addEventListener('change', function (event) {
+            var input = event.target;
+            if (!input.dataset.date) return;
+            var value = U.parseNum(input.value);
+            if (value === null && !input.value.trim()) value = 0;
+            if (!TrackerStore.setDatedBalance(input.dataset.date, input.dataset.dateAccount, value)) {
+                FireApp.toast('Enter a valid balance');
+            }
+        });
+        grid.addEventListener('click', function (event) {
+            if (!event.target.dataset.delDate) return;
+            var date = event.target.dataset.delDate;
+            FireApp.confirm('Remove the snapshot from ' + date + '?', function () {
+                TrackerStore.removeDatedSnapshot(date);
+                FireApp.toast('Dated snapshot removed');
+            });
+        });
+    }
+
+    function wireAccountDetails() {
+        var details = els.body.querySelector('.trk-account-details');
+        if (!details) return;
+        details.addEventListener('toggle', function () { detailsOpen = details.open; });
+        details.addEventListener('change', function (event) {
+            var input = event.target;
+            if (!input.dataset.accountDetail) return;
+            var patch = {};
+            patch[input.dataset.accountField] = input.dataset.accountField === 'apr' ? U.parseNum(input.value) : input.value;
+            if (!TrackerStore.updateAccount(input.dataset.accountDetail, patch)) {
+                FireApp.toast('Enter valid account details');
+            }
+        });
     }
 
     /* ---------------- editable months grid ---------------- */
@@ -237,7 +367,7 @@
         var profile = K.sharedProfile();
         if (FireApp.mode() === 'expert') {
             body += '<tr class="trk-incomerow"><th class="trk-sticky" scope="row">Annual income' +
-            ' <span class="ff-hint" tabindex="0" role="img" data-tooltip="Gross annual income used for the PAW / AAW / UAW benchmarks. Type it in the month it changes; blank months inherit from the last recorded month, or the Profile tab.">i</span></th>';
+            ' <button class="ff-hint" type="button" data-tooltip="Gross annual income used for the PAW / AAW / UAW benchmarks. Type it in the month it changes; blank months inherit from the last recorded month, or the Profile tab." aria-label="About benchmark income">i</button></th>';
         months.forEach(function (mo) {
             var rec = (state.ageIncome || {})[mo];
             var eff = E.ageIncomeAt(state, mo, profile);
@@ -260,6 +390,7 @@
 
     function wireGrid() {
         var grid = els.body.querySelector('[data-el="grid"]');
+        if (!grid) return;
         grid.addEventListener('change', function (e) {
             var t = e.target;
             if (t.dataset.month) {

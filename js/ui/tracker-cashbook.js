@@ -14,6 +14,7 @@
     var selMonth = null;
     var filter = { q: '', cat: '' };
     var editingId = null;
+    var selectedIds = {};
     var datePicker = null;
     var pendingUpdate = false;
     var searchTimer = null;
@@ -58,6 +59,7 @@
         selMonth = null;
         filter = { q: '', cat: '' };
         editingId = null;
+        selectedIds = {};
         pendingUpdate = false;
         els.body.addEventListener('focusout', function () {
             if (!pendingUpdate) return;
@@ -203,7 +205,7 @@
                 (saved >= 0 ? 'Surplus' : 'Deficit') + '</div>';
 
         var incomeHint = agg.estIncome
-            ? ' <span class="ff-hint" tabindex="0" role="img" data-tooltip="No income transactions this month, so this is 1/12 of your estimated take-home: gross annual income (the Net Worth grid&rsquo;s income row or the Profile tab) less the effective income tax set on the Profile tab. Logging even one money-in transaction switches the whole month to actuals only.">i</span>'
+            ? ' <button class="ff-hint" type="button" data-tooltip="No income transactions this month, so this is 1/12 of your estimated take-home: gross annual income (the Net Worth grid&rsquo;s income row or the Profile tab) less the effective income tax set on the Profile tab. Logging even one money-in transaction switches the whole month to actuals only." aria-label="About estimated income">i</button>'
             : '';
         return '<div class="trk-panel-head"><h2>' + E.monthLabel(selMonth) + '</h2>' +
             '<div class="trk-st-headtools">' + stampHTML +
@@ -227,7 +229,7 @@
             (agg.saving > 0
                 ? '<div class="trk-st-verdict trk-st-saving">' +
                     '<span>Marked as savings' +
-                        ' <span class="ff-hint" tabindex="0" role="img" data-tooltip="Transactions in savings-kind categories (Savings, Investments, Retirement Contributions, or any category you mark as Savings on the Categories tab). The plan bridge uses marked savings for those months and surplus for unmarked months.">i</span>' +
+                        ' <button class="ff-hint" type="button" data-tooltip="Transactions in savings-kind categories (Savings, Investments, Retirement Contributions, or any category you mark as Savings on the Rules tab). The plan bridge uses marked savings for those months and surplus for unmarked months." aria-label="About marked savings">i</button>' +
                     '</span>' +
                     '<strong class="pos">' + U.money(agg.saving) +
                     (agg.income > 0 ? ' <em>(' + ((agg.saving / agg.income) * 100).toFixed(0) + '% of income)</em>' : '') + '</strong>' +
@@ -275,6 +277,32 @@
             (t ? escapeAttr(t.category) : '') + '">';
     }
 
+    function accountControl(t, state) {
+        var linked = t && t.accountId || '';
+        var blank = t && t.account ? 'Unlinked · ' + t.account : 'No linked account';
+        return '<select data-f="accountId" aria-label="Linked account">' +
+            '<option value="">' + escapeAttr(blank) + '</option>' +
+            state.accounts.map(function (account) {
+                return '<option value="' + escapeAttr(account.id) + '"' + (linked === account.id ? ' selected' : '') + '>' +
+                    escapeAttr(account.name) + '</option>';
+            }).join('') + '</select>';
+    }
+
+    function splitRows(splits, total) {
+        var list = splits && splits.length ? splits : [
+            { category: '', amount: total ? Math.round(total * 100 / 2) / 100 : '' },
+            { category: '', amount: total ? Math.round((total - total / 2) * 100) / 100 : '' }
+        ];
+        return list.map(function (split, index) {
+            return '<div class="trk-split-row">' +
+                '<input type="text" list="trk-cats" data-split-category aria-label="Split ' + (index + 1) + ' category" placeholder="Category" value="' + escapeAttr(split.category || '') + '">' +
+                '<input type="text" inputmode="decimal" data-split-amount aria-label="Split ' + (index + 1) + ' amount" placeholder="Amount" value="' + escapeAttr(split.amount) + '">' +
+                '<input type="text" data-split-note aria-label="Split ' + (index + 1) + ' note" placeholder="Note (optional)" value="' + escapeAttr(split.note || '') + '">' +
+                '<button class="trk-x trk-x-visible" type="button" data-act="remove-split" aria-label="Remove split">×</button>' +
+            '</div>';
+        }).join('');
+    }
+
     function formHTML(state) {
         var t = editingId ? state.txns.filter(function (t) { return t.id === editingId; })[0] : null;
         if (editingId && !t) editingId = null;
@@ -292,15 +320,35 @@
             '<input type="text" data-f="name" aria-label="Merchant or description" placeholder="Merchant" value="' + (t ? escapeAttr(t.name) : '') + '">' +
             '<input type="text" inputmode="decimal" data-f="amount" aria-label="Transaction amount" placeholder="Amount" value="' + (t ? t.amount : '') + '">' +
             '<span class="trk-catwrap" data-el="catwrap">' + catControl(dir, t, state) + '</span>' +
-            '<input type="text" data-f="account" aria-label="Account" placeholder="Account" value="' + (t ? escapeAttr(t.account || '') : '') + '">' +
+            accountControl(t, state) +
             '<button class="trk-btn trk-btn-primary" type="button" data-act="save">' + (t ? 'Save' : 'Add') + '</button>' +
-            (t ? '<button class="trk-btn" type="button" data-act="cancel">Cancel</button>' : '');
+            '<button class="trk-btn" type="button" data-act="toggle-split">' + (t && t.splits ? 'Remove split' : 'Split') + '</button>' +
+            (t ? '<button class="trk-btn" type="button" data-act="cancel">Cancel</button>' : '') +
+            '<div class="trk-splits" data-el="splits"' + (t && t.splits ? '' : ' hidden') + '>' +
+                '<div class="trk-split-head"><span>Split this transaction across categories</span>' +
+                    '<button class="trk-mini" type="button" data-act="add-split">+ line</button></div>' +
+                '<div data-el="splitRows">' + splitRows(t && t.splits, t && t.amount) + '</div>' +
+            '</div>';
     }
 
     function readForm() {
         var out = {};
         els.body.querySelectorAll('[data-f]').forEach(function (i) { out[i.dataset.f] = i.value; });
         out.amount = U.parseNum(out.amount); // "$18.50" -> 18.5, empty -> null
+        var account = els.body.querySelector('[data-f="accountId"]');
+        if (account && account.value) out.account = account.options[account.selectedIndex].text;
+        var splitHost = els.body.querySelector('[data-el="splits"]');
+        if (splitHost && !splitHost.hidden) {
+            out.splits = [];
+            splitHost.querySelectorAll('.trk-split-row').forEach(function (row) {
+                var amount = U.parseNum(row.querySelector('[data-split-amount]').value);
+                out.splits.push({
+                    category: row.querySelector('[data-split-category]').value,
+                    amount: amount,
+                    note: row.querySelector('[data-split-note]').value
+                });
+            });
+        }
         return out;
     }
 
@@ -317,7 +365,18 @@
 
         if (!list.length) { host.innerHTML = '<p class="trk-kpi-note">No transactions match.</p>'; return; }
 
-        var html = '<table class="trk-register"><caption class="trk-sr-only">Transactions for ' + escapeAttr(E.monthLabel(selMonth)) + '</caption><thead><tr>' +
+        Object.keys(selectedIds).forEach(function (id) {
+            if (!state.txns.some(function (transaction) { return transaction.id === id; })) delete selectedIds[id];
+        });
+        var selectedCount = list.filter(function (transaction) { return selectedIds[transaction.id]; }).length;
+        var html = '<div class="trk-bulk"' + (selectedCount ? '' : ' hidden') + '>' +
+            '<strong>' + selectedCount + ' selected</strong>' +
+            '<input class="trk-search" type="text" list="trk-cats" placeholder="New category" aria-label="New category for selected transactions" data-el="bulkCategory">' +
+            '<button class="trk-btn" type="button" data-act="bulk-category">Apply category</button>' +
+            '<button class="trk-btn trk-btn-danger" type="button" data-act="bulk-delete">Delete selected</button></div>' +
+            '<table class="trk-register"><caption class="trk-sr-only">Transactions for ' + escapeAttr(E.monthLabel(selMonth)) + '</caption><thead><tr>' +
+            '<th scope="col"><input type="checkbox" data-select-all aria-label="Select all visible transactions"' +
+                (selectedCount === list.length ? ' checked' : '') + '></th>' +
             '<th scope="col">Date</th><th scope="col">Merchant</th><th scope="col">Category</th><th scope="col">Account</th><th class="num" scope="col">Amount</th><th scope="col">Actions</th>' +
             '</tr></thead><tbody>';
         list.forEach(function (t) {
@@ -326,6 +385,7 @@
             // Expenses: negative amounts are refunds, shown green.
             var amtCls = kind === 'income' ? (t.amount >= 0 ? 'pos' : 'neg') : (t.amount < 0 ? 'pos' : '');
             html += '<tr>' +
+                '<td><input type="checkbox" data-select-txn="' + escapeAttr(t.id) + '" aria-label="Select ' + escapeAttr(t.name) + '"' + (selectedIds[t.id] ? ' checked' : '') + '></td>' +
                 '<td class="num dim">' + t.date.slice(5) + '</td>' +
                 '<td>' + escapeAttr(t.name) + '</td>' +
                 '<td><span class="trk-badge trk-badge-' + kind + '">' + escapeAttr(t.category) + '</span></td>' +
@@ -362,6 +422,9 @@
     function wire(state) {
         var amt = els.body.querySelector('[data-f="amount"]');
         if (amt) U.bindCurrency(amt, { prefix: true, cents: true });
+        els.body.querySelectorAll('[data-split-amount]').forEach(function (input) {
+            U.bindCurrency(input, { prefix: true, cents: true });
+        });
 
         var dateEl = els.body.querySelector('[data-f="date"]');
         if (dateEl) {
@@ -377,6 +440,7 @@
             selMonth = btn.dataset.month;
             filter.cat = '';
             editingId = null;
+            selectedIds = {};
             update(TrackerStore.get());
         });
         var q = els.body.querySelector('[data-el="q"]');
@@ -386,11 +450,13 @@
                 searchTimer = null;
                 if (!els.body || !document.contains(q)) return;
                 filter.q = q.value;
+                selectedIds = {};
                 renderRegister(TrackerStore.get());
             }, 150);
         });
         els.body.querySelector('[data-el="cat"]').addEventListener('change', function (e) {
             filter.cat = e.target.value;
+            selectedIds = {};
             renderRegister(TrackerStore.get());
         });
 
@@ -409,6 +475,15 @@
                 if (!E.validDate(f.date) || f.amount === null || !Number.isFinite(f.amount)) {
                     FireApp.toast('Enter a valid date and amount');
                     return;
+                }
+                if (f.splits) {
+                    var splitTotal = f.splits.reduce(function (sum, split) { return sum + Number(split.amount || 0); }, 0);
+                    if (f.splits.length < 2 || f.splits.some(function (split) {
+                        return !split.category.trim() || !Number.isFinite(split.amount);
+                    }) || Math.abs(splitTotal - f.amount) > 0.009) {
+                        FireApp.toast('Split lines need categories and must add up to the transaction amount');
+                        return;
+                    }
                 }
                 if (f.dir === 'out' && E.categoryKind(f.category) === 'income') {
                     FireApp.toast('Choose Money in for an income category');
@@ -442,6 +517,23 @@
             } else if (e.target.dataset.act === 'cancel') {
                 editingId = null;
                 update(TrackerStore.get());
+            } else if (e.target.dataset.act === 'toggle-split') {
+                var splitHost = els.body.querySelector('[data-el="splits"]');
+                splitHost.hidden = !splitHost.hidden;
+                e.target.textContent = splitHost.hidden ? 'Split' : 'Remove split';
+            } else if (e.target.dataset.act === 'add-split') {
+                var rows = els.body.querySelector('[data-el="splitRows"]');
+                rows.insertAdjacentHTML('beforeend', splitRows([{ category: '', amount: '', note: '' }], 0));
+                var input = rows.lastElementChild.querySelector('[data-split-amount]');
+                U.bindCurrency(input, { prefix: true, cents: true });
+                rows.lastElementChild.querySelector('[data-split-category]').focus();
+            } else if (e.target.dataset.act === 'remove-split') {
+                var allRows = els.body.querySelectorAll('.trk-split-row');
+                if (allRows.length <= 2) {
+                    FireApp.toast('A split needs at least two lines');
+                } else {
+                    e.target.closest('.trk-split-row').remove();
+                }
             }
         });
 
@@ -460,7 +552,21 @@
 
         els.body.querySelector('[data-el="register"]').addEventListener('click', function (e) {
             var t = e.target;
-            if (t.dataset.edit) {
+            if (t.dataset.act === 'bulk-category') {
+                var category = els.body.querySelector('[data-el="bulkCategory"]').value.trim();
+                var ids = Object.keys(selectedIds).filter(function (id) { return selectedIds[id]; });
+                if (!category) { FireApp.toast('Enter a category first'); return; }
+                selectedIds = {};
+                var changed = TrackerStore.updateTxns(ids, { category: category, splits: null });
+                FireApp.toast('Updated ' + changed + ' transaction' + (changed === 1 ? '' : 's'));
+            } else if (t.dataset.act === 'bulk-delete') {
+                var removeIds = Object.keys(selectedIds).filter(function (id) { return selectedIds[id]; });
+                FireApp.confirm('Delete ' + removeIds.length + ' selected transaction' + (removeIds.length === 1 ? '' : 's') + '?', function () {
+                    selectedIds = {};
+                    var removed = TrackerStore.removeTxns(removeIds);
+                    FireApp.toast('Deleted ' + removed + ' transaction' + (removed === 1 ? '' : 's'));
+                });
+            } else if (t.dataset.edit) {
                 editingId = t.dataset.edit;
                 update(TrackerStore.get());
                 els.body.querySelector('[data-f="name"]').focus();
@@ -469,6 +575,17 @@
                     TrackerStore.removeTxn(t.dataset.delTxn);
                     FireApp.toast('Transaction deleted');
                 });
+            }
+        });
+        els.body.querySelector('[data-el="register"]').addEventListener('change', function (e) {
+            if (e.target.dataset.selectTxn) {
+                selectedIds[e.target.dataset.selectTxn] = e.target.checked;
+                renderRegister(TrackerStore.get());
+            } else if (e.target.hasAttribute('data-select-all')) {
+                els.body.querySelectorAll('[data-select-txn]').forEach(function (checkbox) {
+                    selectedIds[checkbox.dataset.selectTxn] = e.target.checked;
+                });
+                renderRegister(TrackerStore.get());
             }
         });
     }

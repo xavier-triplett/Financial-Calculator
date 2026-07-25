@@ -354,5 +354,209 @@ failStorage = false;
 S.reset();
 check('successful persistence clears error', S.persistenceError() === null);
 
+// ---------- tracker v3 schema + current-v2 migration ----------
+delete savedItems.trackerData_v3;
+savedItems.trackerData_v2 = JSON.stringify({
+    accounts: [{ id: 'legacy-cash', name: 'Legacy cash', group: 'cash' }],
+    snapshots: { '2025-01': { 'legacy-cash': 1250 } },
+    ageIncome: {},
+    txns: [{ id: 'legacy-txn', date: '2025-01-02', name: 'Legacy coffee', amount: 5, category: 'Coffee', account: 'Checking' }],
+    cashMonths: [],
+    categoryKinds: {},
+    csvColumns: {}
+});
+S.init();
+check('v2 local data migrates to schema v3', S.get().schemaVersion === 3 && !!savedItems.trackerData_v3);
+check('migration preserves balances and transactions',
+    S.get().snapshots['2025-01']['legacy-cash'] === 1250 && S.get().txns[0].id === 'legacy-txn');
+check('migration canonicalizes account defaults',
+    S.get().accounts[0].currency === 'USD' && S.get().accounts[0].institution === '' &&
+    S.get().accounts[0].freshness.source === 'manual');
+check('v3 state carries durable metadata',
+    !!S.metadata().createdAt && !!S.metadata().updatedAt);
+
+// ---------- canonical accounts + arbitrary dated snapshots ----------
+S.reset();
+const linkedCash = S.addAccount('Everyday checking', 'cash', {
+    institution: 'Example Credit Union',
+    currency: 'usd',
+    freshness: { source: 'manual', asOf: '2026-01-31' }
+});
+const linkedDebt = S.addAccount('Rewards card', 'liability', {
+    institution: 'Example Bank',
+    currency: 'USD',
+    apr: 19.99,
+    minimumPayment: 75,
+    dueDay: 17
+});
+check('canonical account details are retained',
+    linkedCash.institution === 'Example Credit Union' && linkedCash.currency === 'USD' &&
+    linkedCash.freshness.asOf === '2026-01-31');
+check('liability terms are retained',
+    linkedDebt.apr === 19.99 && linkedDebt.minimumPayment === 75 && linkedDebt.dueDay === 17);
+check('invalid account details are rejected',
+    S.updateAccount(linkedDebt.id, { apr: 150 }) === false &&
+    S.get().accounts.find(a => a.id === linkedDebt.id).apr === 19.99);
+check('arbitrary dated snapshot added',
+    S.addDatedSnapshot('2026-02-15', { [linkedCash.id]: 1500, [linkedDebt.id]: 400 }) === '2026-02-15');
+check('arbitrary dated balance can be patched',
+    S.setDatedBalance('2026-03-01', linkedCash.id, 1600) === true &&
+    S.get().datedSnapshots['2026-03-01'][linkedCash.id] === 1600);
+const latestLinked = T.latestBalances(S.get());
+check('partial dated snapshots carry earlier balances',
+    latestLinked.asOfDate === '2026-03-01' && latestLinked.balances[linkedCash.id] === 1600 &&
+    latestLinked.balances[linkedDebt.id] === 400);
+check('latest arbitrary snapshot feeds planner buckets',
+    T.buckets(S.get()).cash === 1600 && T.buckets(S.get()).netWorth === 1200);
+
+// ---------- linked and split transactions + atomic bulk operations ----------
+const splitTxn = S.addTxn({
+    date: '2026-03-02',
+    name: 'Supermarket',
+    amount: 100,
+    category: 'Split',
+    accountId: linkedCash.id,
+    splits: [
+        { category: 'Groceries', amount: 70 },
+        { category: 'Household', amount: 30, note: 'Cleaning supplies' }
+    ]
+});
+check('transaction links canonical account', splitTxn.accountId === linkedCash.id);
+check('valid transaction splits are retained', splitTxn.splits.length === 2 && splitTxn.splits[1].note === 'Cleaning supplies');
+check('split totals must equal transaction amount',
+    S.addTxn({ date: '2026-03-03', amount: 10, splits: [{ category: 'Coffee', amount: 9 }] }) === null);
+const splitAgg = T.spendByMonth([splitTxn])['2026-03'];
+check('split categories drive expense aggregation',
+    splitAgg.expenses === 100 && splitAgg.byCategory.Groceries === 70 && splitAgg.byCategory.Household === 30);
+
+const bulkOne = S.addTxn({ date: '2026-03-04', name: 'Cafe A', amount: 5, category: 'Coffee', accountId: linkedCash.id });
+const bulkTwo = S.addTxn({ date: '2026-03-05', name: 'Cafe B', amount: 6, category: 'Coffee', accountId: linkedCash.id });
+const depthBeforeBulk = S.undoDepth();
+check('bulk transaction update is atomic',
+    S.updateTxns([bulkOne.id, bulkTwo.id], { category: 'Dining & Drinks' }) === 2 &&
+    S.get().txns.filter(t => t.category === 'Dining & Drinks').length === 2 &&
+    S.undoDepth() === depthBeforeBulk + 1);
+check('one undo reverts an entire bulk update',
+    S.undo() === true && S.get().txns.filter(t => t.category === 'Coffee').length === 2);
+check('bulk transaction removal is atomic',
+    S.removeTxns([bulkOne.id, bulkTwo.id]) === 2 && !S.get().txns.find(t => t.id === bulkOne.id));
+check('one undo restores an entire bulk removal',
+    S.undo() === true && !!S.get().txns.find(t => t.id === bulkOne.id) && !!S.get().txns.find(t => t.id === bulkTwo.id));
+
+// ---------- budgets, goals, recurring templates, and merchant rules ----------
+const groceryBudget = S.addBudget({
+    name: 'Groceries',
+    category: 'Groceries',
+    monthlyTarget: 500,
+    rollover: true,
+    startMonth: '2026-01'
+});
+check('budget CRUD stores monthly target and rollover',
+    !!groceryBudget && groceryBudget.monthlyTarget === 500 && groceryBudget.rollover === true &&
+    S.updateBudget(groceryBudget.id, { monthlyTarget: 550 }) === true);
+const goal = S.addSavingsGoal({
+    name: 'Emergency fund',
+    targetAmount: 15000,
+    currentAmount: 3000,
+    targetDate: '2027-12-31',
+    accountId: linkedCash.id
+});
+check('savings goal links to an account',
+    !!goal && goal.accountId === linkedCash.id && S.updateSavingsGoal(goal.id, { currentAmount: 3500 }) === true);
+const recurring = S.addRecurringTemplate({
+    name: 'Rent',
+    amount: 1800,
+    category: 'Rent',
+    accountId: linkedCash.id,
+    frequency: 'monthly',
+    startDate: '2026-04-01'
+});
+check('recurring template is normalized',
+    !!recurring && recurring.nextDate === '2026-04-01' && recurring.active === true);
+const merchantRule = S.addMerchantRule({
+    match: 'SAFEWAY',
+    mode: 'startsWith',
+    category: 'Groceries',
+    priority: 20,
+    accountId: linkedCash.id
+});
+check('merchant/category rule is retained and matched',
+    !!merchantRule && merchantRule.mode === 'startsWith' &&
+    T.matchMerchantRule({ name: 'Safeway #123', accountId: linkedCash.id }, S.get().merchantRules).id === merchantRule.id);
+
+const rolloverResult = T.budgetRollover(
+    { id: 'food', category: 'Groceries', monthlyTarget: 500, rollover: true, startMonth: '2025-01' },
+    [
+        { date: '2025-01-05', amount: 400, category: 'Groceries' },
+        { date: '2025-02-05', amount: 650, category: 'Groceries' }
+    ],
+    '2025-02'
+);
+check('budget rollover carries underspend then records overspend',
+    rolloverResult.carryIn === 100 && rolloverResult.available === 600 &&
+    rolloverResult.actual === 650 && rolloverResult.remaining === -50);
+const budgetSummary = T.budgetVsActual({
+    budgets: [{ id: 'food', category: 'Groceries', monthlyTarget: 500, rollover: false, startMonth: '2025-01' }],
+    txns: [{ date: '2025-02-05', amount: 450, category: 'Groceries' }]
+}, '2025-02');
+check('budget-vs-actual totals are summarized',
+    budgetSummary.totalTarget === 500 && budgetSummary.totalActual === 450 && budgetSummary.totalRemaining === 50);
+
+// ---------- debt payoff, freshness, and plan-vs-actual ----------
+const zeroInterestPayoff = T.debtPayoffEstimate(
+    { balance: 1200, apr: 0, minimumPayment: 100 },
+    0,
+    '2026-01-01'
+);
+check('debt payoff estimates months and interest',
+    zeroInterestPayoff.payoffPossible && zeroInterestPayoff.months === 12 &&
+    zeroInterestPayoff.totalInterest === 0 && zeroInterestPayoff.payoffDate === '2027-01-01');
+const negativeAmortization = T.debtPayoffEstimate({ balance: 10000, apr: 24, minimumPayment: 100 }, 0);
+check('debt payoff detects negative amortization',
+    negativeAmortization.payoffPossible === false && negativeAmortization.reason === 'negative-amortization');
+
+const freshness = T.dataFreshness(S.get(), { asOfDate: '2026-04-20', staleAfterDays: 30 });
+check('freshness reports per-account stale status',
+    freshness.accounts.find(a => a.id === linkedCash.id).status === 'stale' && freshness.stale >= 1);
+
+const actualState = {
+    accounts: [
+        { id: 'cash', name: 'Cash', group: 'cash' },
+        { id: 'roth', name: 'Roth', group: 'taxFree' },
+        { id: 'deferred', name: '401k', group: 'taxDeferred' },
+        { id: 'brokerage', name: 'Brokerage', group: 'afterTax' }
+    ],
+    snapshots: {
+        '2026-03': { cash: 1000, roth: 2000, deferred: 3000, brokerage: 4000 }
+    },
+    datedSnapshots: {},
+    txns: [
+        { date: '2026-01-01', amount: 4000, category: 'Paychecks' },
+        { date: '2026-01-02', amount: 2000, category: 'Rent' },
+        { date: '2026-02-01', amount: 4000, category: 'Paychecks' },
+        { date: '2026-02-02', amount: 2000, category: 'Rent' },
+        { date: '2026-03-01', amount: 4000, category: 'Paychecks' },
+        { date: '2026-03-02', amount: 2000, category: 'Rent' }
+    ],
+    cashMonths: [],
+    budgets: []
+};
+const actualInputs = T.planVsActualInputs(actualState, { span: 12, incomeTaxRate: 20 });
+check('plan-vs-actual maps canonical balances',
+    actualInputs.inputs.balCash === 1000 && actualInputs.inputs.balFree === 2000 &&
+    actualInputs.inputs.balDeferred === 3000 && actualInputs.inputs.balTaxable === 4000);
+check('plan-vs-actual grosses up income and reports savings rate',
+    actualInputs.inputs.income === 60000 && actualInputs.inputs.expenses === 24000 &&
+    Math.abs(actualInputs.inputs.savingsRate - 40) < 1e-9);
+
+// Undo history is deliberately bounded, even under repeated edits.
+S.clearUndo();
+for (let undoIndex = 0; undoIndex < S.UNDO_LIMIT + 5; undoIndex++) {
+    S.setCsvColumn('amount', 'Value ' + undoIndex);
+}
+check('undo history stays bounded', S.undoDepth() === S.UNDO_LIMIT);
+S.undo();
+check('bounded undo restores the immediately prior value', S.get().csvColumns.amount === 'Value 28');
+
 console.log(failures ? '\n' + failures + ' failure(s)' : '\nAll tracker tests passed');
 process.exit(failures ? 1 : 0);

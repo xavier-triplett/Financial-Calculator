@@ -101,6 +101,19 @@
         return swr > 0 ? (Number(inputs.expenses) || 0) / swr : 0;
     }
 
+    function spendableInvested(state) {
+        var b = E.buckets(state);
+        if (!b) return null;
+        if (global.FireEngine && typeof FireEngine.spendableAssets === 'function') {
+            return FireEngine.spendableAssets(FireApp.inputs(), {
+                deferred: b.deferred,
+                free: b.free,
+                taxable: b.taxable
+            });
+        }
+        return b.deferred + b.free + b.taxable;
+    }
+
     /* proposals(state, scope) — scope 'networth' offers bucket balances,
      * 'cashflow' offers trailing income/expenses/savings rate. */
     function proposals(state, scope) {
@@ -155,6 +168,54 @@
         return list.length;
     }
 
+    function proposalPatch(state) {
+        var patch = {};
+        proposals(state, 'networth').concat(proposals(state, 'cashflow')).forEach(function (proposal) {
+            patch[proposal.key] = proposal.to;
+        });
+        return patch;
+    }
+
+    function sustainableRetirementAge(inputs, phases) {
+        if (!global.FireEngine || typeof FireEngine.simulate !== 'function') return null;
+        var first = Math.max(
+            inputs.currentAge,
+            inputs.planType === FireEngine.PLAN_TYPES.COAST ? inputs.coastAge : inputs.currentAge
+        );
+        for (var age = first; age <= 80; age++) {
+            var candidate = Object.assign({}, inputs, { retireAge: age });
+            if (candidate.planType === FireEngine.PLAN_TYPES.COAST && candidate.coastAge > age) {
+                candidate.coastAge = age;
+            }
+            candidate = FireEngine.normalizeInputs(candidate);
+            var summary = FireEngine.simulate(candidate, phases, { startYear: FireApp.startYear() }).summary;
+            if (summary.ranOutOfMoneyAge === null && summary.standardSuccess) return age;
+        }
+        return null;
+    }
+
+    function planImpact(state) {
+        var patch = proposalPatch(state);
+        if (!Object.keys(patch).length) return null;
+        var baseline = FireApp.inputs();
+        var actual = FireEngine.normalizeInputs(Object.assign({}, baseline, patch));
+        var phases = FireApp.phases();
+        var plannedAge = sustainableRetirementAge(baseline, phases);
+        var actualAge = sustainableRetirementAge(actual, phases);
+        var tracked = spendableInvested(state);
+        var planned = typeof FireEngine.spendableAssets === 'function'
+            ? FireEngine.spendableAssets(baseline)
+            : baseline.balDeferred + baseline.balFree + baseline.balTaxable;
+        return {
+            patch: patch,
+            plannedAge: plannedAge,
+            actualAge: actualAge,
+            retirementAgeDelta: plannedAge !== null && actualAge !== null ? actualAge - plannedAge : null,
+            spendingDelta: Object.prototype.hasOwnProperty.call(patch, 'expenses') ? patch.expenses - baseline.expenses : 0,
+            investedDelta: tracked === null ? 0 : tracked - planned
+        };
+    }
+
     /* renderBridge(container, state, opts) — pending diffs + apply.
      * opts.scope picks the dataset; opts.fi adds the FI progress readout. */
     function renderBridge(container, state, opts) {
@@ -175,14 +236,14 @@
                 // Market buckets only: the plan holds cash inert, so cash can
                 // never actually fund the FI number. Today's dollars on both
                 // sides of the ratio.
-                var market = b.deferred + b.free + b.taxable;
+                var market = spendableInvested(state);
                 var pct = (market / target) * 100;
                 var barPct = Math.max(0, Math.min(100, pct));
                 html += '<div class="trk-fi">' +
-                    '<div class="trk-fi-row"><span>Invested today</span><strong>' + U.compact(market) + '</strong></div>' +
+                    '<div class="trk-fi-row"><span>Spendable invested today</span><strong>' + U.compact(market) + '</strong></div>' +
                     '<div class="trk-fi-row"><span>FI target (today&rsquo;s $)</span><strong>' + U.compact(target) + '</strong></div>' +
                     '<div class="trk-fi-bar"><span style="width:' + barPct.toFixed(1) + '%"></span></div>' +
-                    '<div class="trk-fi-pct">' + pct.toFixed(1) + '% of the way · plan retires at ' + ctx.retireAge +
+                    '<div class="trk-fi-pct">' + pct.toFixed(1) + '% of the way after estimated withdrawal tax · plan retires at ' + ctx.retireAge +
                     ' · ' + (ctx.successRate * 100).toFixed(0) + '% Monte Carlo</div>' +
                 '</div>';
             }
@@ -193,7 +254,7 @@
             list.forEach(function (p) {
                 var fmt = p.pct ? function (v) { return v + '%'; } : U.compact;
                 var hint = p.hint
-                    ? ' <span class="ff-hint" tabindex="0" role="img" data-tooltip="' + p.hint + '" aria-label="' + p.hint + '">i</span>'
+                    ? ' <button class="ff-hint" type="button" data-tooltip="' + p.hint + '" aria-label="' + p.hint + '">i</button>'
                     : '';
                 html += '<tr><td>' + p.label + hint + '</td><td class="num dim">' + fmt(p.from) + '</td>' +
                     '<td class="arrow">→</td><td class="num strong">' + fmt(p.to) + '</td></tr>';
@@ -222,7 +283,7 @@
     function importControl(opts) {
         opts = opts || {};
         var wrap = U.el('span', { class: 'trk-import' });
-        var btn = U.el('button', { class: 'trk-btn' + (opts.primary ? ' trk-btn-primary' : ''), type: 'button', text: opts.label || 'Import Rocket Money CSV' });
+        var btn = U.el('button', { class: 'trk-btn' + (opts.primary ? ' trk-btn-primary' : ''), type: 'button', text: opts.label || 'Import transaction CSV' });
         var input = U.el('input', { type: 'file', accept: '.csv,text/csv', style: 'display:none', 'aria-label': 'Choose transaction CSV' });
 
         function handleFiles(files) {
@@ -247,10 +308,24 @@
                     (res.ignored ? ' ' + res.ignored + ' ignored row' + (res.ignored === 1 ? '' : 's') + ' excluded.' : '') +
                     (invalid ? ' ' + invalid + ' invalid row' + (invalid === 1 ? '' : 's') + ' will be skipped.' : '');
                 FireApp.confirm(summary, function () {
-                    var merged = TrackerStore.importTxns(res.txns);
+                    var trackerState = TrackerStore.get();
+                    var rulesApplied = 0;
+                    var categorized = res.txns.map(function (transaction) {
+                        var rule = E.matchMerchantRule(transaction, trackerState.merchantRules);
+                        if (!rule) return transaction;
+                        rulesApplied++;
+                        var account = trackerState.accounts.filter(function (candidate) { return candidate.id === rule.accountId; })[0];
+                        return Object.assign({}, transaction, {
+                            category: rule.category,
+                            accountId: rule.accountId || transaction.accountId || '',
+                            account: account ? account.name : transaction.account
+                        });
+                    });
+                    var merged = TrackerStore.importTxns(categorized);
                     FireApp.toast('Imported ' + merged.added + ' transactions' +
                         (merged.duplicates ? ' (' + merged.duplicates + ' already present)' : '') +
                         (merged.rejected ? ' · ' + merged.rejected + ' rejected' : '') +
+                        (rulesApplied ? ' · ' + rulesApplied + ' categorized by rules' : '') +
                         (!merged.persisted ? ' · not saved to browser storage' : ''));
                 }, 'Import transactions');
             };
@@ -278,7 +353,7 @@
             title: 'Download an example CSV in the format the importer expects' });
         btn.addEventListener('click', function () {
             var url = URL.createObjectURL(new Blob([RocketMoney.template()], { type: 'text/csv' }));
-            var a = U.el('a', { href: url, download: 'rocket-money-template.csv' });
+            var a = U.el('a', { href: url, download: 'transaction-import-template.csv' });
             document.body.appendChild(a);
             a.click();
             a.remove();
@@ -307,8 +382,11 @@
         sharedProfile: sharedProfile,
         planContext: planContext,
         fiTargetToday: fiTargetToday,
+        spendableInvested: spendableInvested,
         proposals: proposals,
         applyProposals: applyProposals,
+        proposalPatch: proposalPatch,
+        planImpact: planImpact,
         renderBridge: renderBridge,
         importControl: importControl,
         templateButton: templateButton,

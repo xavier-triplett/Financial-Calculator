@@ -34,8 +34,8 @@
             '<header class="trk-masthead">' +
                 '<div>' +
                     '<span class="trk-eyebrow">Cashbook configuration</span>' +
-                    '<h1>Categories</h1>' +
-                    '<span class="trk-sub">How transactions are classified, and how CSV imports are read</span>' +
+                    '<h1>Rules &amp; categories</h1>' +
+                    '<span class="trk-sub">Teach imports once, then keep spending categories consistent</span>' +
                 '</div>' +
                 '<div class="trk-mast-actions" data-el="actions"></div>' +
             '</header>' +
@@ -97,6 +97,37 @@
         }).join('');
     }
 
+    function merchantRules(state) {
+        var rules = state.merchantRules || [];
+        var accountOptions = '<option value="">Any account</option>' + state.accounts.map(function (account) {
+            return '<option value="' + escapeHtml(account.id) + '">' + escapeHtml(account.name) + '</option>';
+        }).join('');
+        var rows = rules.map(function (rule) {
+            return '<tr><td>' + escapeHtml(rule.match) + '</td><td>' + escapeHtml(rule.mode) + '</td>' +
+                '<td>' + escapeHtml(rule.category) + '</td><td>' + escapeHtml((state.accounts.filter(function (account) {
+                    return account.id === rule.accountId;
+                })[0] || {}).name || 'Any') + '</td>' +
+                '<td><label class="trk-rule-toggle"><input type="checkbox" data-rule-enabled="' + escapeHtml(rule.id) + '"' +
+                    (rule.enabled ? ' checked' : '') + '> Active</label></td>' +
+                '<td><button class="trk-x trk-x-visible" type="button" data-rule-delete="' + escapeHtml(rule.id) + '" aria-label="Delete merchant rule">×</button></td></tr>';
+        }).join('');
+        return '<section class="trk-panel trk-set-rules">' +
+            '<div class="trk-panel-head"><h2>Merchant rules</h2><span class="trk-panel-note">applied to future CSV imports</span></div>' +
+            '<p class="trk-set-blurb">A rule says, for example, “names containing SAFEWAY count as Groceries.” ' +
+                'Higher-priority rules win when more than one matches.</p>' +
+            (rows ? '<div class="trk-regwrap"><table class="trk-register"><caption class="trk-sr-only">Merchant categorization rules</caption>' +
+                '<thead><tr><th>Merchant text</th><th>Match</th><th>Category</th><th>Account</th><th>Status</th><th></th></tr></thead>' +
+                '<tbody>' + rows + '</tbody></table></div>' : '<p class="trk-kpi-note">No merchant rules yet.</p>') +
+            '<div class="trk-rule-add">' +
+                '<input class="trk-search" data-rule-new="match" placeholder="Merchant text" aria-label="Merchant text to match">' +
+                '<select class="trk-select" data-rule-new="mode" aria-label="Merchant match type">' +
+                    '<option value="contains">Contains</option><option value="startsWith">Starts with</option><option value="equals">Exactly equals</option></select>' +
+                '<input class="trk-search" data-rule-new="category" placeholder="Category" aria-label="Category to assign">' +
+                '<select class="trk-select" data-rule-new="accountId" aria-label="Limit rule to account">' + accountOptions + '</select>' +
+                '<button class="trk-btn trk-btn-primary" type="button" data-act="addRule">Add rule</button>' +
+            '</div></section>';
+    }
+
     function update(state) {
         // Don't rebuild under a focused text field (add-category / CSV headers)
         var a = document.activeElement;
@@ -140,7 +171,8 @@
                             escapeHtml(state.csvColumns[f.id] || '') + '"></label>';
                     }).join('') + '</div>' +
                 '</section>' +
-            '</div>';
+            '</div>' +
+            merchantRules(state);
     }
 
     function wire() {
@@ -151,16 +183,30 @@
             } else if (e.target.dataset.field !== undefined) {
                 TrackerStore.setCsvColumn(e.target.dataset.field, e.target.value);
                 FireApp.toast('Import mapping saved');
+            } else if (e.target.dataset.ruleEnabled) {
+                TrackerStore.updateMerchantRule(e.target.dataset.ruleEnabled, { enabled: e.target.checked });
+                FireApp.toast('Rule updated');
             }
         });
         els.body.addEventListener('click', function (e) {
-            if (e.target.dataset.act !== 'addCat') return;
-            var name = els.body.querySelector('[data-el="newCat"]');
-            var kind = els.body.querySelector('[data-el="newKind"]');
-            if (!name.value.trim()) { FireApp.toast('Name the category first'); return; }
-            // The store commit re-renders the tab, which also resets this row
-            TrackerStore.setCategoryKind(name.value, kind.value);
-            FireApp.toast('Category kind set');
+            if (e.target.dataset.act === 'addCat') {
+                var name = els.body.querySelector('[data-el="newCat"]');
+                var kind = els.body.querySelector('[data-el="newKind"]');
+                if (!name.value.trim()) { FireApp.toast('Name the category first'); return; }
+                TrackerStore.setCategoryKind(name.value, kind.value);
+                FireApp.toast('Category kind set');
+            } else if (e.target.dataset.act === 'addRule') {
+                var fields = {};
+                els.body.querySelectorAll('[data-rule-new]').forEach(function (input) {
+                    fields[input.dataset.ruleNew] = input.value;
+                });
+                var rule = TrackerStore.addMerchantRule(fields);
+                FireApp.toast(rule ? 'Merchant rule added' : 'Add merchant text and a category');
+            } else if (e.target.dataset.ruleDelete) {
+                FireApp.confirm('Delete this merchant rule?', function () {
+                    TrackerStore.removeMerchantRule(e.target.dataset.ruleDelete);
+                });
+            }
         });
     }
 
@@ -171,8 +217,8 @@
     function unmount() { pendingUpdate = false; els = {}; }
 
     (global.TrackerUIs = global.TrackerUIs || []).push({
-        id: 'categories', name: 'Categories', tag: 'Bookkeeping rules & CSV import',
-        mount: mount, update: update, unmount: unmount, expertOnly: true
+        id: 'categories', name: 'Rules', tag: 'Merchant rules, categories, and CSV columns',
+        mount: mount, update: update, unmount: unmount
     });
 
 })(window);
