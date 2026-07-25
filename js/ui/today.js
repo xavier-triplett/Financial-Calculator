@@ -224,9 +224,13 @@
             '</section>';
     }
 
-    function update(state) {
+    /* Registered as a FireUI, so the state argument is the plan. Every tracker
+     * fact below reads TrackerStore directly. */
+    function update() {
         var readiness = FireApp.planReadiness();
-        els.body.innerHTML = readiness.ready ? complete(state) : incomplete(readiness, FireStore.get());
+        els.body.innerHTML = readiness.ready
+            ? complete(TrackerStore.get())
+            : incomplete(readiness, FireStore.get());
     }
 
     function onClick(event) {
