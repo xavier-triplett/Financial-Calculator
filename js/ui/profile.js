@@ -9,11 +9,38 @@
 
     function pathOptions() {
         return FireSchema.planTypes.map(function (type) {
-            return '<button class="pf-path" type="button" role="radio" aria-checked="false" data-plan-type="' + type.id + '">' +
+            return '<button class="pf-path" type="button" role="radio" aria-checked="false" tabindex="-1" data-plan-type="' + type.id + '">' +
                 '<span class="pf-path-name">' + type.name + '</span>' +
                 '<span class="pf-path-desc">' + type.description + '</span>' +
             '</button>';
         }).join('');
+    }
+
+    function selectPath(button) {
+        FireStore.setInput('planType', Number(button.getAttribute('data-plan-type')));
+    }
+
+    function pathKeydown(event) {
+        var buttons = Array.prototype.slice.call(
+            event.currentTarget.parentNode.querySelectorAll('[data-plan-type]')
+        );
+        var index = buttons.indexOf(event.currentTarget);
+        var next = null;
+
+        if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = (index + 1) % buttons.length;
+        else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = (index - 1 + buttons.length) % buttons.length;
+        else if (event.key === 'Home') next = 0;
+        else if (event.key === 'End') next = buttons.length - 1;
+        else if (event.key === ' ' || event.key === 'Spacebar') {
+            event.preventDefault();
+            selectPath(event.currentTarget);
+            return;
+        }
+
+        if (next === null) return;
+        event.preventDefault();
+        buttons[next].focus();
+        selectPath(buttons[next]);
     }
 
     /* Beginner states its assumptions instead of hiding them: the model is
@@ -90,9 +117,8 @@
         FireForms.buildGroups(els.groups, { groups: FireSchema.profileGroups });
 
         root.querySelectorAll('[data-plan-type]').forEach(function (button) {
-            button.addEventListener('click', function () {
-                FireStore.setInput('planType', Number(button.getAttribute('data-plan-type')));
-            });
+            button.addEventListener('click', function () { selectPath(button); });
+            button.addEventListener('keydown', pathKeydown);
         });
 
         els.dob.addEventListener('change', function () { FireStore.setProfile('birthDate', els.dob.value); });
@@ -123,6 +149,7 @@
             var selected = Number(button.getAttribute('data-plan-type')) === inputs.planType;
             button.classList.toggle('selected', selected);
             button.setAttribute('aria-checked', String(selected));
+            button.tabIndex = selected ? 0 : -1;
         });
 
         var coastField = els.root.querySelector('.ff-field[data-key="coastAge"]');

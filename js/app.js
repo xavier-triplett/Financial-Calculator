@@ -14,7 +14,7 @@
     var confirmStrict = false;  // strict dialogs ignore backdrop/Escape
     var confirmQueue = [];      // requests arriving while a dialog is open
     var active = null; // { ui, kind } currently mounted
-    var pref = { view: 'profile', theme: null, mode: null };
+    var pref = { view: 'today', theme: null, mode: null };
 
     function setBackgroundInert(inert) {
         Array.prototype.forEach.call(document.body.children, function (node) {
@@ -37,6 +37,18 @@
         return results;
     }
 
+    function planReadiness() {
+        var state = FireStore.get();
+        var inputs = effective.inputs || state.inputs;
+        var missing = [];
+        if (!state.profile.birthDate) missing.push({ key: 'birthDate', label: 'date of birth' });
+        if (!(Number(inputs.expenses) > 0)) missing.push({ key: 'expenses', label: 'annual spending' });
+        if (Number(inputs.currentAge) < Number(inputs.retireAge) && !(Number(inputs.income) > 0)) {
+            missing.push({ key: 'income', label: 'annual income' });
+        }
+        return { ready: missing.length === 0, missing: missing };
+    }
+
     /* Plan verdicts, stated once so every part of the UI agrees on the facts. */
     function verdicts() {
         var s = results.sim.summary;
@@ -52,7 +64,7 @@
 
         var coast;
         if (s.ranOutOfMoneyAge !== null) {
-            coast = { code: 'broke', label: 'Broke at ' + s.ranOutOfMoneyAge, age: s.ranOutOfMoneyAge };
+            coast = { code: 'depleted', label: 'Depletes at ' + s.ranOutOfMoneyAge, age: s.ranOutOfMoneyAge };
         } else if (s.standardSuccess) {
             coast = { code: 'secure', label: 'Secure', coverage: s.standardCoverage };
         } else {
@@ -206,8 +218,8 @@
         compute();
         mountActive();
         toast(mode === 'beginner'
-            ? "Beginner mode: standard assumptions, today's dollars"
-            : 'Expert mode: your own assumptions, future dollars');
+            ? "Beginner model: no tax estimates, standard assumptions, today's dollars"
+            : 'Expert model: your tax and market assumptions, future dollars');
     }
 
     function escapeHtml(s) {
@@ -305,12 +317,12 @@
         var burger = navMenuOpen
             ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>'
             : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>';
-        navEl.innerHTML = '<span class="nav-brand">The Coast Ledger</span>' +
+        navEl.innerHTML = '<span class="nav-brand">Meridian</span>' +
             '<span class="nav-tabs">' + tabButtonsHtml() + '</span>' +
             '<span class="nav-right">' + authHtml() +
-                '<span class="nav-mode" role="group" aria-label="Detail level">' +
-                    '<button type="button" data-mode-set="beginner" class="' + (pref.mode === 'beginner' ? 'active' : '') + '" aria-pressed="' + (pref.mode === 'beginner') + '">Beginner</button>' +
-                    '<button type="button" data-mode-set="expert" class="' + (pref.mode === 'expert' ? 'active' : '') + '" aria-pressed="' + (pref.mode === 'expert') + '">Expert</button>' +
+                '<span class="nav-mode" role="group" aria-label="Planning model">' +
+                    '<button type="button" data-mode-set="beginner" title="Simple model with no tax estimates" class="' + (pref.mode === 'beginner' ? 'active' : '') + '" aria-pressed="' + (pref.mode === 'beginner') + '">Beginner</button>' +
+                    '<button type="button" data-mode-set="expert" title="Custom tax-aware model" class="' + (pref.mode === 'expert' ? 'active' : '') + '" aria-pressed="' + (pref.mode === 'expert') + '">Expert</button>' +
                 '</span>' +
                 '<button class="nav-theme" type="button" data-theme-toggle aria-label="Switch to ' +
                     (pref.theme === 'dark' ? 'light' : 'dark') + ' mode" title="Switch to ' +
@@ -484,12 +496,14 @@
         prompt: askPrompt,
         verdicts: verdicts,
         results: function () { return results; },
+        planReadiness: planReadiness,
         mode: function () { return pref.mode; },
         isBeginner: function () { return pref.mode === 'beginner'; },
         // The inputs the current mode actually simulated, never the raw store.
         inputs: function () { return effective.inputs || FireStore.get().inputs; },
         phases: function () { return effective.phases || FireStore.get().phases; },
         setMode: setMode,
+        setView: setView,
         startYear: function () { return startYear; },
         confirmReset: function () {
             askConfirm('Reset all plan data to defaults?', function () {

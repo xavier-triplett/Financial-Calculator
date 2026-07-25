@@ -17,7 +17,7 @@
             '<header class="lg-masthead">' +
                 '<div class="lg-brand">' +
                     '<span class="lg-eyebrow">Private wealth projection</span>' +
-                    '<h1>The Coast Ledger</h1>' +
+                    '<h1>Meridian</h1>' +
                     '<span class="lg-sub" data-el="planPath"></span>' +
                 '</div>' +
                 '<div class="lg-mast-right">' +
@@ -25,11 +25,20 @@
                     // Stated on every figure: the two modes report in different
                     // units, so the same plan yields two very different numbers.
                     '<span class="lg-basis">' + (beginner
-                        ? "All figures in today's dollars"
+                        ? "Today's dollars · no taxes estimated"
                         : 'All figures in future dollars') + '</span>' +
                     '<button class="lg-reset" type="button">Reset plan</button>' +
                 '</div>' +
             '</header>' +
+
+            '<section class="lg-start" data-el="gate" hidden>' +
+                '<span class="lg-eyebrow">Projection paused</span>' +
+                '<h2>Add the basics before viewing a verdict</h2>' +
+                '<p data-el="gateNote"></p>' +
+                '<button class="lg-reset" type="button" data-el="goProfile">Finish your profile</button>' +
+            '</section>' +
+
+            '<div data-el="resultsWrap">' +
 
             '<section class="lg-verdicts">' +
                 '<article class="lg-verdict" data-v="bridge">' +
@@ -46,8 +55,8 @@
                 '</article>' +
                 '<article class="lg-verdict" data-v="mc">' +
                     '<span class="lg-eyebrow">' + (beginner ? 'Resilience &mdash; odds it works' : 'Resilience &mdash; Monte Carlo') +
-                        '<span class="ff-hint" tabindex="0" role="img" data-tooltip="Rather than betting on one average return, your plan is re-run against randomly generated market futures &mdash; booms, crashes and flat decades alike. The rate is the share that still has money at 95." ' +
-                            'aria-label="Rather than betting on one average return, your plan is re-run against randomly generated market futures. The rate is the share that still has money at 95.">i</span></span>' +
+                        '<button class="ff-hint" type="button" data-tooltip="Rather than betting on one average return, your plan is re-run against randomly generated market futures &mdash; booms, crashes and flat decades alike. The rate is the share that still has money at 95." ' +
+                            'aria-label="About the resilience simulation">i</button></span>' +
                     '<span class="lg-v-range lg-expert" data-el="mcSims"></span>' +
                     '<div class="lg-bignum" data-el="mcRate">&mdash;</div>' +
                     '<p class="lg-v-note">of simulated market futures leave you with money at 95. ' +
@@ -57,7 +66,8 @@
                     '<span class="lg-eyebrow">' + (beginner ? 'Your coast number' : 'Coast number today') + '</span>' +
                     '<span class="lg-v-range">No new savings &rarr; account unlock</span>' +
                     '<div class="lg-bignum" data-el="fiNumber">&mdash;</div>' +
-                    '<p class="lg-v-note">Full target at unlock: <strong data-el="fiTarget"></strong><br>Tax-adjusted coast balance: <strong data-el="nwAtRetire"></strong></p>' +
+                    '<p class="lg-v-note">Full target at unlock: <strong data-el="fiTarget"></strong><br>' +
+                        (beginner ? 'Coast balance' : 'Tax-adjusted coast balance') + ': <strong data-el="nwAtRetire"></strong></p>' +
                 '</article>' +
             '</section>' +
 
@@ -74,8 +84,8 @@
                     '<p class="lg-help lg-expert">Which buckets fund each retirement phase.</p>' +
                     '<div class="lg-expert" data-el="drawdown"></div>' +
                     (beginner
-                        ? '<p class="mode-note">Growth, taxes, contribution limits and the withdrawal rate are fixed in Beginner mode. ' +
-                            'They are listed in full on the Profile tab. ' +
+                        ? '<p class="mode-note">Growth, contribution limits and the withdrawal rate are fixed in Beginner mode; taxes are intentionally not modeled. ' +
+                            'Every assumption is listed on the Profile tab. ' +
                             '<button type="button" data-mode-set="expert">Switch to Expert</button> to set your own.</p>'
                         : '') +
                 '</aside>' +
@@ -119,7 +129,7 @@
                         '</table></div>' +
                     '</section>' +
                 '</main>' +
-            '</div>' +
+            '</div></div>' +
         '</div>';
     }
 
@@ -151,6 +161,7 @@
         if (first) FireForms.setGroupOpen(first, true);
 
         root.querySelector('.lg-reset').addEventListener('click', FireApp.confirmReset);
+        els.goProfile.addEventListener('click', function () { FireApp.setView('profile'); });
         els.reroll.addEventListener('click', function () { FireStore.rerollSeed(); });
 
         makeCharts();
@@ -227,6 +238,14 @@
     }
 
     function update(state, results) {
+        var readiness = FireApp.planReadiness();
+        els.gate.hidden = readiness.ready;
+        els.resultsWrap.hidden = !readiness.ready;
+        if (!readiness.ready) {
+            els.gateNote.textContent = 'Still needed: ' + readiness.missing.map(function (item) { return item.label; }).join(', ') + '.';
+            return;
+        }
+
         FireForms.syncInputs(els.root);
         FireForms.renderPhases(els.phases);
         FireForms.renderDrawdown(els.drawdown);
@@ -280,9 +299,12 @@
 
         if (s.firstInfeasibleAge !== null) {
             els.infeasible.hidden = false;
+            var incomeBasis = FireApp.isBeginner()
+                ? 'gross income (Beginner intentionally does not model taxes)'
+                : 'take-home pay (gross income less the effective income tax on the Profile tab)';
             els.infeasible.textContent = 'Feasibility: from age ' + s.firstInfeasibleAge +
-                ', planned saving plus spending exceeds take-home pay (gross income less the effective income tax on the Profile tab). ' +
-                'Saving is capped to the available take-home surplus; lower the requested savings rate or spending to remove this constraint.';
+                ', planned saving plus spending exceeds ' + incomeBasis + '. ' +
+                'Saving is capped to the available surplus; lower the requested savings rate or spending to remove this constraint.';
         } else {
             els.infeasible.hidden = true;
         }
@@ -295,8 +317,8 @@
         if (!coastPlan && !earlyPlan && s.ranOutOfMoneyAge === null) {
             stamp(els.coastStamp, 'secure', 'Funded');
             els.coastNote.textContent = 'The fixed-return projection funds retirement spending through age 95.';
-        } else if (v.coast.code === 'broke') {
-            stamp(els.coastStamp, 'failed', 'Broke at ' + v.coast.age);
+        } else if (v.coast.code === 'depleted') {
+            stamp(els.coastStamp, 'failed', 'Depletes at ' + v.coast.age);
             els.coastNote.textContent = 'The portfolio is exhausted before age 95.';
         } else if (v.coast.code === 'secure') {
             stamp(els.coastStamp, 'secure', coastPlan ? 'On course' : 'Secure');
@@ -364,7 +386,7 @@
             var status, cls;
             if (r.phase === 'coasting') { status = 'Coasting'; cls = 'st-coasting'; }
             else if (!r.isRetired) { status = 'Working'; cls = 'st-working'; }
-            else if (r.broke) { status = 'Broke'; cls = 'st-broke'; }
+            else if (r.broke) { status = 'Depleted'; cls = 'st-broke'; }
             else if (r.phase === 'bridge') { status = 'Bridge'; cls = 'st-bridge'; }
             else { status = 'Retired'; cls = 'st-retired'; }
 

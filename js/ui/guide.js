@@ -43,7 +43,7 @@
                 '<div class="gd-card-title">Two models</div>' +
                 '<p><strong>Beginner</strong> is a simpler simulation, not a shorter version of the expert one. It runs a fixed set ' +
                 'of assumptions that is the same for every plan and printed in full on the Profile tab: one savings rate that never ' +
-                'ramps, growth after inflation, standard taxes and contribution limits, and the 4% withdrawal rule. Because inflation ' +
+                'ramps, growth after inflation, no guessed taxes, standard contribution limits, and the 4% withdrawal rule. Because inflation ' +
                 'is taken out rather than modeled, every figure reads in today\'s dollars.</p>' +
                 '<p><strong>Expert</strong> hands you all of it: every rate, saving phase, drawdown rule and diagnostic, projected in ' +
                 'future dollars. A value you set in Expert mode never leaks into a beginner run, so the same plan will report two ' +
@@ -54,9 +54,9 @@
 
             '<section class="gd-card">' +
                 '<div class="gd-card-title">The coast number</div>' +
-                '<p>The Planner calculates the after-tax value your tax-advantaged accounts need <em>today</em> for market growth alone, ' +
-                'with no new savings, to reach your full retirement target at the later of retirement or account access. Compare it with your Roth balance ' +
-                'plus your deferred balance after estimated withdrawal tax; brokerage and cash belong to the bridge instead.</p>' +
+                '<p>The Planner calculates the spendable value your invested accounts need <em>today</em> for market growth alone, ' +
+                'with no new savings, to reach your full retirement target at the later of retirement or account access. Compare it with your Roth and brokerage balances ' +
+                'plus your deferred balance after any modeled withdrawal tax. Cash stays outside this long-term investment comparison.</p>' +
             '</section>' +
 
             '<section class="gd-card">' +
@@ -68,8 +68,8 @@
                         '<p>You skip taxes now, pay income tax when you withdraw. The catch: touching it before roughly age 60 ' +
                         'usually costs a 10% penalty.</p></div>' +
                     '<div class="gd-bucket"><h3>Tax&#8209;Free</h3><span class="gd-bucket-eg">Roth IRA &middot; Roth 401k</span>' +
-                        '<p>You pay taxes now; growth and withdrawals are tax-free forever. Also locked until roughly 60 ' +
-                        '(with some exceptions for what you contributed).</p></div>' +
+                        '<p>You pay taxes now; qualified growth and withdrawals are tax-free. Roth IRA contributions can generally be reached first, ' +
+                        'while earnings and workplace Roth money stay locked until roughly 60 in this model.</p></div>' +
                     '<div class="gd-bucket"><h3>After&#8209;Tax</h3><span class="gd-bucket-eg">Brokerage account</span>' +
                         '<p>A normal investment account. No special tax breaks &mdash; but no lock, either. You can spend it at any age. ' +
                         'This is what funds an <em>early</em> retirement.</p></div>' +
@@ -78,7 +78,7 @@
 
             '<section class="gd-card">' +
                 '<div class="gd-card-title">The bridge</div>' +
-                '<p>Say you retire at 50 but your 401k and Roth stay locked until 60. Those ten years are <strong>the bridge</strong> &mdash; ' +
+                '<p>Say you retire at 50 but most workplace retirement money and investment earnings stay locked until 60. Those ten years are <strong>the bridge</strong> &mdash; ' +
                 'and your brokerage has to carry every year of it alone. The app treats this as its own goal because it&rsquo;s the most ' +
                 'common way early-retirement plans fail: plenty of money in total, but locked behind the wrong door at the wrong time.</p>' +
                 '<p>If the bridge fails, the projection keeps going by tapping the locked accounts early: tax-deferred draws then pay the ' +
@@ -99,10 +99,10 @@
                     'futures still leave you with money at 95.</li>' +
                     '<li><strong>Experiment</strong> &mdash; every change recalculates instantly. Try retiring two years later, or saving ' +
                     '5% more, and watch what it does to the verdicts. The small &#9432; icons explain each field.</li>' +
-                    '<li><strong>Track reality</strong> &mdash; record actual account balances each month in <strong>Net Worth</strong>, and ' +
-                    'actual income and spending in <strong>Cashbook</strong> (by hand, or import a Rocket Money CSV). Each tracker can push ' +
-                    'its actuals back into the plan, replacing your guesses with the real numbers. The <strong>Categories</strong> tab ' +
-                    'tunes how transactions are classified and which CSV columns the importer reads.</li>' +
+                    '<li><strong>Track reality</strong> &mdash; record actual account balances on any date in <strong>Net Worth</strong>, and ' +
+                    'actual income and spending in <strong>Cashbook</strong> (by hand, or import a transaction CSV). Each tracker can propose ' +
+                    'updates to the plan so you can review the effect before replacing an estimate. Use <strong>Goals</strong> for budgets, debt, and recurring items; ' +
+                    '<strong>Rules</strong> tunes transaction classification and CSV columns.</li>' +
                 '</ol>' +
             '</section>' +
 
@@ -110,8 +110,8 @@
                 '<div class="gd-card-title">Reading the verdicts</div>' +
                 '<dl class="gd-gloss">' +
                     dt('READY / SECURE', 'The selected path reaches its current milestone: the Coast target, retirement-readiness checkpoint, or early-retirement bridge. The note below the stamp names the exact test.') +
-                    dt('DEPLETED / Broke at &hellip;', 'The projection runs dry, and the age it happens. Save more, spend less, retire later, or rebalance the buckets.') +
-                    dt('&hellip;% funded', 'Your projected <em>tax-advantaged</em> balances (401k + Roth, after estimated withdrawal tax &mdash; brokerage and cash are deliberately not counted) at the relevant path milestone, versus the nest egg the safe-withdrawal rule says a full retirement needs.') +
+                    dt('DEPLETES AT &hellip;', 'The projection runs dry at this age. Treat it as a scenario to improve: save more, spend less, retire later, or rebalance the buckets.') +
+                    dt('&hellip;% funded', 'Your projected spendable invested balance at the relevant path milestone versus the nest egg the safe-withdrawal rule says a full retirement needs. It includes brokerage and tax-adjusts deferred money when the selected model includes taxes; cash is excluded.') +
                     dt('Resilience %', 'The share of 2,000 randomized market futures (booms, crashes, flat decades) where you still have money at 95. Annual returns are calibrated so their arithmetic average and standard deviation match your market-return and volatility assumptions. A typical compounded path can be lower because volatility compounds unevenly.') +
                 '</dl>' +
             '</section>' +
@@ -120,7 +120,7 @@
                 '<div class="gd-card-title">Glossary</div>' +
                 '<dl class="gd-gloss">' +
                     dt('Net worth', 'Everything you own (cash, investments, property) minus everything you owe (loans, cards). The single number the trackers watch.') +
-                    dt('Savings rate', 'The share of your gross income you plan to put away. The projection caps actual saving at take-home pay left after expenses and flags the first year your requested rate is not feasible. ' +
+                    dt('Savings rate', 'The share of your gross income you plan to put away. Beginner caps actual saving at gross pay left after expenses because it does not model taxes; Expert uses modeled take-home pay. The first constrained year is flagged. ' +
                         'In the Cashbook, transactions in savings-kind categories count as deliberate contributions &mdash; when you mark them, ' +
                         'the observed rate uses those actuals instead of assuming every surplus dollar was saved.') +
                     dt('Compounding', 'Growth on top of growth: returns earned by past returns. The reason money saved at 25 counts several times more than money saved at 45.') +
@@ -131,7 +131,7 @@
                     dt('Employer match', 'Free money: your employer contributes in proportion to traditional or Roth workplace-plan contributions, up to a cap. The match is deposited into the tax-deferred bucket.') +
                     dt('Contribution limits', 'Traditional and Roth workplace contributions share the 401k limit; traditional and Roth IRAs share the IRA limit. The model fills the workplace plan first, then the IRA, while preserving your deferred/Roth split. The caps rise with inflation, ages 50+ get catch-up room, and excess savings spill into brokerage.') +
                     dt('Penalty-free access age', 'The age your tax-advantaged accounts unlock &mdash; usually 59&frac12; (the app models 60). Some employer plans allow access at 55 if you leave the job then (the &ldquo;Rule of 55&rdquo;).') +
-                    dt('Effective tax rate', 'Your total tax as a share of the money in question &mdash; a blend of all the brackets, not your top bracket. The app applies one effective rate to deferred withdrawals and another to the full amount of each brokerage withdrawal.') +
+                    dt('Effective tax rate', 'Your total tax as a share of the money in question &mdash; a blend of all the brackets, not your top bracket. Expert applies one effective rate to deferred withdrawals and another to the full amount of each brokerage withdrawal; Beginner does not guess or model taxes.') +
                     dt('Capital gains', 'Profit from selling an investment for more than you paid. In real life only this profit is taxed, typically at lower rates than income. The app instead applies your brokerage-draw rate to the <em>entire</em> withdrawal, so enter a blended rate lower than the statutory one (e.g. 15% on the half of a draw that is gains &asymp; 7&ndash;8%).') +
                     dt('Inflation', 'The slow rise of prices. The plan grows your expenses and the IRS limits with it, so a plan that works &ldquo;in today&rsquo;s dollars&rdquo; still works in 2050&rsquo;s dollars.') +
                     dt('Market return', 'The average yearly growth you expect from investments. Long-run stock-market history is roughly 9&ndash;10% before inflation &mdash; the default here is deliberately more modest.') +

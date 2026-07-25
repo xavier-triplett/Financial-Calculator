@@ -66,7 +66,7 @@ html[data-theme="dark"] .ui-ledger .ff-phase-cell input:read-only { background: 
 .lg-reset {
     border: 1px solid var(--rule-dark); background: transparent; color: var(--muted);
     font: 500 12px/1 "Public Sans", sans-serif;
-    padding: 8px 14px; border-radius: 3px;
+    min-height: 40px; padding: 8px 14px; border-radius: 3px;
     transition: color .15s, border-color .15s;
 }
 .lg-reset:hover { color: var(--red); border-color: var(--red); }
@@ -125,7 +125,8 @@ html[data-theme="dark"] .ui-ledger .ff-phase-cell input:read-only { background: 
 }
 
 .lg-link {
-    border: none; background: none; padding: 0;
+    display: inline-flex; align-items: center;
+    min-height: 32px; border: none; background: none; padding: 4px 0;
     color: var(--steel); text-decoration: underline;
     font: inherit; font-size: 12px;
 }
@@ -157,7 +158,7 @@ html[data-theme="dark"] .ui-ledger .ff-phase-cell input:read-only { background: 
 .ui-ledger .ff-group { border-bottom: 1px solid var(--rule); }
 .ui-ledger .ff-group-head {
     width: 100%; display: flex; align-items: center; gap: 8px;
-    background: none; border: none; padding: 10px 2px;
+    min-height: 44px; background: none; border: none; padding: 10px 2px;
     font: 600 13px/1 "Public Sans", sans-serif; color: var(--ink);
     text-align: left;
 }
@@ -173,9 +174,10 @@ html[data-theme="dark"] .ui-ledger .ff-phase-cell input:read-only { background: 
 .ui-ledger .ff-label { font-size: 12px; color: var(--muted); display: flex; gap: 5px; align-items: center; }
 .ui-ledger .ff-hint {
     display: inline-flex; align-items: center; justify-content: center;
-    width: 13px; height: 13px; border-radius: 50%;
+    width: 24px; height: 24px; padding: 0; border-radius: 50%;
     border: 1px solid var(--faint); color: var(--faint);
-    font-size: 9px; cursor: pointer;
+    background: color-mix(in srgb, var(--panel) 82%, var(--green));
+    font-size: 10px; cursor: pointer; appearance: none;
 }
 @media (min-width: 721px) {
     .ui-ledger .ff-hint[data-tooltip]::after { width: 190px; }
@@ -184,12 +186,18 @@ html[data-theme="dark"] .ui-ledger .ff-phase-cell input:read-only { background: 
 .ui-ledger .ff-unit { font: 500 11px/1 "IBM Plex Mono", monospace; color: var(--faint); }
 .ui-ledger .ff-control input {
     width: 92px; text-align: right;
+    min-height: 34px;
     font: 500 13px/1 "IBM Plex Mono", monospace;
     border: none; border-bottom: 1px solid var(--rule-dark);
     background: transparent; color: var(--ink);
     padding: 4px 2px;
 }
 .ui-ledger .ff-control input:focus { outline: none; border-bottom-color: var(--green); }
+.ui-ledger .ff-control input:focus-visible,
+.ui-ledger .ff-phase-head input:focus-visible,
+.ui-ledger .ff-phase-cell input:focus-visible {
+    outline: 2px solid var(--green); outline-offset: 2px;
+}
 .ui-ledger .ff-bucket-deferred .ff-label-text { box-shadow: inset 3px 0 0 var(--amber); padding-left: 7px; }
 .ui-ledger .ff-bucket-free .ff-label-text { box-shadow: inset 3px 0 0 var(--green); padding-left: 7px; }
 .ui-ledger .ff-bucket-taxable .ff-label-text { box-shadow: inset 3px 0 0 var(--steel); padding-left: 7px; }
@@ -202,18 +210,23 @@ html[data-theme="dark"] .ui-ledger .ff-phase-cell input:read-only { background: 
 .ui-ledger .ff-phase-age-label { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); }
 .ui-ledger .ff-phase-head input {
     width: 54px; text-align: right;
+    min-height: 36px;
     font: 500 12.5px/1 "IBM Plex Mono", monospace;
     border: none; border-bottom: 1px solid var(--rule-dark); background: transparent; padding: 3px 2px;
 }
 .ui-ledger .ff-phase-head input:disabled { border-bottom-style: dotted; color: var(--muted); }
-.ui-ledger .ff-phase-del { margin-left: auto; border: none; background: none; color: var(--faint); font-size: 15px; padding: 0 2px; }
+.ui-ledger .ff-phase-del {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 36px; min-height: 36px; margin-left: auto;
+    border: none; background: none; color: var(--faint); font-size: 15px; padding: 4px;
+}
 .ui-ledger .ff-phase-del:hover { color: var(--red); }
 .ui-ledger .ff-phase-split { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
 .ui-ledger .ff-phase-cell { display: flex; flex-direction: column; gap: 3px; }
 .ui-ledger .ff-phase-cell-label { font-size: 10px; letter-spacing: 0.04em; color: var(--muted); }
 .ui-ledger .ff-phase-cell input {
     width: 100%; font: 500 12.5px/1 "IBM Plex Mono", monospace;
-    border: 1px solid var(--rule); background: transparent; padding: 5px 6px; text-align: right;
+    min-height: 38px; border: 1px solid var(--rule); background: transparent; padding: 7px 6px; text-align: right;
 }
 .ui-ledger .ff-phase-cell input:read-only { background: #FAFBF9; color: var(--muted); border-style: dotted; }
 .ui-ledger .ff-phase-cell.ff-bucket-deferred input { border-bottom: 2px solid var(--amber); }
@@ -221,7 +234,7 @@ html[data-theme="dark"] .ui-ledger .ff-phase-cell input:read-only { background: 
 .ui-ledger .ff-phase-cell.ff-bucket-taxable input { border-bottom: 2px solid var(--steel); }
 .ui-ledger .ff-phase-add {
     width: 100%; border: 1px dashed var(--rule-dark); background: none;
-    color: var(--muted); font-size: 12px; padding: 8px;
+    min-height: 40px; color: var(--muted); font-size: 12px; padding: 8px;
 }
 .ui-ledger .ff-phase-add:hover { color: var(--green); border-color: var(--green); }
 
@@ -249,6 +262,7 @@ html[data-theme="dark"] .ui-ledger .ff-phase-cell input:read-only { background: 
 .ui-ledger .ff-draw-label { font-size: 12.5px; font-weight: 500; color: var(--ink); }
 .ui-ledger .ff-draw-row input {
     width: 54px; text-align: right;
+    min-height: 38px;
     font: 600 12.5px/1 "IBM Plex Mono", monospace;
     border: 1px solid var(--rule-dark); border-radius: 3px;
     background: var(--panel); color: var(--ink); padding: 6px 5px;
@@ -285,7 +299,7 @@ html[data-theme="dark"] .ui-ledger .ff-phase-cell input:read-only { background: 
 
 /* ---------- Table ---------- */
 .lg-tablewrap { overflow: auto; max-height: 68vh; }
-.lg-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12px; }
+.lg-table { width: 100%; min-width: 980px; border-collapse: separate; border-spacing: 0; font-size: 12px; }
 .lg-table th {
     position: sticky; top: 0; z-index: 2;
     background: var(--panel);
@@ -327,13 +341,44 @@ html[data-theme="dark"] .ui-ledger .ff-phase-cell input:read-only { background: 
 }
 @media (max-width: 620px) {
     .lg-shell { padding: 18px 14px 40px; }
+    .lg-masthead { align-items: stretch; }
+    .lg-mast-right { width: 100%; flex-wrap: wrap; justify-content: space-between; gap: 10px 14px; }
+    .lg-reset { flex-basis: 100%; width: 100%; min-height: 44px; }
     .lg-verdicts { grid-template-columns: 1fr 1fr; }
     .lg-figures { grid-template-columns: 1fr; }
     .lg-brand h1 { font-size: 26px; }
+    .lg-controls, .lg-panel { padding: 16px 14px; }
+    .ui-ledger .ff-control input,
+    .ui-ledger .ff-phase-head input,
+    .ui-ledger .ff-phase-cell input,
+    .ui-ledger .ff-draw-row input,
+    .ui-ledger .ff-phase-add { min-height: 44px; }
+    .ui-ledger .ff-phase-del { min-width: 44px; min-height: 44px; }
+    .lg-tablewrap {
+        max-height: 62vh; overscroll-behavior-inline: contain;
+        -webkit-overflow-scrolling: touch;
+    }
     .lg-chart { height: 260px; }
     .lg-chart-mc { height: 240px; }
 }
-@media (max-width: 420px) {
+@media (max-width: 520px) {
     .lg-verdicts { grid-template-columns: 1fr; }
     .lg-verdict { padding-inline: 16px; }
+    .lg-panel-head h2 { width: 100%; }
+}
+@media (max-width: 460px) {
+    .ui-ledger .ff-field { flex-direction: column; align-items: stretch; gap: 5px; }
+    .ui-ledger .ff-control { width: 100%; }
+    .ui-ledger .ff-control input { flex: 1; width: auto; min-width: 0; }
+    .ui-ledger .ff-phase { padding-inline: 9px; }
+    .ui-ledger .ff-phase-split { gap: 5px; }
+}
+
+@media (pointer: coarse) {
+    .lg-reset, .ui-ledger .ff-group-head, .ui-ledger .ff-phase-add { min-height: 44px; }
+    .ui-ledger .ff-phase-del { min-width: 44px; min-height: 44px; }
+    .ui-ledger .ff-control input,
+    .ui-ledger .ff-phase-head input,
+    .ui-ledger .ff-phase-cell input,
+    .ui-ledger .ff-draw-row input { min-height: 44px; }
 }

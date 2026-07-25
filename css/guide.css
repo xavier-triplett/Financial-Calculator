@@ -107,3 +107,9 @@ html[data-theme="dark"] .ui-guide {
     color: var(--faint);
     margin: 0; padding: 0 2px;
 }
+
+@media (max-width: 620px) {
+    .gd-shell { padding: 18px 14px 40px; }
+    .gd-masthead h1 { font-size: 26px; }
+    .gd-card { padding: 18px 14px 16px; }
+}

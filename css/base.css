@@ -10,7 +10,8 @@ img, canvas { max-width: 100%; }
     overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
 }
 button { font: inherit; cursor: pointer; }
-input { font: inherit; }
+input, select, textarea { font: inherit; }
+button, [role="button"] { touch-action: manipulation; }
 input[type="number"] { appearance: textfield; -moz-appearance: textfield; }
 input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 
@@ -20,15 +21,14 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
 .ff-hint[data-tooltip] {
     position: relative; isolation: isolate;
     display: inline-flex; align-items: center; justify-content: center;
-    /* The chip is a fixed-size circle inside flex labels; without flex:none a
-     * wrapping label (phone widths) shrinks it into an oval. */
     flex: none;
-    width: 16px; height: 16px;
+    width: 24px; height: 24px; padding: 0;
     border-radius: 50%;
     border: 1px solid var(--rule-dark);
     background: color-mix(in srgb, var(--panel) 82%, var(--green));
     color: var(--green);
     font: 700 10px/1 "Fraunces", Georgia, serif;
+    appearance: none;
     cursor: pointer;
     transition: border-color .12s, background .12s, transform .12s;
 }
@@ -77,7 +77,7 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
 /* Phones: a tooltip anchored right of the icon can't fit, so tapping the
  * icon shows it as a fixed sheet pinned to the bottom of the screen
  * (fixed boxes never widen the page). The arrow pseudo-element becomes an
- * invisible 36px tap pad — the 13px chips are untappable on their own. */
+ * invisible 44px tap pad. */
 @media (max-width: 720px) {
     /* The hover/focus lift must not run here: a transformed (even
      * mid-transition) chip becomes the containing block for the fixed
@@ -93,7 +93,7 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
     .ff-hint[data-tooltip]:focus::before {
         display: block;
         left: 50%; top: 50%;
-        width: 36px; height: 36px;
+        width: 44px; height: 44px;
         background: transparent;
         transform: translate(-50%, -50%);
         pointer-events: auto;
@@ -130,6 +130,7 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
     border: 1px solid #C9CEC8; border-radius: 5px;
 }
 .nav-mode button {
+    min-height: 36px;
     border: 0; border-radius: 3px; padding: 6px 8px;
     background: transparent; color: #66716B;
     font: 600 9px/1 "Public Sans", sans-serif;
@@ -138,8 +139,8 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
 .nav-mode button.active { background: #17604A; color: #fff; }
 
 html[data-mode="beginner"] .lg-expert { display: none !important; }
-.ff-beginner-toggle { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink); margin-bottom: 10px; }
-.ff-beginner-toggle input { accent-color: var(--green); }
+.ff-beginner-toggle { display: flex; align-items: center; gap: 8px; min-height: 40px; font-size: 12px; color: var(--ink); margin-bottom: 10px; }
+.ff-beginner-toggle input { width: 18px; height: 18px; accent-color: var(--green); }
 .ff-fields.ff-toggle-off { display: none !important; }
 .mode-note { color: var(--muted); font-size: 11.5px; line-height: 1.5; margin: 16px 0 0; padding-top: 12px; border-top: 1px solid var(--rule); }
 .mode-note button { border: 0; background: none; color: var(--green); font: inherit; font-weight: 600; padding: 0; text-decoration: underline; }
@@ -156,8 +157,24 @@ html[data-mode="beginner"] .lg-expert { display: none !important; }
     .nav-tabs::-webkit-scrollbar { display: none; }
     .nav-tab { white-space: nowrap; }
 }
+@media (max-width: 520px) {
+    #app-nav { align-items: center; }
+    .nav-brand { width: 100%; }
+    .nav-right {
+        order: 5;
+        width: 100%;
+        min-width: 0;
+        margin-left: 0;
+        gap: 6px;
+        justify-content: space-between;
+    }
+    .nav-auth-in { flex: 1 1 auto; min-width: 0; padding-inline: 8px; }
+    .nav-mode { flex: none; }
+    .nav-mode button { padding-inline: 7px; }
+    .nav-theme, .nav-burger { flex: none; }
+}
 .nav-theme {
-    width: 34px; height: 34px; padding: 0;
+    width: 40px; height: 40px; padding: 0;
     display: grid; place-items: center;
     border: 1px solid #C9CEC8; border-radius: 50%;
     background: transparent; color: #1A211D;
@@ -168,7 +185,7 @@ html[data-mode="beginner"] .lg-expert { display: none !important; }
 /* ---------- Collapsed nav: hamburger + dropdown ---------- */
 /* JS adds .nav-collapsed when the tab row can't fit without scrolling. */
 .nav-burger {
-    display: none; width: 34px; height: 34px; padding: 0;
+    display: none; width: 40px; height: 40px; padding: 0;
     place-items: center;
     border: 1px solid #C9CEC8; border-radius: 4px;
     background: transparent; color: #1A211D;
@@ -196,7 +213,7 @@ html[data-mode="beginner"] .lg-expert { display: none !important; }
 .nav-auth {
     border: 1px solid #C9CEC8; background: transparent; color: #1A211D;
     font: 600 11px/1 "Public Sans", sans-serif;
-    padding: 8px 12px; border-radius: 4px;
+    min-height: 38px; padding: 8px 12px; border-radius: 4px;
 }
 .nav-auth:hover { border-color: #1A211D; }
 .nav-auth-in { border-color: #17604A; color: #17604A; }
@@ -209,6 +226,7 @@ html[data-mode="beginner"] .lg-expert { display: none !important; }
 .nav-sync-warn { color: #7A5000; }
 .nav-sync-error { color: #8E2F29; }
 
+html[data-theme="light"] { color-scheme: light; }
 html[data-theme="dark"] { color-scheme: dark; background: #111714; }
 html[data-theme="dark"] #app-nav {
     background: #151C18; border-bottom-color: #36413B;
@@ -251,7 +269,7 @@ html[data-theme="dark"] .nav-mode button.active { background: #8BE8BC; color: #1
     border: none; background: none; color: #66716B;
     font: 600 11px/1 "Public Sans", sans-serif;
     letter-spacing: 0.12em; text-transform: uppercase;
-    padding: 7px 12px; border-radius: 3px;
+    min-height: 38px; padding: 7px 12px; border-radius: 3px;
     white-space: nowrap;
 }
 .nav-tab:hover { color: #1A211D; }
@@ -263,7 +281,8 @@ html[data-theme="dark"] .nav-mode button.active { background: #8BE8BC; color: #1
 @media (max-width: 720px) {
     #app-nav { flex-wrap: wrap; gap: 6px 10px; padding: 8px 14px; }
     .nav-right { gap: 8px; }
-    .nav-mode button { padding: 6px; letter-spacing: .04em; }
+    .nav-mode button { min-height: 40px; padding: 6px 8px; letter-spacing: .04em; }
+    .nav-theme, .nav-burger { width: 44px; height: 44px; }
     .nav-tabs {
         order: 3; flex-basis: 100%;
         justify-content: space-between;
@@ -271,9 +290,9 @@ html[data-theme="dark"] .nav-mode button.active { background: #8BE8BC; color: #1
         scrollbar-width: none;
     }
     .nav-tabs::-webkit-scrollbar { display: none; }
-    .nav-tab { padding: 7px 8px; letter-spacing: 0.08em; }
+    .nav-tab { min-height: 44px; padding: 7px 10px; letter-spacing: 0.08em; }
     .nav-user { display: none; }
-    .nav-auth { padding: 7px 9px; }
+    .nav-auth { min-height: 44px; padding: 7px 10px; }
 }
 
 /* ---------- Toast ---------- */
@@ -325,9 +344,10 @@ html[data-theme="dark"] .nav-mode button.active { background: #8BE8BC; color: #1
     border: 1px solid #59615D; border-radius: 5px;
     background: rgba(255, 255, 255, .06); color: #E8ECE8;
     font: 500 12px/1.2 "Public Sans", system-ui, sans-serif;
-    padding: 9px 10px;
+    min-height: 40px; padding: 9px 10px;
 }
 #confirm-input:focus { outline: none; border-color: #929B96; }
+#confirm-input:focus-visible { outline: 2px solid #8BE8BC; outline-offset: 2px; }
 #confirm-layer.with-input #confirm-prompt { flex-direction: column; align-items: stretch; gap: 10px; }
 #confirm-layer.with-input #confirm-input { display: block; }
 #confirm-layer.with-input .confirm-actions { justify-content: flex-end; }
@@ -335,7 +355,7 @@ html[data-theme="dark"] .nav-mode button.active { background: #8BE8BC; color: #1
 .confirm-actions button {
     border: 1px solid #59615D; border-radius: 5px;
     background: transparent; color: #E8ECE8;
-    padding: 7px 10px;
+    min-height: 40px; padding: 7px 10px;
     font: 600 11px/1 "Public Sans", system-ui, sans-serif;
 }
 .confirm-actions button:hover { border-color: #929B96; background: rgba(255, 255, 255, .08); }
@@ -345,4 +365,10 @@ html[data-theme="dark"] .nav-mode button.active { background: #8BE8BC; color: #1
 @media (max-width: 520px) {
     #confirm-prompt { align-items: stretch; flex-direction: column; gap: 10px; }
     .confirm-actions { justify-content: flex-end; }
+    #confirm-input, .confirm-actions button, .ff-beginner-toggle { min-height: 44px; }
+}
+
+@media (forced-colors: active) {
+    :focus-visible { outline-color: Highlight; }
+    .ff-hint[data-tooltip] { forced-color-adjust: auto; }
 }
