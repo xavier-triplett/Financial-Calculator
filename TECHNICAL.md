@@ -1,10 +1,10 @@
-# The Coast Ledger — Technical Details
+# Meridian: Technical Details
 
 For product usage, see the [README](README.md) or the in-app **Guide**.
 
 Live site: https://xavier-triplett.github.io/Financial-Calculator/
 
-The Coast Ledger is a zero-build static web application. The production path uses plain
+Meridian is a zero-build static web application. The production path uses plain
 HTML, CSS, and browser JavaScript; Node dependencies exist only for tests and Firebase
 tooling. Calculation and tracker modules attach small APIs to `globalThis`, which lets the
 same source files run in a browser and in Node tests.
@@ -89,15 +89,17 @@ otherwise an unchanged plan produces unchanged results.
 
 ## State and validation
 
-`js/store.js` owns plan state under `fireData_v3`. `js/tracker/store.js` owns tracker state
-under `trackerData_v2`. Both use `localStorage`, validate data at load/replace boundaries,
-and notify subscribers after a successful in-memory update. The tracker surfaces a
-warning if persistence fails so an in-memory edit is not mistaken for a durable save.
+`js/store.js` owns plan state under `fireData_v3`. `js/tracker/store.js` owns schema-v3
+tracker state under the existing `trackerData_v2` storage key. Both use `localStorage`,
+validate data at load/replace boundaries, keep bounded in-session undo, and notify
+subscribers after a successful in-memory update. The tracker migrates valid v2 local
+records to v3 and surfaces a warning if persistence fails so an in-memory edit is not
+mistaken for a durable save.
 
 Input numbers are clamped to engine limits, integer-only values are rounded, drawdown and
 saving splits are normalized, duplicate or invalid phases are repaired, and malformed
-stored tracker records are discarded field by field. Stored formats have no migration or
-backward-compatibility promise; incompatible data may reset to defaults.
+stored tracker records are discarded field by field. Unsupported or invalid future data
+may still reset to defaults.
 
 Beginner and Expert are two models over this same state, not two levels of detail. Beginner
 projects the stored inputs onto `FireEngine.BEGINNER_MODEL`, a published constant for every
@@ -112,6 +114,13 @@ flat in real terms and the inflation-indexed IRS limits stay constant, which is 
 limits mean in real terms. `engine.test.js` pins the equivalence by running a growth-only
 plan through both modes and deflating the nominal result.
 
+Beginner also fixes every modeled tax and early-withdrawal penalty to zero instead of
+inventing a rate for a new user. Expert models the current tax benefit of deferred
+contributions and later withdrawal tax. Before the configured access age, Roth draws are
+capped by `rothContributionBasis`; Roth IRA contributions add basis while workplace Roth
+contributions do not. `FireEngine.spendableAssets()` is the canonical after-tax comparison
+used by planner readiness and tracked FI progress.
+
 `FireApp.inputs()` returns the inputs the current mode actually simulated. Every UI reads it
 rather than `FireStore.get().inputs`, or a label would describe a run that never happened.
 Switching modes never rewrites the plan.
@@ -120,13 +129,15 @@ Switching modes never rewrites the plan.
 
 The tracker domains are intentionally independent:
 
-- **Net Worth** stores accounts, monthly balance snapshots, and optional age/income
-  history. It calculates assets, liabilities, investable assets, account composition, and
+- **Net Worth** stores canonical accounts, monthly and arbitrary dated balance snapshots,
+  account freshness, liability terms, and optional age/income history. It calculates
+  assets, liabilities, investable assets, account composition, and
   PAW/AAW/UAW benchmarks (`AAW = age × income ÷ 10`, `PAW = 2 × AAW`,
   `UAW = AAW ÷ 2`). Its bridge to the Planner sends only the latest mapped account
   balances.
-- **Cashbook** stores transactions and explicitly opened months. Categories resolve to
-  income, transfer, saving, fixed, variable, or spending, with user overrides. Its bridge
+- **Cashbook** stores linked transactions, optional category splits, explicitly opened
+  months, recurring templates, category budgets, and merchant rules. Categories resolve
+  to income, transfer, saving, fixed, variable, or spending, with user overrides. Its bridge
   always proposes trailing annual expenses. With positive income and at least three
   months of history, it also proposes a savings rate and estimates gross income by
   treating transaction income as take-home pay and applying the Profile's effective
@@ -138,8 +149,9 @@ month, explicitly marked saving is used when present; otherwise income minus exp
 used. This supports histories that mix marked and inferred saving without dropping either
 kind.
 
-Rocket Money import accepts quoted CSV fields, validates dates and amounts, skips rows
-marked ignored, supports custom header mappings, and reports rejected rows. It only flips
+Transaction CSV import accepts Rocket Money and custom-mapped headers, quoted fields,
+validated dates and amounts, ignored-row markers, and merchant rules, and reports rejected
+rows. It only flips
 a debit-negative expense convention when the income/expense evidence is unambiguous;
 ambiguous expense signs are preserved, while income is always normalized positive.
 Import identity is occurrence-aware, so exact duplicate purchases in one source file are
@@ -277,7 +289,10 @@ The scripts can also run separately:
 - `npm run test:browser` runs the UI smoke suite, mocked cloud lifecycle suite, and
   vendored Firebase/config load check in isolated headless-Chrome profiles. It also
   serves and boots the production `index.html` over a loopback HTTP server and fails on
-  missing required assets. A secure-context browser test installs the service worker,
+  missing required assets. The Phase 1 product test covers the first-run gate, zero-tax
+  Beginner model, budgets, goals, debt, recurring items, splits, arbitrary snapshots,
+  data controls, compact-width overflow, and dark-calendar contrast. A secure-context
+  browser test installs the service worker,
   removes a stale release cache, verifies network-first behavior, and loads the cached
   application shell with the server offline. Fixture pages use in-memory storage and
   disable themselves outside local or `file:` origins.
@@ -298,6 +313,7 @@ js/engine.js                       retirement calculation and Monte Carlo
 js/store.js                        normalized plan state and persistence
 js/schema.js                       input and disclosure definitions
 js/forms.js                        reusable form and phase editors
+js/data.js                         portable workspace export and restore
 js/app.js                          boot, navigation, modal, recomputation, sync status
 js/security.js                     early framed-page guard
 js/cloud.js                        revision-safe optional cloud sync
@@ -307,7 +323,7 @@ js/tracker/engine.js               tracker calculations and benchmarks
 js/tracker/rocketmoney.js          CSV parser and import normalization
 js/tracker/store.js                validated tracker state and persistence
 js/tracker/kit.js                  tracker charts, import, and Planner bridge helpers
-js/ui/                             Profile, Planner, trackers, Categories, and Guide
+js/ui/                             Today, Profile, Planner, trackers, Goals, Rules, Data, Guide
 js/vendor/                         Chart.js, Flatpickr, Firebase compat bundles
 css/                               application styles and vendored fonts
 firestore.rules                    per-user schema and concurrency enforcement
