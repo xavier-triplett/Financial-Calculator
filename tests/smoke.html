@@ -37,6 +37,7 @@
     <script src="../js/tracker/rocketmoney.js"></script>
     <script src="../js/tracker/store.js"></script>
     <script src="../js/tracker/kit.js"></script>
+    <script src="../js/ui/today.js"></script>
     <script src="../js/ui/ledger.js"></script>
     <script src="../js/ui/tracker-observatory.js"></script>
     <script src="../js/ui/tracker-cashbook.js"></script>
@@ -62,6 +63,7 @@
             FireStore.init();
             FireApp.setMode('beginner');
             FireApp.setMode('expert');
+            FireApp.setView('ledger');
 
             check('ledger mounts', document.querySelector('.lg-shell') !== null);
             check('blank plan is gated', document.querySelector('[data-el="gate"]').hidden === false &&
@@ -455,6 +457,18 @@
             check('burger state resets when overflow clears',
                 document.querySelector('#app-nav [data-nav-burger]').getAttribute('aria-expanded') === 'false' &&
                 document.querySelector('#app-nav .nav-menu').hidden === true);
+            nav('[data-view="ledger"]');
+
+            // Today reads the tracker, not the plan it is handed as a FireUI.
+            nav('[data-view="today"]');
+            var todayKpis = Array.prototype.map.call(document.querySelectorAll('.home-kpis article'),
+                function (node) { return node.textContent; });
+            check('today shows tracked net worth',
+                /^Net worth\$[\d.]+[KMk]?/.test(todayKpis[0]) && !/Not tracked/.test(todayKpis[0]));
+            check('today shows tracked spending', !/Not tracked/.test(todayKpis[1]));
+            check('today shows FI progress from balances', /%/.test(todayKpis[2]));
+            check('today stops asking for a first snapshot',
+                !/Add your first balance snapshot/.test(text('.home-hero-copy')));
             nav('[data-view="ledger"]');
 
             // Beginner is a second model, not a filtered view of the expert one.
