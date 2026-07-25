@@ -89,8 +89,8 @@ otherwise an unchanged plan produces unchanged results.
 
 ## State and validation
 
-`js/store.js` owns plan state under `fireData_v3`. `js/tracker/store.js` owns simplified
-schema-v4 tracker state under `trackerData_v4`. Both use `localStorage`, validate data at
+`js/store.js` owns schema-v5 plan state under `fireData_v3`. `js/tracker/store.js` owns
+simplified schema-v4 tracker state under `trackerData_v4`. Both use `localStorage`, validate data at
 load/replace boundaries, keep bounded in-session undo, and notify subscribers after a
 successful in-memory update. Older tracker saves are intentionally not adopted because
 the removed planning and automation features no longer belong in the state shape. The
@@ -112,16 +112,17 @@ derives its beginner fields from it so the UI cannot offer a field the model ign
 Beginner needs no special case in the simulation loop. It sets `inflation` to 0 and derives
 `marketReturn` and `incomeGrowth` as real rates from the same nominal pair Expert runs on
 (`FireEngine.BEGINNER_NOMINAL`), which puts every figure in today's dollars: expenses stay
-flat in real terms and entered annual contribution limits remain constant in today's
-dollars. `engine.test.js` pins the equivalence by running a growth-only plan through both
-modes and deflating the nominal result.
+flat in real terms and the fixed 2026 Beginner contribution limits remain constant.
+`engine.test.js` pins the equivalence by running a growth-only plan through both modes and
+deflating the nominal result.
 
 Beginner also fixes every modeled tax and early-withdrawal penalty to zero instead of
 inventing a rate for a new user. Expert models the current tax benefit of deferred
-contributions and later withdrawal tax. Before the configured access age, Roth draws are
-capped by `rothContributionBasis`; Roth IRA contributions add basis while workplace Roth
-contributions do not. `FireEngine.spendableAssets()` is the canonical after-tax comparison
-used by planner readiness and tracked FI progress.
+contributions and later withdrawal tax. Beginner fixes the retirement-account access
+checkpoint at age 60 and uses the 2026 workplace, IRA, and catch-up contribution limits;
+Expert exposes those controls. Roth balances are unavailable before the configured access
+age. `FireEngine.spendableAssets()` is the canonical after-tax comparison used by planner
+readiness and tracked FI progress.
 
 `FireApp.inputs()` returns the inputs the current mode actually simulated. Every UI reads it
 rather than `FireStore.get().inputs`, or a label would describe a run that never happened.
@@ -291,7 +292,7 @@ The scripts can also run separately:
   vendored Firebase/config load check in isolated headless-Chrome profiles. It also
   serves and boots the production `index.html` over a loopback HTTP server and fails on
   missing required assets. The Phase 1 product test covers the first-run gate, zero-tax
-  Beginner model, editable personal assumptions, debt details, categories, splits,
+  Beginner model, fixed 2026 retirement assumptions, debt details, categories, splits,
   arbitrary snapshots, data controls, compact-width overflow, and dark-calendar contrast.
   A secure-context
   browser test installs the service worker,

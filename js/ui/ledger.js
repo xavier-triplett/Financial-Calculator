@@ -85,7 +85,7 @@
                     '<div class="lg-expert" data-el="drawdown"></div>' +
                     (beginner
                         ? '<p class="mode-note">Growth and the withdrawal rate are fixed in Beginner mode; taxes are intentionally not modeled. ' +
-                            'Allocation, account limits, Roth access, and employer match use only what you enter. Every fixed choice is listed on the Profile tab. ' +
+                            'Retirement access and contribution limits use the listed 2026 baseline; allocation and employer match remain yours. ' +
                             '<button type="button" data-mode-set="expert">Switch to Expert</button> to set your own.</p>'
                         : '') +
                 '</aside>' +

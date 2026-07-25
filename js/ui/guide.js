@@ -42,7 +42,7 @@
                 '<div class="gd-card-title">Two models</div>' +
                 '<p><strong>Beginner</strong> is a simpler simulation, not a shorter version of the expert one. It keeps a small set ' +
                 'of modeling choices printed in full on the Profile tab: one savings rate that never ' +
-                'ramps, growth after inflation, no guessed taxes, and a 4% withdrawal guideline. Your allocation, retirement-account access, contribution limits, Roth basis, and employer match remain editable. Because inflation ' +
+                'ramps, growth after inflation, no guessed taxes, a 4% withdrawal guideline, an age-60 retirement-access checkpoint, and 2026 federal contribution limits. Your allocation and employer match remain editable. Because inflation ' +
                 'is taken out rather than modeled, every figure reads in today\'s dollars.</p>' +
                 '<p><strong>Expert</strong> hands you all of it: every rate, saving phase, drawdown rule and diagnostic, projected in ' +
                 'future dollars. Expert-only tax, market, drawdown, and simulation inputs do not leak into a beginner run; personal facts exposed in both modes stay shared. The same plan can report two ' +
@@ -75,17 +75,16 @@
                 '<div class="gd-card-title">The bridge</div>' +
                 '<p>Say you retire at 50 but choose age 60 as the simplified account-access checkpoint. Those ten years are <strong>the bridge</strong> &mdash; ' +
                 'and your accessible balances need to carry those years. The app reports this as a separate milestone so a large total balance does not hide an access gap.</p>' +
-                '<p>If the bridge fails, the projection keeps going by tapping the locked accounts early: tax-deferred draws then pay the ' +
-                'early-withdrawal penalty on top of income tax, while Roth draws are treated as penalty-free withdrawals of what you contributed.</p>' +
+                '<p>If the bridge fails, the projection keeps going by tapping tax-deferred accounts early, using any tax and early-withdrawal rates in the selected model. Roth balances stay unavailable until the modeled access age.</p>' +
             '</section>' +
 
             '<section class="gd-card">' +
                 '<div class="gd-card-title">How to use the app</div>' +
                 '<ol class="gd-steps">' +
                     '<li><strong>Profile</strong> &mdash; explicitly choose Traditional retirement, Coast FIRE, or Early FIRE when you want a projection. ' +
-                    'Date of birth and annual expenses place it on a timeline. Income, tax estimates, account limits, and access age are editable; leave optional personal inputs at 0 rather than guessing.</li>' +
+                    'Date of birth and annual expenses place it on a timeline. Income remains optional. Expert mode adds editable tax estimates, contribution limits, and access age.</li>' +
                     '<li><strong>Planner</strong> &mdash; set the assumptions: your savings rate, how each saved dollar splits across the ' +
-                    'three buckets, employer match, contribution access, and what you expect from the market. No employer match, workplace-plan access, IRA room, or catch-up contribution is assumed.</li>' +
+                    'three buckets, employer match, and what you expect from the market. Beginner uses its stated 2026 contribution limits; Expert lets you replace them. No employer match is assumed.</li>' +
                     '<li><strong>Read the verdicts</strong> &mdash; the first two stamps adapt to the selected path: reaching the coast and ' +
                     'coasting to retirement, funding an early-retirement bridge, or reaching a traditional retirement. Resilience shows how many simulated market ' +
                     'futures still leave you with money at 95.</li>' +
@@ -120,8 +119,8 @@
                     dt('Roth', 'A tax treatment available in some IRAs and workplace plans. Qualified distributions can be tax-free, while nonqualified distributions and conversions can require more detailed handling than this app models.') +
                     dt('Brokerage account', 'An ordinary taxable investment account. No tax perks, no age locks.') +
                     dt('Employer match', 'An optional employer contribution described by your workplace plan. Enter your own match rate and eligible-pay cap; the app assumes none. The projection places modeled match dollars in the tax-deferred bucket.') +
-                    dt('Contribution limits', 'The annual workplace and IRA amounts you choose to model. The app fills workplace capacity first, then IRA capacity, while preserving your allocation. It does not determine eligibility, compensation limits, deductibility, or plan-specific restrictions.') +
-                    dt('Account access age', 'One editable checkpoint used by this simplified projection. Real distribution access and additional-tax exceptions vary by account, employment separation, plan terms, and circumstances.') +
+                    dt('Contribution limits', 'The app fills workplace capacity first, then IRA capacity, while preserving your allocation. Beginner uses its stated 2026 federal baseline; Expert lets you edit each amount. Eligibility, compensation limits, deductibility, and plan-specific restrictions are not calculated.') +
+                    dt('Account access age', 'The annual projection uses one checkpoint for retirement-account access: age 60 in Beginner and editable in Expert. Roth balances are unavailable before it. Real distribution access and additional-tax exceptions vary by account, employment separation, plan terms, and circumstances.') +
                     dt('Effective tax rate', 'Your total tax as a share of the money in question &mdash; a blend of all the brackets, not your top bracket. Expert applies one effective rate to deferred withdrawals and another to the full amount of each brokerage withdrawal; Beginner does not guess or model taxes.') +
                     dt('Capital gains', 'Profit from selling an investment for more than you paid. The app does not track tax basis or holding period; it applies any brokerage-draw estimate you enter to the <em>entire</em> withdrawal. Leave it at 0 unless a simplified blended estimate is useful to you.') +
                     dt('Inflation', 'The slow rise of prices. The plan grows your expenses and the IRS limits with it, so a plan that works &ldquo;in today&rsquo;s dollars&rdquo; still works in 2050&rsquo;s dollars.') +

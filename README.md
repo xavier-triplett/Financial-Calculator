@@ -18,12 +18,11 @@ on an output.
    zero to model no future contributions.
 2. In **Profile**, choose a retirement path and enter only the facts you know. Coast FIRE
    stops new retirement contributions at the coast age while modeled employment continues
-   until full retirement. The account-access age is an editable planning input, not a
-   statement that an account or distribution is eligible.
+   until full retirement. Expert mode exposes an editable account-access checkpoint.
 3. In **Planner**, review your savings rate, account balances, allocation, employer
-   match, contribution limits, market return, inflation, and drawdown strategy. Employer
-   match and contribution limits start at zero. Enter the terms that apply to you; the app
-   does not infer a plan, employer benefit, tax status, or contribution eligibility.
+   match, market return, inflation, and drawdown strategy. Employer match starts at zero.
+   Expert mode exposes editable contribution limits; the app does not determine plan
+   access, tax status, or contribution eligibility.
 4. Read the four headline results:
 
    - **Path milestones:** adaptive verdicts for reaching and sustaining Coast FIRE,
@@ -38,18 +37,18 @@ on an output.
 
 **Beginner** and **Expert** are two different simulations, not one simulation at two levels
 of detail. Beginner uses one savings rate that never ramps, growth after inflation, the
-4% withdrawal rule, and an editable three-account allocation. Employer match, contribution
-limits, account-access age, and Roth contribution basis remain editable because they are
-personal facts. **Beginner does not invent a tax estimate:** income tax, withdrawal tax,
+4% withdrawal rule, an editable three-account allocation, an age-60 retirement-access
+checkpoint, and 2026 federal contribution limits. Employer match remains editable.
+**Beginner does not invent a tax estimate:** income tax, withdrawal tax,
 brokerage tax, and early-withdrawal penalties all start at zero and are stated that way.
 Because inflation is removed rather than modeled, every beginner figure reads in today's
 dollars. **Expert** exposes every rate, saving phase, drawdown preference, and diagnostic,
 projected in future dollars.
 
-Expert-only market, tax, drawdown, and simulation settings never leak into a beginner run.
-Shared personal facts such as balances, match terms, and contribution limits remain shared
-and editable in both modes. Both modes read and write one saved plan; switching modes never
-rewrites it.
+Expert-only access, contribution-limit, market, tax, drawdown, and simulation settings
+never leak into a beginner run. Shared personal facts such as balances and match terms
+remain editable in both modes. Both modes read and write one saved plan; switching modes
+never rewrites it.
 The in-app **Guide** explains Coast FIRE, the account buckets, and every result in plain
 language.
 

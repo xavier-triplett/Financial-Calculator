@@ -1,4 +1,4 @@
-var CACHE = 'meridian-2026-07-25-simplified';
+var CACHE = 'meridian-2026-07-25-beginner-baseline';
 var ASSETS = [
     './',
     './index.html',

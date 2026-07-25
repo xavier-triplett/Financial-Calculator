@@ -216,7 +216,7 @@
         compute();
         mountActive();
         toast(mode === 'beginner'
-            ? "Beginner model: no tax estimates, editable benefits, today's dollars"
+            ? "Beginner model: 2026 limits, no tax estimates, today's dollars"
             : 'Expert model: optional tax and market inputs, future dollars');
     }
 

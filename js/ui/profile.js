@@ -47,7 +47,7 @@
     function assumptionsHtml() {
         return '<section class="pf-card pf-assumptions">' +
             '<div class="pf-card-title">The standard assumptions</div>' +
-            '<p class="pf-help">Beginner mode keeps market and tax modeling simple while leaving personal facts, account access, allocation, and employer benefits editable. ' +
+            '<p class="pf-help">Beginner mode uses a fixed age-60 retirement-access checkpoint and 2026 federal contribution limits while keeping your balances, allocation, and employer match editable. ' +
                 '<button type="button" data-mode-set="expert">Switch to Expert</button> for detailed rates and drawdown controls.</p>' +
             '<dl class="pf-assume-list">' +
                 FireEngine.beginnerAssumptions().map(function (a) {

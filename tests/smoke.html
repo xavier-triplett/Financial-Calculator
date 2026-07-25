@@ -497,8 +497,9 @@
 
             // The customizations above must not reach the beginner simulation.
             check('beginner simulates the fixed model, not stored expert values',
-                FireApp.inputs().swr === 4 && FireApp.inputs().standardRetireAge === 70 &&
-                FireApp.inputs().marketReturn === FireEngine.BEGINNER_MODEL.marketReturn);
+                FireApp.inputs().swr === 4 && FireApp.inputs().standardRetireAge === 60 &&
+                FireApp.inputs().marketReturn === FireEngine.BEGINNER_MODEL.marketReturn &&
+                FireApp.inputs().limit401k === 24500 && FireApp.inputs().limitIRA === 7500);
             check('beginner holds the savings rate flat',
                 FireApp.inputs().savingsRateIncrease === 0 &&
                 FireApp.inputs().maxSavingsRate === FireApp.inputs().savingsRate);
@@ -512,12 +513,21 @@
                 document.querySelector('[data-key="employerMatchRate"]') !== null &&
                 document.querySelector('[data-key="employerMatchCap"]') !== null &&
                 FireApp.inputs().employerMatchRate === 75 && FireApp.inputs().employerMatchCap === 4);
-            check('beginner exposes optional account access and allocation',
-                document.querySelector('[data-key="limit401k"]') !== null &&
+            check('beginner hides retirement access and contribution limits',
+                document.querySelector('[data-key="standardRetireAge"]') === null &&
+                document.querySelector('[data-key="limit401k"]') === null &&
+                document.querySelector('[data-key="limitIRA"]') === null &&
+                document.querySelector('[data-key="catchUpAge"]') === null &&
+                document.querySelector('[data-key="catchUp401k"]') === null &&
+                document.querySelector('[data-key="superCatchUp401k"]') === null &&
+                document.querySelector('[data-key="catchUpIRA"]') === null);
+            check('beginner keeps allocation editable',
                 document.querySelector('[data-key="beginnerDeferredShare"]') !== null &&
                 FireApp.phases()[0].deferred === 60 &&
                 FireApp.phases()[0].free === 20 &&
                 FireApp.phases()[0].taxable === 20);
+            check('Roth contribution basis control is removed',
+                document.querySelector('[data-key="rothContributionBasis"]') === null);
             check('Monte Carlo rate remains visible', /^\d+%$/.test(text('[data-el="mcRate"]')));
             check('switching mode preserves plan data', FireStore.get().inputs.income === preservedIncome);
 
@@ -529,8 +539,13 @@
 
             FireApp.setMode('expert');
             check('expert drops the beginner note', document.querySelector('.lg-controls .mode-note') === null);
-            check('expert restores the stored assumptions', FireApp.inputs().swr === 9);
+            check('expert restores the stored assumptions',
+                FireApp.inputs().swr === 9 && FireApp.inputs().standardRetireAge === 70);
             check('expert exposes the frozen dials', document.querySelector('[data-key="swr"]') !== null);
+            check('expert keeps contribution controls',
+                document.querySelector('[data-key="limit401k"]') !== null &&
+                document.querySelector('[data-key="limitIRA"]') !== null &&
+                document.querySelector('[data-key="catchUpAge"]') !== null);
             check('expert states its dollar basis', /future/i.test(text('.lg-basis')));
             FireStore.setInputs({ swr: FireEngine.DEFAULTS.swr, marketReturn: FireEngine.DEFAULTS.marketReturn,
                 standardRetireAge: FireEngine.DEFAULTS.standardRetireAge });
