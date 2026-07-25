@@ -47,7 +47,6 @@ const normalized = E.normalizeInputs({
     savingsRate: 75,
     maxSavingsRate: 50,
     taxTaxableRate: -20,
-    rothContributionBasis: -50,
     swr: 0,
     marketReturn: -150,
     mcSims: 50.5
@@ -55,7 +54,7 @@ const normalized = E.normalizeInputs({
 check('input domains clamp unsafe values',
     normalized.currentAge === 95 && normalized.income === 0 && normalized.expenses === E.DEFAULTS.expenses &&
     normalized.savingsRate === 50 && normalized.taxTaxableRate === 0 && normalized.swr === 0.1 &&
-    normalized.rothContributionBasis === 0 && normalized.marketReturn === -99 && normalized.mcSims === 51);
+    normalized.marketReturn === -99 && normalized.mcSims === 51);
 check('draw sets normalize to exactly 100', E.DRAW_SETS.every(keys =>
     approx(keys.reduce((sum, key) => sum + normalized[key], 0), 100)));
 
@@ -165,21 +164,9 @@ const rothVehicleRow = vehiclePlan({ deferred: 0, free: 100, taxable: 0 }).rows[
 const rothVehicle = rothVehicleRow.contrib;
 check('Roth workplace contributions earn match',
     approx(rothVehicle.free, 32000) && approx(rothVehicle.match, 6000) && approx(rothVehicle.deferred, 0));
-check('only Roth IRA contributions add accessible contribution basis',
-    approx(rothVehicle.rothBasisAdded, 7500) &&
-    approx(rothVehicleRow.rothContributionBasis, 7500));
-
-const workplaceOnlyRoth = E.simulate(Object.assign({}, E.DEFAULTS, {
-    currentAge: 30, retireAge: 31, standardRetireAge: 60,
-    income: 200000, incomeTaxRate: 0, expenses: 0,
-    savingsRate: 10, savingsRateIncrease: 0, maxSavingsRate: 10,
-    incomeGrowth: 0, marketReturn: 0, inflation: 0, employerMatchRate: 0,
-    limit401k: 24500, limitIRA: 7500
-}), [{ age: 30, deferred: 0, free: 100, taxable: 0 }], {}).rows[0];
-check('workplace Roth contributions do not add accessible basis',
-    approx(workplaceOnlyRoth.contrib.free, 20000) &&
-    workplaceOnlyRoth.contrib.rothBasisAdded === 0 &&
-    workplaceOnlyRoth.rothContributionBasis === 0);
+check('Roth projections expose no contribution-basis metadata',
+    !Object.prototype.hasOwnProperty.call(rothVehicle, 'rothBasisAdded') &&
+    !Object.prototype.hasOwnProperty.call(rothVehicleRow, 'rothContributionBasis'));
 
 const deferredVehicle = vehiclePlan({ deferred: 100, free: 0, taxable: 0 }).rows[0].contrib;
 check('traditional IRA capacity follows the workplace limit',
@@ -327,49 +314,32 @@ check('bridge deferred draws pay deferred tax plus the early penalty',
 check('standard-age deferred draws do not pay the early penalty',
     firstDeferredStandard && firstDeferredStandard.wd.taxes < firstDeferredStandard.wd.deferred * 0.25);
 
-const rothBasisBridgeInputs = Object.assign({}, E.DEFAULTS, {
+const rothAccessInputs = Object.assign({}, E.DEFAULTS, {
     currentAge: 40, retireAge: 40, standardRetireAge: 60,
     expenses: 100, balDeferred: 0, balFree: 1000, balTaxable: 0,
-    rothContributionBasis: 250,
     marketReturn: 0, inflation: 0,
     taxDeferredRate: 0, taxTaxableRate: 0, earlyPenaltyRate: 0,
     drawTaxableBridge: 0, drawDeferredBridge: 0, drawFreeBridge: 100
 });
-const rothBasisBridge = E.simulate(rothBasisBridgeInputs, null, {});
-check('pre-access Roth draws stop at accessible contribution basis',
-    approx(rothBasisBridge.rows[0].wd.free, 100) &&
-    approx(rothBasisBridge.rows[1].wd.free, 100) &&
-    approx(rothBasisBridge.rows[2].wd.free, 50) &&
-    rothBasisBridge.rows[3].wd.free === 0 &&
-    rothBasisBridge.summary.ranOutOfMoneyAge === 42);
-check('preferred Roth draws decrement basis without consuming inaccessible earnings',
-    approx(rothBasisBridge.rows[0].rothContributionBasis, 150) &&
-    approx(rothBasisBridge.rows[2].rothContributionBasis, 0) &&
-    approx(rothBasisBridge.rows[2].free, 750));
+const preAccessRoth = E.simulate(rothAccessInputs, null, {});
+check('Roth balances stay unavailable before the account-access age',
+    preAccessRoth.rows.slice(0, 20).every(row => row.wd.free === 0) &&
+    approx(preAccessRoth.rows[20].wd.free, 100));
 
-const rothBasisFallback = E.simulate(Object.assign({}, rothBasisBridgeInputs, {
-    currentAge: 40, retireAge: 40, expenses: 100,
-    rothContributionBasis: 200,
-    drawTaxableBridge: 100, drawDeferredBridge: 0, drawFreeBridge: 0
-}), null, {});
-check('fallback Roth draws obey and decrement the same basis',
-    approx(rothBasisFallback.rows[0].wd.free, 100) &&
-    approx(rothBasisFallback.rows[0].rothContributionBasis, 100));
-
-const standardRoth = E.simulate(Object.assign({}, rothBasisBridgeInputs, {
-    currentAge: 60, retireAge: 60, standardRetireAge: 60,
-    rothContributionBasis: 0
+const standardRoth = E.simulate(Object.assign({}, rothAccessInputs, {
+    currentAge: 60, retireAge: 60, standardRetireAge: 60
 }), null, {});
 check('the full Roth balance is available at the account-access age',
     approx(standardRoth.rows[0].wd.free, 100));
 
-const inaccessibleRothMc = E.monteCarlo(Object.assign({}, rothBasisBridgeInputs, {
-    expenses: 10, volatility: 0, mcSims: 50, rothContributionBasis: 0
+const inaccessibleRothMc = E.monteCarlo(Object.assign({}, rothAccessInputs, {
+    expenses: 100, volatility: 0, mcSims: 50
 }), null, { seed: 17 });
-const accessibleRothMc = E.monteCarlo(Object.assign({}, rothBasisBridgeInputs, {
-    expenses: 10, volatility: 0, mcSims: 50, rothContributionBasis: 1000
+const accessibleRothMc = E.monteCarlo(Object.assign({}, rothAccessInputs, {
+    currentAge: 60, retireAge: 60, standardRetireAge: 60,
+    expenses: 10, volatility: 0, mcSims: 50
 }), null, { seed: 17 });
-check('lean Monte Carlo applies the same Roth-basis access limit',
+check('lean Monte Carlo applies the same Roth access checkpoint',
     inaccessibleRothMc.successRate === 0 && accessibleRothMc.successRate === 1);
 
 const withoutCash = E.simulate(DEMO, regressionPhases, {});
@@ -397,8 +367,6 @@ const totals = new Float64Array(years);
 const lean = E.simulate(DEMO, null, { returns, lean: true, totalsOut: totals });
 check('lean mode matches full totals', full.rows.every((row, i) => approx(row.total, totals[i])));
 check('lean mode matches summary', approx(full.summary.endingNetWorth, lean.summary.endingNetWorth));
-check('lean mode preserves Roth contribution basis',
-    approx(full.summary.endingRothContributionBasis, lean.summary.endingRothContributionBasis));
 
 const fractionalMc = E.monteCarlo(Object.assign({}, DEMO, { mcSims: 50.1 }), null, { seed: 9 });
 check('Monte Carlo simulation count is integral', fractionalMc.sims === 50);
@@ -450,13 +418,16 @@ const beg = E.beginnerInputs(TAMPERED);
 check('beginner ignores customized growth', beg.marketReturn === E.BEGINNER_MODEL.marketReturn);
 check('beginner ignores customized inflation', beg.inflation === 0);
 check('beginner ignores customized withdrawal rate', beg.swr === 4);
-check('beginner keeps the entered access age', beg.standardRetireAge === 72);
+check('beginner uses the fixed age-60 access checkpoint', beg.standardRetireAge === 60);
 check('beginner models no taxes or early penalty',
     beg.incomeTaxRate === 0 && beg.taxDeferredRate === 0 &&
     beg.taxTaxableRate === 0 && beg.earlyPenaltyRate === 0);
-check('beginner keeps entered Roth contribution basis', beg.rothContributionBasis === 30000);
-check('beginner keeps entered contribution access',
-    beg.limit401k === 999999 && beg.limitIRA === 999999);
+check('removed Roth contribution basis is not normalized',
+    !Object.prototype.hasOwnProperty.call(beg, 'rothContributionBasis'));
+check('beginner uses 2026 contribution limits',
+    beg.limit401k === 24500 && beg.limitIRA === 7500 &&
+    beg.catchUp401k === 8000 && beg.superCatchUp401k === 11250 &&
+    beg.catchUpIRA === 1100 && beg.catchUpAge === 50);
 check('beginner ignores customized drawdown order',
     beg.drawTaxableStd === E.DEFAULTS.drawTaxableStd && beg.drawFreeStd === E.DEFAULTS.drawFreeStd);
 check('beginner ignores customized Monte Carlo settings',

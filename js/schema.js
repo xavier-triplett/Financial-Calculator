@@ -75,7 +75,6 @@
                 fields: [
                     { key: 'balDeferred', label: 'Tax-deferred (401k / IRA)', unit: '$', step: 1000, min: 0, max: 1000000000000000, bucket: 'deferred' },
                     { key: 'balFree', label: 'Tax-free (Roth)', unit: '$', step: 1000, min: 0, max: 1000000000000000, bucket: 'free' },
-                    { key: 'rothContributionBasis', label: 'Accessible Roth contributions (optional)', unit: '$', step: 500, min: 0, max: 1000000000000000, bucket: 'free', hint: 'Enter only regular Roth IRA contributions in the current balance that you expect to be available before the access age. Exclude earnings, conversions, and workplace Roth contributions.' },
                     { key: 'balTaxable', label: 'After-tax (brokerage)', unit: '$', step: 1000, min: 0, max: 1000000000000000, bucket: 'taxable' },
                     { key: 'balCash', label: 'Cash on hand', unit: '$', step: 500, min: 0, max: 1000000000000000, bucket: 'cash', hint: 'Counts toward net worth but sits outside the market — the projection never grows it and never draws it down.' }
                 ]

@@ -69,7 +69,10 @@ FireStore.setProfile('birthDate', '2026-02-30');
 check('invalid calendar DOB is rejected', FireStore.get().profile.birthDate === null);
 
 FireStore.replace({
-    inputs: { income: Infinity, expenses: -100, swr: 0, mcSims: 50.5 },
+    inputs: {
+        income: Infinity, expenses: -100, swr: 0, mcSims: 50.5,
+        rothContributionBasis: 50000
+    },
     profile: { birthDate: null },
     phases: [{ id: 7, age: 40, deferred: 0, free: 0, taxable: 100, isLocked: false }]
 });
@@ -77,6 +80,9 @@ check('adoption normalizes invalid financial inputs',
     FireStore.get().inputs.income === FireEngine.DEFAULTS.income &&
     FireStore.get().inputs.expenses === 0 && FireStore.get().inputs.swr === 0.1 &&
     FireStore.get().inputs.mcSims === 51);
+check('adoption drops removed Roth contribution basis data',
+    !Object.prototype.hasOwnProperty.call(FireStore.get().inputs, 'rothContributionBasis') &&
+    FireStore.get().schemaVersion === 5);
 check('future-only adoption restores baseline phase',
     FireStore.get().phases.length === 2 && phaseInvariant(FireStore.get().phases, 30) &&
     FireStore.get().phases[1].age === 40 && FireStore.get().phases[1].taxable === 100);

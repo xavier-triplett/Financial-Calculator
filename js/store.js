@@ -3,7 +3,7 @@
     'use strict';
 
     var KEY = 'fireData_v3';
-    var SCHEMA_VERSION = 4;
+    var SCHEMA_VERSION = 5;
     var MAX_UNDO = 20;
     var listeners = [];
     var state = null;

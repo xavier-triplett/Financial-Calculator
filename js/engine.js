@@ -35,8 +35,6 @@
         // Current buckets
         balDeferred: 0,
         balFree: 0,
-        // Regular Roth IRA contributions available before the access age.
-        rothContributionBasis: 0,
         balTaxable: 0,
         // Cash on hand: counts toward net worth but sits outside the market —
         // never grown by returns and never drawn by the simulation.
@@ -80,7 +78,7 @@
         taxTaxableRate: 0,        // optional effective estimate
         // Extra charge on tax-deferred draws before standardRetireAge
         // (the IRS rate is 10%; set 0 for Rule of 55 / 72(t) plans).
-        // Roth draws are modeled penalty-free, as contribution withdrawals.
+        // Roth draws are available at the modeled access age and tax-free.
         earlyPenaltyRate: 0,      // optional estimate
 
         // Monte Carlo
@@ -103,7 +101,6 @@
         incomeGrowth: { min: -99, max: 100 },
         balDeferred: { min: 0, max: 1e15 },
         balFree: { min: 0, max: 1e15 },
-        rothContributionBasis: { min: 0, max: 1e15 },
         balTaxable: { min: 0, max: 1e15 },
         balCash: { min: 0, max: 1e15 },
         beginnerDeferredShare: { min: 0, max: 100 },
@@ -143,7 +140,7 @@
 
     var ZERO_CONTRIB = {
         deferred: 0, free: 0, taxable: 0, match: 0, overflow: 0,
-        workplace: 0, ira: 0, rothBasisAdded: 0, taxBenefit: 0
+        workplace: 0, ira: 0, taxBenefit: 0
     };
 
     /* ---------------------------------------------------------------------
@@ -166,11 +163,11 @@
 
     // Keys the beginner enters. Everything else is frozen at BEGINNER_MODEL.
     var BEGINNER_OWNED = [
-        'planType', 'currentAge', 'coastAge', 'retireAge', 'standardRetireAge',
+        'planType', 'currentAge', 'coastAge', 'retireAge',
         'income', 'expenses', 'savingsRate',
-        'balDeferred', 'balFree', 'rothContributionBasis', 'balTaxable', 'balCash',
+        'balDeferred', 'balFree', 'balTaxable', 'balCash',
         'beginnerDeferredShare', 'beginnerFreeShare',
-        'employerMatchRate', 'employerMatchCap', 'limit401k', 'limitIRA'
+        'employerMatchRate', 'employerMatchCap'
     ];
 
     var BEGINNER_MODEL = Object.assign({}, DEFAULTS, {
@@ -188,11 +185,12 @@
         earlyPenaltyRate: 0,
         employerMatchRate: 0,
         employerMatchCap: 0,
-        limit401k: 0,
-        limitIRA: 0,
-        catchUp401k: 0,
-        superCatchUp401k: 0,
-        catchUpIRA: 0,
+        limit401k: 24500,
+        limitIRA: 7500,
+        catchUp401k: 8000,
+        superCatchUp401k: 11250,
+        catchUpIRA: 1100,
+        catchUpAge: 50,
         volatility: 15,
         mcSims: 2000
     });
@@ -227,11 +225,12 @@
             { label: 'Dollars', value: "Today's dollars", note: 'Inflation is removed, so every figure reads in money you can feel now.' },
             { label: 'Market growth', value: BEGINNER_MODEL.marketReturn.toFixed(1) + '% a year after inflation', note: BEGINNER_NOMINAL.marketReturn + '% growth less ' + BEGINNER_NOMINAL.inflation + '% inflation.' },
             { label: 'Savings rate', value: 'Fixed for every year', note: 'The rate you enter is the rate the whole projection uses. It never ramps.' },
-            { label: 'Where savings go', value: 'Your editable allocation', note: 'Any remainder and amounts above the limits you enter go to brokerage.' },
+            { label: 'Where savings go', value: 'Your editable allocation', note: 'Any remainder and amounts above the Beginner limits go to brokerage.' },
             { label: 'Withdrawal rate', value: BEGINNER_MODEL.swr + '% a year', note: 'The standard safe-withdrawal guideline.' },
-            { label: 'Account access', value: 'The age you enter', note: 'Before then, only the Roth contribution basis you enter and modeled future Roth IRA contributions are available. No tax or penalty is estimated.' },
+            { label: 'Retirement access', value: 'Age 60', note: 'The annual model rounds the general federal age 59½ threshold to 60. Roth balances stay unavailable before then.' },
             { label: 'Taxes', value: 'Not modeled', note: 'Pay, contributions, brokerage draws, retirement withdrawals, and early withdrawals are all modeled tax-free.' },
-            { label: 'Benefits & account access', value: 'Only what you enter', note: 'No workplace plan, IRA room, catch-up contribution, or employer match is assumed.' }
+            { label: 'Contribution limits', value: '2026 federal baseline', note: '$24,500 workplace and $7,500 IRA limits, with 2026 catch-up amounts. Eligibility and plan-specific limits are not evaluated.' },
+            { label: 'Employer match', value: 'Only what you enter', note: 'No employer contribution is assumed.' }
         ];
     }
 
@@ -405,7 +404,6 @@
 
         var curDeferred = d.balDeferred;
         var curFree = d.balFree;
-        var curRothBasis = d.rothContributionBasis;
         var curTaxable = d.balTaxable;
         var cash = d.balCash; // inert: no growth, no draws
         var curIncome = d.income;
@@ -524,8 +522,6 @@
                 var cF = acceptedAdvantaged - cD;
                 var overflow = wantAdvantaged - acceptedAdvantaged;
                 var cT = wantT + overflow;
-                var freeShare = wantAdvantaged > 0 ? wantF / wantAdvantaged : 0;
-                var rothBasisAdded = ira * freeShare; // Workplace Roth does not add basis.
                 var contributionTaxBenefit = cD * incomeTax;
 
                 // Employer match: matchRate% of your contributions,
@@ -535,14 +531,12 @@
 
                 curDeferred += cD + match;
                 curFree += cF;
-                curRothBasis += rothBasisAdded;
                 curTaxable += cT;
 
                 if (!lean) {
                     contrib = {
                         deferred: cD, free: cF, taxable: cT, match: match,
                         overflow: overflow, workplace: workplace, ira: ira,
-                        rothBasisAdded: rothBasisAdded,
                         taxBenefit: contributionTaxBenefit
                     };
                 }
@@ -581,10 +575,9 @@
                     curDeferred -= g; wdD += g; gotNet += g * keepDNow;
 
                     g = netNeed * (isStandardAge ? drawFS : drawFB);
-                    var accessibleFree = isStandardAge ? curFree : Math.min(curFree, curRothBasis);
+                    var accessibleFree = isStandardAge ? curFree : 0;
                     if (g > accessibleFree) g = accessibleFree;
                     curFree -= g;
-                    curRothBasis = Math.max(0, curRothBasis - g);
                     wdF += g; gotNet += g;
 
                     var shortfall = netNeed - gotNet;
@@ -597,7 +590,7 @@
                         var n = 0;
                         if (curTaxable > 0.01) n++;
                         if (curDeferred > 0.01) n++;
-                        accessibleFree = isStandardAge ? curFree : Math.min(curFree, curRothBasis);
+                        accessibleFree = isStandardAge ? curFree : 0;
                         if (accessibleFree > 0.01) n++;
                         if (n === 0) break;
                         var chunk = shortfall / n;
@@ -615,7 +608,6 @@
                             g = chunk;
                             if (g > accessibleFree) g = accessibleFree;
                             curFree -= g;
-                            curRothBasis = Math.max(0, curRothBasis - g);
                             wdF += g; shortfall -= g;
                         }
                         guard++;
@@ -642,7 +634,6 @@
 
             if (curDeferred < 0) curDeferred = 0;
             if (curFree < 0) curFree = 0;
-            if (curRothBasis < 0) curRothBasis = 0;
             if (curTaxable < 0) curTaxable = 0;
 
             var portfolio = curDeferred + curFree + curTaxable;
@@ -656,7 +647,6 @@
                     year: startYear + yearIndex,
                     deferred: curDeferred,
                     free: curFree,
-                    rothContributionBasis: curRothBasis,
                     taxable: curTaxable,
                     cash: cash,
                     total: totalNW,
@@ -719,7 +709,6 @@
                 totalMatch: totalMatch,
                 totalContributed: totalContributed,
                 totalContributionTaxBenefit: totalContributionTaxBenefit,
-                endingRothContributionBasis: curRothBasis,
                 bridgeYears: Math.max(0, d.standardRetireAge - d.retireAge),
                 yearsModeled: MAX_AGE - d.currentAge + 1
             }
