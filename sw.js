@@ -1,4 +1,4 @@
-var CACHE = 'coast-ledger-2026-07-24-beginner-model';
+var CACHE = 'meridian-2026-07-24-phase-one';
 var ASSETS = [
     './',
     './index.html',
@@ -10,6 +10,7 @@ var ASSETS = [
     './css/profile.css',
     './css/ledger.css',
     './css/tracker.css',
+    './css/today.css',
     './css/guide.css',
     './css/fonts/fraunces.woff2',
     './css/fonts/fraunces-italic.woff2',
@@ -31,11 +32,15 @@ var ASSETS = [
     './js/tracker/rocketmoney.js',
     './js/tracker/store.js',
     './js/tracker/kit.js',
+    './js/data.js',
+    './js/ui/today.js',
     './js/ui/profile.js',
     './js/ui/ledger.js',
     './js/ui/tracker-observatory.js',
     './js/ui/tracker-cashbook.js',
+    './js/ui/goals.js',
     './js/ui/tracker-settings.js',
+    './js/ui/data-controls.js',
     './js/ui/guide.js',
     './js/app.js',
     './js/vendor/chart.umd.min.js',
@@ -50,8 +55,10 @@ self.addEventListener('install', function (event) {
 
 self.addEventListener('activate', function (event) {
     event.waitUntil(caches.keys().then(function (keys) {
+        // Any cache but the current release, so renaming the app does not
+        // strand the previous name's caches on an installed client.
         return Promise.all(keys.filter(function (key) {
-            return key.indexOf('coast-ledger-') === 0 && key !== CACHE;
+            return key !== CACHE;
         }).map(function (key) { return caches.delete(key); }));
     }).then(function () { return self.clients.claim(); }));
 });

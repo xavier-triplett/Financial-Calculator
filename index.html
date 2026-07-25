@@ -6,7 +6,7 @@
     <meta name="referrer" content="strict-origin-when-cross-origin">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://apis.google.com; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com wss://*.firebaseio.com; frame-src https://*.firebaseapp.com https://accounts.google.com; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'self' https://accounts.google.com">
     <script src="js/security.js"></script>
-    <title>The Coast Ledger — Coast FIRE Planner</title>
+    <title>Meridian: FIRE Planner</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
 
     <!-- Chart.js + Flatpickr + fonts (vendored locally so the app works offline) -->
@@ -21,6 +21,7 @@
     <link rel="stylesheet" href="css/profile.css">
     <link rel="stylesheet" href="css/ledger.css">
     <link rel="stylesheet" href="css/tracker.css">
+    <link rel="stylesheet" href="css/today.css">
     <link rel="stylesheet" href="css/guide.css">
 </head>
 <body>
@@ -54,6 +55,7 @@
     <script defer src="js/tracker/rocketmoney.js"></script>
     <script defer src="js/tracker/store.js"></script>
     <script defer src="js/tracker/kit.js"></script>
+    <script defer src="js/data.js"></script>
 
     <!-- Firebase loads during idle time, or immediately when sign-in starts. -->
     <script defer src="js/firebase-config.js"></script>
@@ -61,11 +63,14 @@
     <script defer src="js/cloud.js"></script>
 
     <!-- UI -->
+    <script defer src="js/ui/today.js"></script>
     <script defer src="js/ui/profile.js"></script>
     <script defer src="js/ui/ledger.js"></script>
     <script defer src="js/ui/tracker-observatory.js"></script>
     <script defer src="js/ui/tracker-cashbook.js"></script>
+    <script defer src="js/ui/goals.js"></script>
     <script defer src="js/ui/tracker-settings.js"></script>
+    <script defer src="js/ui/data-controls.js"></script>
     <script defer src="js/ui/guide.js"></script>
 
     <!-- Shell -->

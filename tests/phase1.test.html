@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phase 1 product test</title>
+    <script src="test-bootstrap.js"></script>
+    <script>try { localStorage.clear(); } catch (error) {}</script>
+    <script src="../js/security.js"></script>
+    <script src="../js/vendor/chart.umd.min.js"></script>
+    <script src="../js/vendor/flatpickr.min.js"></script>
+    <link rel="stylesheet" href="../css/fonts.css">
+    <link rel="stylesheet" href="../css/base.css">
+    <link rel="stylesheet" href="../css/flatpickr.min.css">
+    <link rel="stylesheet" href="../css/flatpickr-theme.css">
+    <link rel="stylesheet" href="../css/profile.css">
+    <link rel="stylesheet" href="../css/ledger.css">
+    <link rel="stylesheet" href="../css/tracker.css">
+    <link rel="stylesheet" href="../css/today.css">
+    <link rel="stylesheet" href="../css/guide.css">
+    <style>#out { display: none; }</style>
+</head>
+<body>
+    <nav id="app-nav"></nav>
+    <div id="ui-root"></div>
+    <div id="toast" role="status"></div>
+    <div id="confirm-layer" aria-hidden="true" hidden>
+        <div id="confirm-prompt" role="alertdialog" aria-modal="true" aria-labelledby="confirm-message" tabindex="-1">
+            <span id="confirm-message"></span>
+            <input id="confirm-input" type="text" autocomplete="off" aria-labelledby="confirm-message">
+            <span class="confirm-actions">
+                <button type="button" data-confirm-cancel>Cancel</button>
+                <button type="button" class="confirm-danger" data-confirm-alternate hidden></button>
+                <button type="button" class="confirm-danger" data-confirm-accept>Delete</button>
+            </span>
+        </div>
+    </div>
+    <pre id="out">RUNNING</pre>
+
+    <script src="../js/engine.js"></script>
+    <script src="../js/util.js"></script>
+    <script src="../js/schema.js"></script>
+    <script src="../js/store.js"></script>
+    <script src="../js/forms.js"></script>
+    <script src="../js/tracker/engine.js"></script>
+    <script src="../js/tracker/rocketmoney.js"></script>
+    <script src="../js/tracker/store.js"></script>
+    <script src="../js/tracker/kit.js"></script>
+    <script src="../js/data.js"></script>
+    <script src="../js/ui/today.js"></script>
+    <script src="../js/ui/profile.js"></script>
+    <script src="../js/ui/ledger.js"></script>
+    <script src="../js/ui/tracker-observatory.js"></script>
+    <script src="../js/ui/tracker-cashbook.js"></script>
+    <script src="../js/ui/goals.js"></script>
+    <script src="../js/ui/tracker-settings.js"></script>
+    <script src="../js/ui/data-controls.js"></script>
+    <script src="../js/ui/guide.js"></script>
+    <script src="../js/app.js"></script>
+
+    <script>
+    window.addEventListener('load', async function () {
+        if (!window.FireTest || !FireTest.allowed) {
+            document.getElementById('out').textContent = 'TEST DISABLED OUTSIDE LOCALHOST';
+            return;
+        }
+        var lines = [];
+        var failures = 0;
+        function check(name, condition) {
+            lines.push((condition ? 'ok:   ' : 'FAIL: ') + name);
+            if (!condition) failures++;
+        }
+        function noOverflow() {
+            return document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1;
+        }
+        function overflowDebug() {
+            var width = document.documentElement.clientWidth;
+            return Array.prototype.filter.call(document.querySelectorAll('body *'), function (node) {
+                var rect = node.getBoundingClientRect();
+                return rect.right > width + 1 || rect.left < -1;
+            }).slice(0, 8).map(function (node) {
+                var rect = node.getBoundingClientRect();
+                return node.tagName + '.' + node.className + '[' + Math.round(rect.left) + ',' + Math.round(rect.right) + ']';
+            }).join(' | ');
+        }
+        function rgb(value) {
+            var match = value.match(/[\d.]+/g);
+            return match ? match.slice(0, 3).map(Number) : [0, 0, 0];
+        }
+        function luminance(color) {
+            return rgb(color).map(function (part) {
+                var value = part / 255;
+                return value <= .03928 ? value / 12.92 : Math.pow((value + .055) / 1.055, 2.4);
+            }).reduce(function (sum, value, index) {
+                return sum + value * [0.2126, 0.7152, 0.0722][index];
+            }, 0);
+        }
+        function contrast(a, b) {
+            var first = luminance(a), second = luminance(b);
+            return (Math.max(first, second) + .05) / (Math.min(first, second) + .05);
+        }
+
+        try {
+            check('test runs at compact width (' + window.innerWidth + 'px)', window.innerWidth <= 500);
+            check('Today is the first-run home', document.querySelector('.home-shell') !== null);
+            check('blank plan explains the gate', /No verdict before the basics/.test(document.body.textContent));
+            check('Today fits the compact viewport', noOverflow());
+            check('beginner starts with no modeled taxes',
+                FireApp.inputs().incomeTaxRate === 0 &&
+                FireApp.inputs().taxDeferredRate === 0 &&
+                FireApp.inputs().taxTaxableRate === 0 &&
+                FireApp.inputs().earlyPenaltyRate === 0);
+
+            FireStore.setProfile('birthDate', '1990-04-28');
+            FireStore.setInputs({ income: 120000, expenses: 54000, balDeferred: 90000, balFree: 30000 });
+            check('complete facts unlock the home dashboard', /Recommended next move/.test(document.body.textContent));
+            check('beginner tax policy stays visible', /no-tax model/.test(document.body.textContent));
+
+            var account = TrackerStore.addAccount('Checking', 'cash', { institution: 'Local Credit Union' });
+            var debt = TrackerStore.addAccount('Student loan', 'liability', {
+                institution: 'Servicer', apr: 5.5, minimumPayment: 350, dueDay: 12
+            });
+            var balances = {};
+            balances[account.id] = 12000;
+            balances[debt.id] = 18000;
+            TrackerStore.addDatedSnapshot('2026-07-24', balances);
+            TrackerStore.addTxn({ date: '2026-07-05', name: 'Market', amount: 420, category: 'Groceries', accountId: account.id });
+            TrackerStore.addBudget({ name: 'Groceries', category: 'Groceries', monthlyTarget: 700, rollover: true });
+            TrackerStore.addSavingsGoal({ name: 'Emergency fund', currentAmount: 4000, targetAmount: 12000 });
+            TrackerStore.addRecurringTemplate({
+                name: 'Rent', amount: 1800, category: 'Rent', frequency: 'monthly',
+                startDate: '2026-08-01', nextDate: '2026-08-01'
+            });
+            TrackerStore.addMerchantRule({ match: 'Market', mode: 'contains', category: 'Groceries' });
+
+            FireApp.setView('goals');
+            check('Goals renders all Phase 1 workflows',
+                /Monthly spending plan/.test(document.body.textContent) &&
+                /Savings goals/.test(document.body.textContent) &&
+                /Debt plan/.test(document.body.textContent) &&
+                /Recurring items/.test(document.body.textContent));
+            var goalsFit = noOverflow();
+            check('Goals fits the compact viewport' + (goalsFit ? '' : ' · ' + overflowDebug()), goalsFit);
+
+            FireApp.setView('cashbook');
+            document.querySelector('[data-act="toggle-split"]').click();
+            check('transaction split editor opens', document.querySelectorAll('.trk-split-row').length === 2);
+            check('Cashbook fits the compact viewport', noOverflow());
+
+            FireApp.setView('observatory');
+            check('arbitrary snapshot is visible', /Point-in-time snapshots/.test(document.body.textContent));
+            check('account details are available', /Account details/.test(document.body.textContent));
+            check('Net Worth fits the compact viewport', noOverflow());
+
+            FireApp.setView('categories');
+            check('merchant rules are visible', /Merchant rules/.test(document.body.textContent));
+            check('Rules fits the compact viewport', noOverflow());
+
+            FireApp.setView('data');
+            check('backup and deletion controls render',
+                /Download backup/.test(document.body.textContent) && /Delete workspace/.test(document.body.textContent));
+            check('derived account freshness renders', /Jul 24, 2026/.test(document.body.textContent));
+            var dataFit = noOverflow();
+            check('Data fits the compact viewport' + (dataFit ? '' : ' · ' + overflowDebug()), dataFit);
+
+            if (document.documentElement.getAttribute('data-theme') !== 'dark') {
+                document.querySelector('[data-theme-toggle]').click();
+            }
+            FireApp.setView('profile');
+            var dateInput = document.querySelector('.pf-dob');
+            dateInput._flatpickr.open();
+            await new Promise(function (resolve) { setTimeout(resolve, 50); });
+            var month = document.querySelector('.flatpickr-current-month .flatpickr-monthDropdown-months, .flatpickr-current-month .cur-month');
+            var calendar = document.querySelector('.flatpickr-calendar');
+            var monthContrast = month && calendar
+                ? contrast(getComputedStyle(month).color, getComputedStyle(calendar).backgroundColor) : 0;
+            check('dark calendar month is visible (' + monthContrast.toFixed(1) + ':1 · ' +
+                (month ? getComputedStyle(month).color : 'missing') + ' on ' +
+                (calendar ? getComputedStyle(calendar).backgroundColor : 'missing') + ')',
+                !!month && monthContrast >= 4.5);
+            check('Profile fits the compact viewport', noOverflow());
+        } catch (error) {
+            failures++;
+            lines.push('EXCEPTION: ' + error.message + '\n' + error.stack);
+        }
+        document.getElementById('out').textContent =
+            (failures ? 'PHASE1 FAIL (' + failures + ')\n' : 'PHASE1 PASS\n') + lines.join('\n');
+    });
+    </script>
+</body>
+</html>
