@@ -354,9 +354,9 @@ failStorage = false;
 S.reset();
 check('successful persistence clears error', S.persistenceError() === null);
 
-// ---------- tracker v3 schema + current-v2 migration ----------
-delete savedItems.trackerData_v3;
-savedItems.trackerData_v2 = JSON.stringify({
+// ---------- simplified tracker v4 starts clean from older feature schemas ----------
+delete savedItems.trackerData_v4;
+savedItems.trackerData_v3 = JSON.stringify({
     accounts: [{ id: 'legacy-cash', name: 'Legacy cash', group: 'cash' }],
     snapshots: { '2025-01': { 'legacy-cash': 1250 } },
     ageIncome: {},
@@ -366,13 +366,11 @@ savedItems.trackerData_v2 = JSON.stringify({
     csvColumns: {}
 });
 S.init();
-check('v2 local data migrates to schema v3', S.get().schemaVersion === 3 && !!savedItems.trackerData_v3);
-check('migration preserves balances and transactions',
-    S.get().snapshots['2025-01']['legacy-cash'] === 1250 && S.get().txns[0].id === 'legacy-txn');
-check('migration canonicalizes account defaults',
-    S.get().accounts[0].currency === 'USD' && S.get().accounts[0].institution === '' &&
-    S.get().accounts[0].freshness.source === 'manual');
-check('v3 state carries durable metadata',
+check('older local tracker data is intentionally not adopted',
+    S.get().schemaVersion === 4 && S.get().accounts.length === 0 && S.get().txns.length === 0);
+S.addAccount('Fresh v4 account', 'cash');
+check('new tracker edits persist under schema v4', !!savedItems.trackerData_v4);
+check('v4 state carries durable metadata',
     !!S.metadata().createdAt && !!S.metadata().updatedAt);
 
 // ---------- canonical accounts + arbitrary dated snapshots ----------
@@ -397,6 +395,9 @@ check('liability terms are retained',
 check('invalid account details are rejected',
     S.updateAccount(linkedDebt.id, { apr: 150 }) === false &&
     S.get().accounts.find(a => a.id === linkedDebt.id).apr === 19.99);
+check('optional liability details can be cleared',
+    S.updateAccount(linkedDebt.id, { dueDay: null }) === true &&
+    S.get().accounts.find(a => a.id === linkedDebt.id).dueDay === undefined);
 check('arbitrary dated snapshot added',
     S.addDatedSnapshot('2026-02-15', { [linkedCash.id]: 1500, [linkedDebt.id]: 400 }) === '2026-02-15');
 check('arbitrary dated balance can be patched',
@@ -443,64 +444,22 @@ check('bulk transaction removal is atomic',
 check('one undo restores an entire bulk removal',
     S.undo() === true && !!S.get().txns.find(t => t.id === bulkOne.id) && !!S.get().txns.find(t => t.id === bulkTwo.id));
 
-// ---------- budgets, goals, recurring templates, and merchant rules ----------
-const groceryBudget = S.addBudget({
-    name: 'Groceries',
-    category: 'Groceries',
-    monthlyTarget: 500,
-    rollover: true,
-    startMonth: '2026-01'
-});
-check('budget CRUD stores monthly target and rollover',
-    !!groceryBudget && groceryBudget.monthlyTarget === 500 && groceryBudget.rollover === true &&
-    S.updateBudget(groceryBudget.id, { monthlyTarget: 550 }) === true);
-const goal = S.addSavingsGoal({
-    name: 'Emergency fund',
-    targetAmount: 15000,
-    currentAmount: 3000,
-    targetDate: '2027-12-31',
-    accountId: linkedCash.id
-});
-check('savings goal links to an account',
-    !!goal && goal.accountId === linkedCash.id && S.updateSavingsGoal(goal.id, { currentAmount: 3500 }) === true);
-const recurring = S.addRecurringTemplate({
-    name: 'Rent',
-    amount: 1800,
-    category: 'Rent',
-    accountId: linkedCash.id,
-    frequency: 'monthly',
-    startDate: '2026-04-01'
-});
-check('recurring template is normalized',
-    !!recurring && recurring.nextDate === '2026-04-01' && recurring.active === true);
-const merchantRule = S.addMerchantRule({
-    match: 'SAFEWAY',
-    mode: 'startsWith',
-    category: 'Groceries',
-    priority: 20,
-    accountId: linkedCash.id
-});
-check('merchant/category rule is retained and matched',
-    !!merchantRule && merchantRule.mode === 'startsWith' &&
-    T.matchMerchantRule({ name: 'Safeway #123', accountId: linkedCash.id }, S.get().merchantRules).id === merchantRule.id);
-
-const rolloverResult = T.budgetRollover(
-    { id: 'food', category: 'Groceries', monthlyTarget: 500, rollover: true, startMonth: '2025-01' },
-    [
-        { date: '2025-01-05', amount: 400, category: 'Groceries' },
-        { date: '2025-02-05', amount: 650, category: 'Groceries' }
-    ],
-    '2025-02'
-);
-check('budget rollover carries underspend then records overspend',
-    rolloverResult.carryIn === 100 && rolloverResult.available === 600 &&
-    rolloverResult.actual === 650 && rolloverResult.remaining === -50);
-const budgetSummary = T.budgetVsActual({
-    budgets: [{ id: 'food', category: 'Groceries', monthlyTarget: 500, rollover: false, startMonth: '2025-01' }],
-    txns: [{ date: '2025-02-05', amount: 450, category: 'Groceries' }]
-}, '2025-02');
-check('budget-vs-actual totals are summarized',
-    budgetSummary.totalTarget === 500 && budgetSummary.totalActual === 450 && budgetSummary.totalRemaining === 50);
+// Removed planning features are discarded at the tracker trust boundary while
+// category classifications remain first-class data.
+const simplifiedSeed = JSON.parse(JSON.stringify(S.get()));
+simplifiedSeed.categoryKinds = { Groceries: 'fixed' };
+simplifiedSeed.budgets = [{ category: 'Groceries', monthlyTarget: 500 }];
+simplifiedSeed.savingsGoals = [{ name: 'Old target', targetAmount: 1000 }];
+simplifiedSeed.recurringTemplates = [{ name: 'Old item' }];
+simplifiedSeed.merchantRules = [{ match: 'Store', category: 'Groceries' }];
+S.replace(simplifiedSeed);
+check('removed planning and automation data is discarded',
+    !Object.prototype.hasOwnProperty.call(S.get(), 'budgets') &&
+    !Object.prototype.hasOwnProperty.call(S.get(), 'savingsGoals') &&
+    !Object.prototype.hasOwnProperty.call(S.get(), 'recurringTemplates') &&
+    !Object.prototype.hasOwnProperty.call(S.get(), 'merchantRules'));
+check('category classifications survive simplification',
+    S.get().categoryKinds.Groceries === 'fixed' && T.categoryKind('Groceries') === 'fixed');
 
 // ---------- debt payoff, freshness, and plan-vs-actual ----------
 const zeroInterestPayoff = T.debtPayoffEstimate(
@@ -538,8 +497,7 @@ const actualState = {
         { date: '2026-03-01', amount: 4000, category: 'Paychecks' },
         { date: '2026-03-02', amount: 2000, category: 'Rent' }
     ],
-    cashMonths: [],
-    budgets: []
+    cashMonths: []
 };
 const actualInputs = T.planVsActualInputs(actualState, { span: 12, incomeTaxRate: 20 });
 check('plan-vs-actual maps canonical balances',

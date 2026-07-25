@@ -2,15 +2,13 @@
 (function (global) {
     'use strict';
 
-    var SCHEMA_VERSION = 3;
-    var KEY = 'trackerData_v3';
-    var LEGACY_KEYS = ['trackerData_v2'];
+    var SCHEMA_VERSION = 4;
+    var KEY = 'trackerData_v4';
+    var LEGACY_KEYS = [];
     var UNDO_LIMIT = 25;
     var E = global.TrackerEngine;
     var CSV_FIELDS = { date: true, origDate: true, acctType: true, account: true, accountNumber: true,
         institution: true, name: true, customName: true, amount: true, description: true, category: true, ignored: true };
-    var FREQUENCIES = ['weekly', 'biweekly', 'semimonthly', 'monthly', 'quarterly', 'yearly'];
-    var RULE_MODES = ['contains', 'equals', 'startsWith'];
 
     var listeners = [];
     var state = null;
@@ -31,11 +29,7 @@
             txns: [],
             cashMonths: [],
             categoryKinds: {},
-            csvColumns: {},
-            budgets: [],
-            savingsGoals: [],
-            recurringTemplates: [],
-            merchantRules: []
+            csvColumns: {}
         };
     }
 
@@ -70,10 +64,6 @@
 
     function clone(value) {
         return JSON.parse(JSON.stringify(value));
-    }
-
-    function today() {
-        return new Date().toISOString().slice(0, 10);
     }
 
     function timestamp(value) {
@@ -205,94 +195,6 @@
         return out;
     }
 
-    function cleanBudget(budget, usedIds) {
-        if (!budget) return null;
-        var category = text(budget.category, '', 200);
-        var target = nonnegative(budget.monthlyTarget !== undefined ? budget.monthlyTarget : budget.amount);
-        if (!category || target === null) return null;
-        var out = {
-            id: uniqueId(budget.id, 'b', usedIds),
-            name: text(budget.name, category, 200),
-            category: category,
-            monthlyTarget: target,
-            rollover: budget.rollover === true,
-            currency: currency(budget.currency)
-        };
-        var start = text(budget.startMonth, '', 7), end = text(budget.endMonth, '', 7);
-        if (E.validMonth(start)) out.startMonth = start;
-        if (E.validMonth(end) && (!out.startMonth || end >= out.startMonth)) out.endMonth = end;
-        return out;
-    }
-
-    function cleanGoal(goal, usedIds, accountsById) {
-        if (!goal) return null;
-        var target = nonnegative(goal.targetAmount);
-        if (target === null || target <= 0) return null;
-        var out = {
-            id: uniqueId(goal.id, 'g', usedIds),
-            name: text(goal.name, 'Savings goal', 200),
-            targetAmount: target,
-            currentAmount: nonnegative(goal.currentAmount) || 0,
-            currency: currency(goal.currency),
-            accountId: accountsById[text(goal.accountId, '', 160)] ? text(goal.accountId, '', 160) : ''
-        };
-        var targetDate = text(goal.targetDate, '', 10);
-        var createdDate = text(goal.createdDate, '', 10);
-        if (E.validDate(targetDate)) out.targetDate = targetDate;
-        if (E.validDate(createdDate)) out.createdDate = createdDate;
-        return out;
-    }
-
-    function frequency(value) {
-        var out = text(value, 'monthly', 20).toLowerCase();
-        if (out === 'annual') out = 'yearly';
-        return FREQUENCIES.indexOf(out) === -1 ? 'monthly' : out;
-    }
-
-    function cleanRecurring(template, usedIds, accountsById) {
-        if (!template) return null;
-        var amount = money(template.amount);
-        var startDate = text(template.startDate, '', 10);
-        if (amount === null || !E.validDate(startDate)) return null;
-        var splits = splitResult(template.splits, amount);
-        if (!splits.valid) return null;
-        var out = {
-            id: uniqueId(template.id, 'r', usedIds),
-            name: text(template.name, 'Recurring transaction', 300),
-            amount: amount,
-            category: text(template.category, 'Uncategorized', 200),
-            accountId: accountsById[text(template.accountId, '', 160)] ? text(template.accountId, '', 160) : '',
-            frequency: frequency(template.frequency),
-            startDate: startDate,
-            active: template.active !== false
-        };
-        var nextDate = text(template.nextDate, '', 10), endDate = text(template.endDate, '', 10);
-        if (E.validDate(nextDate) && nextDate >= startDate) out.nextDate = nextDate;
-        else out.nextDate = startDate;
-        if (E.validDate(endDate) && endDate >= startDate) out.endDate = endDate;
-        if (splits.value) out.splits = splits.value;
-        return out;
-    }
-
-    function cleanRule(rule, usedIds, accountsById) {
-        if (!rule) return null;
-        var match = text(rule.match || rule.merchant, '', 200);
-        var category = text(rule.category, '', 200);
-        if (!match || !category) return null;
-        var mode = text(rule.mode, 'contains', 20).toLowerCase();
-        if (mode === 'startswith') mode = 'startsWith';
-        var priority = finite(rule.priority);
-        return {
-            id: uniqueId(rule.id, 'u', usedIds),
-            match: match,
-            mode: RULE_MODES.indexOf(mode) === -1 ? 'contains' : mode,
-            category: category,
-            accountId: accountsById[text(rule.accountId, '', 160)] ? text(rule.accountId, '', 160) : '',
-            priority: priority === null ? 0 : Math.max(-1000, Math.min(1000, Math.round(priority))),
-            enabled: rule.enabled !== false
-        };
-    }
-
     /* Validate and clone persisted, imported, or cloud state at the trust boundary. */
     function adopt(saved) {
         if (!saved || typeof saved !== 'object') return empty();
@@ -361,32 +263,6 @@
             if (!owns(CSV_FIELDS, field)) return;
             var header = text(columns[field], '', 200);
             if (header) out.csvColumns[field] = header;
-        });
-
-        var usedBudgetIds = Object.create(null);
-        (Array.isArray(saved.budgets) ? saved.budgets : []).forEach(function (source) {
-            var budget = cleanBudget(source, usedBudgetIds);
-            if (budget) out.budgets.push(budget);
-        });
-
-        var usedGoalIds = Object.create(null);
-        (Array.isArray(saved.savingsGoals || saved.goals) ? (saved.savingsGoals || saved.goals) : []).forEach(function (source) {
-            var goal = cleanGoal(source, usedGoalIds, accountsById);
-            if (goal) out.savingsGoals.push(goal);
-        });
-
-        var recurringSource = saved.recurringTemplates || saved.recurringTransactions;
-        var usedRecurringIds = Object.create(null);
-        (Array.isArray(recurringSource) ? recurringSource : []).forEach(function (source) {
-            var template = cleanRecurring(source, usedRecurringIds, accountsById);
-            if (template) out.recurringTemplates.push(template);
-        });
-
-        var ruleSource = saved.merchantRules || saved.categoryRules;
-        var usedRuleIds = Object.create(null);
-        (Array.isArray(ruleSource) ? ruleSource : []).forEach(function (source) {
-            var rule = cleanRule(source, usedRuleIds, accountsById);
-            if (rule) out.merchantRules.push(rule);
         });
 
         return out;
@@ -460,22 +336,6 @@
         account.freshness.updatedAt = new Date().toISOString();
     }
 
-    function cleanNewBudget(source) {
-        return cleanBudget(source, Object.create(null));
-    }
-
-    function cleanNewGoal(source) {
-        return cleanGoal(source, Object.create(null), accountMap(state.accounts));
-    }
-
-    function cleanNewRecurring(source) {
-        return cleanRecurring(source, Object.create(null), accountMap(state.accounts));
-    }
-
-    function cleanNewRule(source) {
-        return cleanRule(source, Object.create(null), accountMap(state.accounts));
-    }
-
     global.TrackerStore = {
         SCHEMA_VERSION: SCHEMA_VERSION,
         UNDO_LIMIT: UNDO_LIMIT,
@@ -510,9 +370,7 @@
         isEmpty: function () {
             return !this.hasNetWorth() && !this.hasCash() && state.accounts.length === 0 &&
                 Object.keys(state.ageIncome).length === 0 && Object.keys(state.categoryKinds).length === 0 &&
-                Object.keys(state.csvColumns).length === 0 && state.budgets.length === 0 &&
-                state.savingsGoals.length === 0 && state.recurringTemplates.length === 0 &&
-                state.merchantRules.length === 0;
+                Object.keys(state.csvColumns).length === 0;
         },
 
         seedFrom: function (seed, scope) {
@@ -526,27 +384,19 @@
                 state.snapshots = incoming.snapshots;
                 state.datedSnapshots = incoming.datedSnapshots;
                 state.ageIncome = incoming.ageIncome;
-                state.savingsGoals = incoming.savingsGoals;
             } else if (scope === 'cashflow') {
                 state.txns = incoming.txns;
                 state.cashMonths = incoming.cashMonths;
-                state.budgets = incoming.budgets;
-                state.recurringTemplates = incoming.recurringTemplates;
-                state.merchantRules = incoming.merchantRules;
             } else {
                 if (!this.hasNetWorth()) {
                     state.accounts = incoming.accounts;
                     state.snapshots = incoming.snapshots;
                     state.datedSnapshots = incoming.datedSnapshots;
                     state.ageIncome = incoming.ageIncome;
-                    state.savingsGoals = incoming.savingsGoals;
                 }
                 if (!this.hasCash()) {
                     state.txns = incoming.txns;
                     state.cashMonths = incoming.cashMonths;
-                    state.budgets = incoming.budgets;
-                    state.recurringTemplates = incoming.recurringTemplates;
-                    state.merchantRules = incoming.merchantRules;
                 }
             }
             if (scope !== 'cashflow' && seed.profile && global.FireStore) {
@@ -569,10 +419,7 @@
             state.snapshots = {};
             state.datedSnapshots = {};
             state.ageIncome = {};
-            state.savingsGoals = [];
             state.txns.forEach(function (transaction) { transaction.accountId = ''; });
-            state.recurringTemplates.forEach(function (template) { template.accountId = ''; });
-            state.merchantRules.forEach(function (rule) { rule.accountId = ''; });
             return commit();
         },
 
@@ -580,9 +427,6 @@
             checkpoint();
             state.txns = [];
             state.cashMonths = [];
-            state.budgets = [];
-            state.recurringTemplates = [];
-            state.merchantRules = [];
             return commit();
         },
 
@@ -611,15 +455,15 @@
         updateAccount: function (id, patch) {
             var account = findById(state.accounts, id);
             if (!account || !patch) return false;
-            if (patch.apr !== undefined) {
+            if (patch.apr !== undefined && patch.apr !== null && patch.apr !== '') {
                 var apr = finite(patch.apr);
                 if (apr === null || apr < 0 || apr > 100) return false;
             }
-            if (patch.minimumPayment !== undefined) {
+            if (patch.minimumPayment !== undefined && patch.minimumPayment !== null && patch.minimumPayment !== '') {
                 var payment = finite(patch.minimumPayment);
                 if (payment === null || payment < 0) return false;
             }
-            if (patch.dueDay !== undefined) {
+            if (patch.dueDay !== undefined && patch.dueDay !== null && patch.dueDay !== '') {
                 var dueDay = finite(patch.dueDay);
                 if (dueDay === null || dueDay < 1 || dueDay > 31) return false;
             }
@@ -658,9 +502,6 @@
             Object.keys(state.snapshots).forEach(function (month) { delete state.snapshots[month][id]; });
             Object.keys(state.datedSnapshots).forEach(function (date) { delete state.datedSnapshots[date][id]; });
             state.txns.forEach(function (transaction) { if (transaction.accountId === id) transaction.accountId = ''; });
-            state.savingsGoals.forEach(function (goal) { if (goal.accountId === id) goal.accountId = ''; });
-            state.recurringTemplates.forEach(function (template) { if (template.accountId === id) template.accountId = ''; });
-            state.merchantRules.forEach(function (rule) { if (rule.accountId === id) rule.accountId = ''; });
             commit();
             return true;
         },
@@ -854,126 +695,6 @@
             state.txns = next;
             commit();
             return removed;
-        },
-
-        /* ---------- budgets ---------- */
-        addBudget: function (source) {
-            source = Object.assign({ startMonth: currentMonth() }, object(source), { id: newId('b') });
-            var budget = cleanNewBudget(source);
-            if (!budget) return null;
-            checkpoint();
-            state.budgets.push(budget);
-            commit();
-            return budget;
-        },
-
-        updateBudget: function (id, patch) {
-            var budget = findById(state.budgets, id);
-            if (!budget || !patch) return false;
-            var candidate = cleanNewBudget(Object.assign({}, budget, patch, { id: id }));
-            if (!candidate) return false;
-            checkpoint();
-            replaceItem(state.budgets, id, candidate);
-            commit();
-            return true;
-        },
-
-        removeBudget: function (id) {
-            if (!findById(state.budgets, id)) return false;
-            checkpoint();
-            state.budgets = state.budgets.filter(function (budget) { return budget.id !== id; });
-            commit();
-            return true;
-        },
-
-        /* ---------- savings goals ---------- */
-        addSavingsGoal: function (source) {
-            source = Object.assign({ createdDate: today() }, object(source), { id: newId('g') });
-            var goal = cleanNewGoal(source);
-            if (!goal) return null;
-            checkpoint();
-            state.savingsGoals.push(goal);
-            commit();
-            return goal;
-        },
-
-        updateSavingsGoal: function (id, patch) {
-            var goal = findById(state.savingsGoals, id);
-            if (!goal || !patch) return false;
-            var candidate = cleanNewGoal(Object.assign({}, goal, patch, { id: id }));
-            if (!candidate) return false;
-            checkpoint();
-            replaceItem(state.savingsGoals, id, candidate);
-            commit();
-            return true;
-        },
-
-        removeSavingsGoal: function (id) {
-            if (!findById(state.savingsGoals, id)) return false;
-            checkpoint();
-            state.savingsGoals = state.savingsGoals.filter(function (goal) { return goal.id !== id; });
-            commit();
-            return true;
-        },
-
-        /* ---------- recurring transaction templates ---------- */
-        addRecurringTemplate: function (source) {
-            source = Object.assign({}, object(source), { id: newId('r') });
-            var template = cleanNewRecurring(source);
-            if (!template) return null;
-            checkpoint();
-            state.recurringTemplates.push(template);
-            commit();
-            return template;
-        },
-
-        updateRecurringTemplate: function (id, patch) {
-            var template = findById(state.recurringTemplates, id);
-            if (!template || !patch) return false;
-            var candidate = cleanNewRecurring(Object.assign({}, template, patch, { id: id }));
-            if (!candidate) return false;
-            checkpoint();
-            replaceItem(state.recurringTemplates, id, candidate);
-            commit();
-            return true;
-        },
-
-        removeRecurringTemplate: function (id) {
-            if (!findById(state.recurringTemplates, id)) return false;
-            checkpoint();
-            state.recurringTemplates = state.recurringTemplates.filter(function (template) { return template.id !== id; });
-            commit();
-            return true;
-        },
-
-        /* ---------- merchant/category rules ---------- */
-        addMerchantRule: function (source) {
-            source = Object.assign({}, object(source), { id: newId('u') });
-            var rule = cleanNewRule(source);
-            if (!rule) return null;
-            checkpoint();
-            state.merchantRules.push(rule);
-            commit();
-            return rule;
-        },
-
-        updateMerchantRule: function (id, patch) {
-            var rule = findById(state.merchantRules, id);
-            if (!rule || !patch) return false;
-            var candidate = cleanNewRule(Object.assign({}, rule, patch, { id: id }));
-            if (!candidate) return false;
-            checkpoint();
-            replaceItem(state.merchantRules, id, candidate);
-            commit();
-            return true;
-        },
-
-        removeMerchantRule: function (id) {
-            if (!findById(state.merchantRules, id)) return false;
-            checkpoint();
-            state.merchantRules = state.merchantRules.filter(function (rule) { return rule.id !== id; });
-            commit();
-            return true;
         },
 
         /* ---------- category kinds, CSV columns, and import ---------- */

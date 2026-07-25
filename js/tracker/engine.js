@@ -374,87 +374,6 @@
         };
     }
 
-    /* ------------------------- budgets ------------------------- */
-    function categoryAmount(aggregate, category) {
-        var target = String(category || '').toLowerCase();
-        var total = 0;
-        var byCategory = aggregate && aggregate.byCategory || {};
-        Object.keys(byCategory).forEach(function (name) {
-            if (name.toLowerCase() === target) total += Number(byCategory[name]) || 0;
-        });
-        return total;
-    }
-
-    function budgetRollover(budget, txns, month) {
-        budget = budget || {};
-        if (!validMonth(month)) return null;
-        var target = Number(budget.monthlyTarget !== undefined ? budget.monthlyTarget : budget.amount);
-        if (!Number.isFinite(target) || target < 0 || !String(budget.category || '').trim()) return null;
-        var start = validMonth(budget.startMonth) ? budget.startMonth : month;
-        var end = validMonth(budget.endMonth) ? budget.endMonth : null;
-        if (month < start || (end && month > end)) {
-            return {
-                budgetId: budget.id || null,
-                category: budget.category,
-                month: month,
-                active: false,
-                target: 0,
-                carryIn: 0,
-                available: 0,
-                actual: 0,
-                remaining: 0
-            };
-        }
-        var distance = monthDiff(start, month);
-        if (distance < 0 || distance > 1200) return null;
-        var byMonth = spendByMonth(txns);
-        var cursor = start, carry = 0, row = null;
-        for (var i = 0; i <= distance; i++) {
-            var carryIn = budget.rollover === true ? carry : 0;
-            var actual = categoryAmount(byMonth[cursor], budget.category);
-            var available = target + carryIn;
-            var remaining = available - actual;
-            row = {
-                budgetId: budget.id || null,
-                name: budget.name || budget.category,
-                category: budget.category,
-                month: cursor,
-                active: true,
-                target: target,
-                carryIn: carryIn,
-                available: available,
-                actual: actual,
-                remaining: remaining,
-                rollover: budget.rollover === true
-            };
-            carry = budget.rollover === true ? remaining : 0;
-            cursor = nextMonth(cursor);
-        }
-        return row;
-    }
-
-    function budgetVsActual(state, month) {
-        state = state || {};
-        var txns = Array.isArray(state.txns) ? state.txns : [];
-        if (!validMonth(month)) {
-            var observed = txnMonths(txns).concat(Array.isArray(state.cashMonths) ? state.cashMonths.filter(validMonth) : []).sort();
-            month = observed.length ? observed[observed.length - 1] : new Date().toISOString().slice(0, 7);
-        }
-        var budgets = Array.isArray(state.budgets) ? state.budgets : [];
-        var rows = budgets.map(function (budget) {
-            return budgetRollover(budget, txns, month);
-        }).filter(function (row) { return row && row.active; });
-        return {
-            month: month,
-            rows: rows,
-            totalTarget: rows.reduce(function (sum, row) { return sum + row.target; }, 0),
-            totalCarryIn: rows.reduce(function (sum, row) { return sum + row.carryIn; }, 0),
-            totalAvailable: rows.reduce(function (sum, row) { return sum + row.available; }, 0),
-            totalActual: rows.reduce(function (sum, row) { return sum + row.actual; }, 0),
-            totalRemaining: rows.reduce(function (sum, row) { return sum + row.remaining; }, 0)
-        };
-    }
-
     /* ------------------------- debt ------------------------- */
     function addMonthsToDate(date, months) {
         if (!validDate(date)) return null;
@@ -622,23 +541,6 @@
         };
     }
 
-    function matchMerchantRule(transaction, rules) {
-        var merchant = String(transaction && transaction.name || '');
-        var accountId = String(transaction && transaction.accountId || '');
-        return (Array.isArray(rules) ? rules.slice() : [])
-            .filter(function (rule) { return rule && rule.enabled !== false; })
-            .sort(function (a, b) { return (Number(b.priority) || 0) - (Number(a.priority) || 0); })
-            .filter(function (rule) {
-                if (rule.accountId && rule.accountId !== accountId) return false;
-                var needle = String(rule.match || '').toLowerCase();
-                var value = merchant.toLowerCase();
-                if (!needle) return false;
-                if (rule.mode === 'equals') return value === needle;
-                if (rule.mode === 'startsWith') return value.indexOf(needle) === 0;
-                return value.indexOf(needle) !== -1;
-            })[0] || null;
-    }
-
     /* ------------------------- wealth benchmarks ------------------------- */
     /* PAW / AAW / UAW lines per The Millionaire Next Door's rule of thumb:
      *   AAW = age × income / 10; PAW = 2 × AAW; UAW = AAW / 2. */
@@ -723,13 +625,9 @@
         categoryRows: categoryRows,
         topMerchants: topMerchants,
         trailing: trailing,
-        budgetRollover: budgetRollover,
-        rollover: budgetRollover,
-        budgetVsActual: budgetVsActual,
         debtPayoffEstimate: debtPayoffEstimate,
         dataFreshness: dataFreshness,
         planVsActualInputs: planVsActualInputs,
-        matchMerchantRule: matchMerchantRule,
         benchmarks: benchmarks,
         ageIncomeAt: ageIncomeAt,
         benchmarkSeries: benchmarkSeries

@@ -403,18 +403,7 @@ html[data-theme="dark"] .trk-btn-primary:hover {
     letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
 }
 .trk-set-field .trk-search { width: 100%; min-width: 0; }
-.trk-set-rules { margin-top: 0; }
-.trk-rule-add {
-    display: grid;
-    grid-template-columns: 1.1fr .8fr 1fr 1fr auto;
-    gap: 8px;
-    align-items: center;
-    padding-top: 14px;
-    margin-top: 14px;
-    border-top: 1px solid var(--rule);
-}
-.trk-rule-toggle { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; }
-.trk-rule-toggle input { accent-color: var(--green); }
+.trk-payoff { display: block; min-width: 150px; color: var(--muted); font-size: 10.5px; line-height: 1.4; }
 
 /* ---------- Responsive ---------- */
 @media (max-width: 1150px) {
@@ -428,7 +417,6 @@ html[data-theme="dark"] .trk-btn-primary:hover {
 @media (max-width: 680px) {
     .trk-shell { padding: 18px 14px 40px; }
     .trk-btn, .trk-select, .trk-search { min-height: 44px; }
-    .trk-rule-add { grid-template-columns: 1fr; }
     .trk-masthead { align-items: stretch; }
     .trk-masthead h1 { font-size: 26px; }
     .trk-mast-actions {

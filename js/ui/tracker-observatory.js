@@ -257,8 +257,22 @@
 
     function accountDetailsHTML(state) {
         if (!state.accounts.length) return '';
+        var latest = E.latestBalances(state);
+        var latestBalances = latest && latest.balances || {};
         var rows = state.accounts.map(function (account) {
             var liability = account.group === 'liability';
+            var balance = Math.abs(Number(latestBalances[account.id]) || 0);
+            var estimate = liability && account.apr !== undefined && account.minimumPayment > 0 && balance > 0
+                ? E.debtPayoffEstimate(account, balance, 0, new Date().toISOString().slice(0, 10))
+                : null;
+            var payoff = '—';
+            if (liability && !estimate) payoff = 'Add balance, APR & payment';
+            else if (estimate && !estimate.payoffPossible) payoff = estimate.reason === 'negative-amortization'
+                ? 'Payment is below monthly interest' : 'No payoff within 100 years';
+            else if (estimate) {
+                payoff = (Math.floor(estimate.months / 12) ? Math.floor(estimate.months / 12) + 'y ' : '') +
+                    (estimate.months % 12) + 'm · ' + U.compact(estimate.totalInterest) + ' interest';
+            }
             return '<tr><td><strong>' + escapeAttr(account.name) + '</strong><small>' +
                 escapeAttr(E.GROUP_BY_ID[account.group].label) + '</small></td>' +
                 '<td><input class="trk-search" data-account-detail="' + escapeAttr(account.id) + '" data-account-field="institution" value="' +
@@ -267,13 +281,25 @@
                     escapeAttr(account.currency || 'USD') + '" aria-label="Currency for ' + escapeAttr(account.name) + '"></td>' +
                 '<td>' + (liability
                     ? '<input class="trk-search" inputmode="decimal" data-account-detail="' + escapeAttr(account.id) +
-                        '" data-account-field="apr" value="' + (account.apr || 0) + '" aria-label="APR for ' + escapeAttr(account.name) + '">'
-                    : '<span class="dim">—</span>') + '</td></tr>';
+                        '" data-account-field="apr" value="' + (account.apr === undefined ? '' : account.apr) +
+                        '" placeholder="Optional" aria-label="APR for ' + escapeAttr(account.name) + '">'
+                    : '<span class="dim">—</span>') + '</td>' +
+                '<td>' + (liability
+                    ? '<input class="trk-search" inputmode="decimal" data-account-detail="' + escapeAttr(account.id) +
+                        '" data-account-field="minimumPayment" value="' + (account.minimumPayment === undefined ? '' : account.minimumPayment) +
+                        '" placeholder="Optional" aria-label="Monthly payment for ' + escapeAttr(account.name) + '">'
+                    : '<span class="dim">—</span>') + '</td>' +
+                '<td>' + (liability
+                    ? '<input class="trk-search" inputmode="numeric" data-account-detail="' + escapeAttr(account.id) +
+                        '" data-account-field="dueDay" value="' + (account.dueDay === undefined ? '' : account.dueDay) +
+                        '" placeholder="Optional" aria-label="Due day for ' + escapeAttr(account.name) + '">'
+                    : '<span class="dim">—</span>') + '</td>' +
+                '<td><span class="trk-payoff">' + payoff + '</span></td></tr>';
         }).join('');
         return '<details class="trk-panel trk-account-details"' + (detailsOpen ? ' open' : '') + '><summary>Account details</summary>' +
-            '<p class="trk-kpi-note">Institution and currency travel with each account. Liability APR also powers payoff estimates on Goals.</p>' +
+            '<p class="trk-kpi-note">Institution and currency travel with each account. Liability APR and payment are optional; when both are entered, the payoff estimate assumes a fixed APR, fixed monthly payment, and no new charges.</p>' +
             '<div class="trk-regwrap"><table class="trk-register"><caption class="trk-sr-only">Canonical account details</caption>' +
-                '<thead><tr><th>Account</th><th>Institution</th><th>Currency</th><th>APR %</th></tr></thead><tbody>' +
+                '<thead><tr><th>Account</th><th>Institution</th><th>Currency</th><th>APR %</th><th>Monthly payment</th><th>Due day</th><th>Payoff estimate</th></tr></thead><tbody>' +
                 rows + '</tbody></table></div></details>';
     }
 
@@ -308,7 +334,10 @@
             var input = event.target;
             if (!input.dataset.accountDetail) return;
             var patch = {};
-            patch[input.dataset.accountField] = input.dataset.accountField === 'apr' ? U.parseNum(input.value) : input.value;
+            var numeric = ['apr', 'minimumPayment', 'dueDay'].indexOf(input.dataset.accountField) !== -1;
+            patch[input.dataset.accountField] = numeric
+                ? (input.value.trim() ? U.parseNum(input.value) : null)
+                : input.value;
             if (!TrackerStore.updateAccount(input.dataset.accountDetail, patch)) {
                 FireApp.toast('Enter valid account details');
             }

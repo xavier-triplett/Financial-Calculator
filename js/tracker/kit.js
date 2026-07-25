@@ -243,7 +243,7 @@
                     '<div class="trk-fi-row"><span>Spendable invested today</span><strong>' + U.compact(market) + '</strong></div>' +
                     '<div class="trk-fi-row"><span>FI target (today&rsquo;s $)</span><strong>' + U.compact(target) + '</strong></div>' +
                     '<div class="trk-fi-bar"><span style="width:' + barPct.toFixed(1) + '%"></span></div>' +
-                    '<div class="trk-fi-pct">' + pct.toFixed(1) + '% of the way after estimated withdrawal tax · plan retires at ' + ctx.retireAge +
+                    '<div class="trk-fi-pct">' + pct.toFixed(1) + '% of the way using your entered withdrawal rates (0 means not modeled) · plan retires at ' + ctx.retireAge +
                     ' · ' + (ctx.successRate * 100).toFixed(0) + '% Monte Carlo</div>' +
                 '</div>';
             }
@@ -308,24 +308,10 @@
                     (res.ignored ? ' ' + res.ignored + ' ignored row' + (res.ignored === 1 ? '' : 's') + ' excluded.' : '') +
                     (invalid ? ' ' + invalid + ' invalid row' + (invalid === 1 ? '' : 's') + ' will be skipped.' : '');
                 FireApp.confirm(summary, function () {
-                    var trackerState = TrackerStore.get();
-                    var rulesApplied = 0;
-                    var categorized = res.txns.map(function (transaction) {
-                        var rule = E.matchMerchantRule(transaction, trackerState.merchantRules);
-                        if (!rule) return transaction;
-                        rulesApplied++;
-                        var account = trackerState.accounts.filter(function (candidate) { return candidate.id === rule.accountId; })[0];
-                        return Object.assign({}, transaction, {
-                            category: rule.category,
-                            accountId: rule.accountId || transaction.accountId || '',
-                            account: account ? account.name : transaction.account
-                        });
-                    });
-                    var merged = TrackerStore.importTxns(categorized);
+                    var merged = TrackerStore.importTxns(res.txns);
                     FireApp.toast('Imported ' + merged.added + ' transactions' +
                         (merged.duplicates ? ' (' + merged.duplicates + ' already present)' : '') +
                         (merged.rejected ? ' · ' + merged.rejected + ' rejected' : '') +
-                        (rulesApplied ? ' · ' + rulesApplied + ' categorized by rules' : '') +
                         (!merged.persisted ? ' · not saved to browser storage' : ''));
                 }, 'Import transactions');
             };

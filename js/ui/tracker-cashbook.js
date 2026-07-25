@@ -1,4 +1,4 @@
-/* UI: CASHBOOK — a month-at-a-time budgeting journal, deliberately blind to
+/* UI: CASHBOOK — a month-at-a-time cash-flow journal, deliberately blind to
  * net worth. A spine of months down the left, one month's cashflow
  * statement in the middle (with a SURPLUS/DEFICIT stamp in the house
  * style), and the raw transaction register beneath it. Rocket Money CSV
@@ -26,7 +26,7 @@
         '<div class="trk-shell">' +
             '<header class="trk-masthead">' +
                 '<div>' +
-                    '<span class="trk-eyebrow">Monthly budgeting · actuals</span>' +
+                    '<span class="trk-eyebrow">Monthly cash flow · actuals</span>' +
                     '<h1>The Cashbook</h1>' +
                     '<span class="trk-sub">One month per page &mdash; income in, spending out, the rest set aside</span>' +
                 '</div>' +
@@ -229,7 +229,7 @@
             (agg.saving > 0
                 ? '<div class="trk-st-verdict trk-st-saving">' +
                     '<span>Marked as savings' +
-                        ' <button class="ff-hint" type="button" data-tooltip="Transactions in savings-kind categories (Savings, Investments, Retirement Contributions, or any category you mark as Savings on the Rules tab). The plan bridge uses marked savings for those months and surplus for unmarked months." aria-label="About marked savings">i</button>' +
+                        ' <button class="ff-hint" type="button" data-tooltip="Transactions in savings-type categories (Savings, Investments, Retirement Contributions, or any category you mark as Savings on the Categories tab). The plan bridge uses marked savings for those months and surplus for unmarked months." aria-label="About marked savings">i</button>' +
                     '</span>' +
                     '<strong class="pos">' + U.money(agg.saving) +
                     (agg.income > 0 ? ' <em>(' + ((agg.saving / agg.income) * 100).toFixed(0) + '% of income)</em>' : '') + '</strong>' +

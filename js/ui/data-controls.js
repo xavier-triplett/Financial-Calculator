@@ -94,7 +94,7 @@
                     '<div class="trk-panel-head"><h2>Local-first by default</h2>' +
                         '<span class="trk-panel-note">plain-language data policy</span></div>' +
                     '<p class="data-copy">The planner works without an account. A downloaded backup contains your full plan, ' +
-                        'balances, transactions, budgets, and goals as readable JSON. It is not encrypted, so keep it somewhere private.</p>' +
+                        'accounts, balance history, transactions, categories, and import settings as readable JSON. It is not encrypted, so keep it somewhere private.</p>' +
                     '<div class="data-status"><span><strong>Plan updated</strong>' + readableTime(planUpdated) + '</span>' +
                         '<span><strong>Tracker updated</strong>' + readableTime(trackerUpdated) + '</span></div>' +
                     '<p class="data-cloud">' + cloudText + '</p>' +

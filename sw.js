@@ -1,4 +1,4 @@
-var CACHE = 'meridian-2026-07-24-phase-one';
+var CACHE = 'meridian-2026-07-25-simplified';
 var ASSETS = [
     './',
     './index.html',
@@ -38,7 +38,6 @@ var ASSETS = [
     './js/ui/ledger.js',
     './js/ui/tracker-observatory.js',
     './js/ui/tracker-cashbook.js',
-    './js/ui/goals.js',
     './js/ui/tracker-settings.js',
     './js/ui/data-controls.js',
     './js/ui/guide.js',
