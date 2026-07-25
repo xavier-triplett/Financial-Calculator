@@ -171,6 +171,21 @@
                 updatedAt: { __serverTimestamp: true }
             });
         }
+        function legacyPlanShape(plan) {
+            return {
+                inputs: copy(plan.inputs), profile: copy(plan.profile),
+                phases: copy(plan.phases), mcSeed: plan.mcSeed
+            };
+        }
+        function legacyTrackerShape(tracker) {
+            return {
+                accounts: copy(tracker.accounts), snapshots: copy(tracker.snapshots),
+                ageIncome: copy(tracker.ageIncome), txns: copy(tracker.txns),
+                cashMonths: copy(tracker.cashMonths),
+                categoryKinds: copy(tracker.categoryKinds || {}),
+                csvColumns: copy(tracker.csvColumns || {})
+            };
+        }
         function readTracker(uid) {
             var meta = __mock.get(path(uid, 'state/tracker'));
             var json = '';
@@ -421,11 +436,20 @@
             FireStore.reset();
             TrackerStore.reset();
             FireStore.setInput('income', 717171);
-            var legacyPlan = copy(defaultPlan);
+            var legacyPlan = {
+                inputs: copy(defaultPlan.inputs),
+                profile: copy(defaultPlan.profile),
+                phases: copy(defaultPlan.phases),
+                mcSeed: defaultPlan.mcSeed
+            };
             legacyPlan.inputs.income = 818181;
-            var legacyTracker = copy(defaultTracker);
-            delete legacyTracker.categoryKinds;
-            delete legacyTracker.csvColumns;
+            var legacyTracker = {
+                accounts: [],
+                snapshots: {},
+                ageIncome: {},
+                txns: [],
+                cashMonths: []
+            };
             legacyTracker.accounts = [{ id: 'legacy-cash', name: 'Legacy cash', group: 'cash' }];
             legacyTracker.snapshots = { '2025-12': { 'legacy-cash': 9191 } };
             var legacyDescription = (new Array(101).join('\0') + '😀').repeat(6000);
@@ -481,7 +505,7 @@
 
             await FireCloud.signOut();
             var malformedLegacy = {
-                version: 1, plan: copy(defaultPlan), tracker: { accounts: 'invalid' },
+                version: 1, plan: legacyPlanShape(defaultPlan), tracker: { accounts: 'invalid' },
                 updatedAt: { __serverTimestamp: true }
             };
             __mock.put(path('legacy-bad'), malformedLegacy);
@@ -493,7 +517,7 @@
                 !__mock.get(path('legacy-bad', 'state/plan')));
 
             await FireCloud.signOut();
-            writeLegacy('legacy-partial', defaultPlan, defaultTracker);
+            writeLegacy('legacy-partial', legacyPlanShape(defaultPlan), legacyTrackerShape(defaultTracker));
             __mock.put(path('legacy-partial', 'state/plan'), {
                 schemaVersion: 2, revision: 1, data: defaultPlan,
                 updatedAt: { __serverTimestamp: true }
@@ -508,9 +532,9 @@
             await FireCloud.signOut();
             FireStore.reset();
             TrackerStore.reset();
-            var editDuringMigration = copy(defaultPlan);
+            var editDuringMigration = legacyPlanShape(defaultPlan);
             editDuringMigration.inputs.income = 900000;
-            writeLegacy('legacy-edit', editDuringMigration, defaultTracker);
+            writeLegacy('legacy-edit', editDuringMigration, legacyTrackerShape(defaultTracker));
             var releaseMigration = __mock.holdNext();
             __signIn('legacy-edit', 'legacy-edit@example.com');
             FireStore.setInput('income', 910000);
@@ -531,9 +555,9 @@
             var releaseLegacySeed = __mock.holdAfterNext();
             __signIn('legacy-race', 'legacy-race@example.com');
             await tick();
-            var racedLegacyPlan = copy(defaultPlan);
+            var racedLegacyPlan = legacyPlanShape(defaultPlan);
             racedLegacyPlan.inputs.income = 404040;
-            writeLegacy('legacy-race', racedLegacyPlan, defaultTracker);
+            writeLegacy('legacy-race', racedLegacyPlan, legacyTrackerShape(defaultTracker));
             releaseLegacySeed();
             await FireCloud.flush();
             check('a legacy root appearing during first upload is not overwritten',

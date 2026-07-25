@@ -216,6 +216,10 @@
 
     function serializeData(name, value) {
         var data = clone(value);
+        // Workspace-level timestamps are local freshness metadata. Excluding
+        // them from cloud payloads prevents two otherwise identical devices
+        // from conflicting only because they adopted data at different times.
+        if (object(data.meta)) delete data.meta;
         var json = JSON.stringify(data);
         return { data: data, json: json, hash: hashString(name === 'plan' ? stableStringify(data) : json) };
     }
@@ -468,8 +472,8 @@
         }
         return {
             kind: 'existing',
-            plan: { data: plan.data, revision: plan.revision, hash: hashString(stableStringify(plan.data)) },
-            tracker: { data: trackerData, revision: tracker.revision, hash: tracker.digest }
+            plan: { data: plan.data, revision: plan.revision, hash: serializeData('plan', plan.data).hash },
+            tracker: { data: trackerData, revision: tracker.revision, hash: serializeData('tracker', trackerData).hash }
         };
     }
 
@@ -1135,6 +1139,50 @@
         });
     }
 
+    function deleteAllData() {
+        if (!currentUser || !db || !storesReady()) return Promise.resolve(false);
+        var uid = currentUser.uid;
+        var expectedGeneration = generation;
+        setPhase('syncing');
+        return db.runTransaction(function (transaction) {
+            transaction.delete(stateRef(uid, 'plan'));
+            transaction.delete(stateRef(uid, 'tracker'));
+            for (var i = 0; i < MAX_CHUNKS; i++) transaction.delete(chunkRef(uid, i));
+            transaction.delete(userRef(uid));
+            return Promise.resolve();
+        }).then(function () {
+            if (!currentUser || currentUser.uid !== uid || generation !== expectedGeneration) return false;
+            applying = true;
+            try {
+                global.FireStore.reset();
+                global.TrackerStore.reset();
+            } finally {
+                applying = false;
+            }
+            try {
+                global.localStorage.removeItem(LOCAL_PREFIX + uid);
+                global.localStorage.removeItem(ANON_LOCAL_KEY);
+            } catch (error) { /* unavailable */ }
+            domains = freshDomains();
+            record = emptyRecord();
+            ['plan', 'tracker'].forEach(function (name) {
+                var encoded = serialize(name);
+                domains[name].hydrated = true;
+                domains[name].baseRevision = 0;
+                domains[name].lastHash = encoded.hash;
+                record[name].lastHash = encoded.hash;
+            });
+            setLocalOwner(uid);
+            saveRecord();
+            setPhase('synced');
+            return true;
+        }).catch(function (error) {
+            setPhase('error', error);
+            toast('Data could not be deleted: ' + errorText(error));
+            return false;
+        });
+    }
+
     function resolveConflict(strategy, name) {
         if (strategy !== 'local' && strategy !== 'remote') {
             return Promise.reject(new Error('Conflict strategy must be local or remote'));
@@ -1226,6 +1274,7 @@
             return hydrate(currentUser, generation);
         },
         resolveConflict: resolveConflict,
+        deleteAllData: deleteAllData,
         signIn: function () {
             return ensureReady(false).then(function (ready) {
                 if (!ready || !auth) return false;

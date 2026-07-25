@@ -64,6 +64,16 @@
             FireApp.setMode('expert');
 
             check('ledger mounts', document.querySelector('.lg-shell') !== null);
+            check('blank plan is gated', document.querySelector('[data-el="gate"]').hidden === false &&
+                document.querySelector('[data-el="resultsWrap"]').hidden === true);
+            check('defaults hold no personal data',
+                FireStore.get().inputs.income === 0 && FireStore.get().inputs.expenses === 0 &&
+                FireStore.get().inputs.balDeferred === 0 && FireStore.get().inputs.balFree === 0 &&
+                FireStore.get().inputs.balTaxable === 0 && FireStore.get().inputs.balCash === 0);
+            FireStore.setProfile('birthDate', (new Date().getFullYear() - 30) + '-01-01');
+            FireStore.setInputs({ income: 180000, expenses: 60000 });
+            check('complete baseline unlocks results', document.querySelector('[data-el="gate"]').hidden === true &&
+                document.querySelector('[data-el="resultsWrap"]').hidden === false);
             check('bridge stamp populated', text('[data-el="bridgeStamp"]').length > 1);
             check('coast stamp populated', text('[data-el="coastStamp"]').length > 1);
             check('default path is presented as Coast FIRE',
@@ -86,10 +96,6 @@
             check('compact strips trailing zeros',
                 FireUtil.compact(3500000) === '$3.5M' && FireUtil.compact(2000000) === '$2M' &&
                 FireUtil.compact(1250000) === '$1.25M' && FireUtil.compact(840000) === '$840k');
-            check('defaults hold no personal data',
-                FireStore.get().inputs.income === 0 && FireStore.get().inputs.expenses === 0 &&
-                FireStore.get().inputs.balDeferred === 0 && FireStore.get().inputs.balFree === 0 &&
-                FireStore.get().inputs.balTaxable === 0 && FireStore.get().inputs.balCash === 0);
             FireStore.setInput('balDeferred', 150000);
             var defEl = document.querySelector('input[data-key="balDeferred"]');
             check('money field shows grouped value', defEl.value === '150,000');
@@ -114,7 +120,7 @@
                 document.querySelector('[data-el="infeasible"]').hidden === true);
             FireStore.setInput('expenses', 160000); // 150k take-home < 50k savings + 160k spending
             check('feasibility warning appears', document.querySelector('[data-el="infeasible"]').hidden === false);
-            FireStore.setInput('expenses', 0);
+            FireStore.setInput('expenses', 60000);
             FireStore.setInput('balDeferred', 175000);
             check('money field regroups from store',
                 document.querySelector('input[data-key="balDeferred"]').value === '175,000');
@@ -456,7 +462,8 @@
             FireStore.setInputs({ swr: 9, marketReturn: 30, standardRetireAge: 70 });
             FireApp.setMode('beginner');
             check('beginner mode stamped on document', document.documentElement.dataset.mode === 'beginner');
-            check('categories absent in beginner nav', document.querySelector('[data-view="categories"]') === null);
+            check('plain-language rules stay available in beginner nav',
+                document.querySelector('[data-view="categories"]') !== null);
             check('expert controls hidden in beginner',
                 getComputedStyle(document.querySelector('.lg-expert')).display === 'none');
 

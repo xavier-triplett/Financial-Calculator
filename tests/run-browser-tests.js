@@ -9,15 +9,16 @@ const root = path.resolve(__dirname, '..');
 const windowsChrome = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const chrome = process.env.CHROME_PATH ||
     (process.platform === 'win32' && fs.existsSync(windowsChrome) ? windowsChrome : 'google-chrome');
-const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'coast-ledger-chrome-'));
-const swProfile = fs.mkdtempSync(path.join(os.tmpdir(), 'coast-ledger-sw-chrome-'));
+const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'meridian-chrome-'));
+const swProfile = fs.mkdtempSync(path.join(os.tmpdir(), 'meridian-sw-chrome-'));
 const cases = [
     ['smoke.html', 'smoke-result', 'SMOKE PASS'],
+    ['phase1.test.html', 'out', 'PHASE1 PASS', '390,844'],
     ['cloud.test.html', 'out', 'CLOUD PASS'],
     ['firebase-load.test.html', 'out', 'FBLOAD PASS']
 ];
 
-function chromeRun(target, profilePath = profile, budget = 15000) {
+function chromeRun(target, profilePath = profile, budget = 15000, windowSize = null) {
     return new Promise((resolve) => {
         const args = [
             '--headless=new',
@@ -29,6 +30,9 @@ function chromeRun(target, profilePath = profile, budget = 15000) {
             '--dump-dom',
             target
         ];
+        if (windowSize) {
+            args.splice(args.length - 2, 0, `--window-size=${windowSize}`, '--force-device-scale-factor=1');
+        }
         const child = spawn(chrome, args);
         let stdout = '';
         let stderr = '';
@@ -175,11 +179,20 @@ function staticServer() {
     return { server, misses };
 }
 
+function cleanupProfile(profilePath) {
+    try {
+        fs.rmSync(profilePath, { recursive: true, force: true, maxRetries: 8, retryDelay: 125 });
+    } catch (error) {
+        if (error.code !== 'EBUSY' && error.code !== 'EPERM') throw error;
+        console.warn(`Temporary Chrome profile is still closing: ${profilePath}`);
+    }
+}
+
 async function main() {
     let failed = false;
     try {
-        for (const [file, resultId, expected] of cases) {
-            const result = await chromeRun(pathToFileURL(path.join(__dirname, file)).href);
+        for (const [file, resultId, expected, windowSize] of cases) {
+            const result = await chromeRun(pathToFileURL(path.join(__dirname, file)).href, profile, 15000, windowSize);
             const expression = new RegExp(`<pre id="${resultId}"[^>]*>([\\s\\S]*?)<\\/pre>`, 'i');
             const match = result.stdout.match(expression);
             const testResult = match ? match[1].replace(/<[^>]+>/g, '').trim() : '';
@@ -197,10 +210,10 @@ async function main() {
         await new Promise((resolve) => hosted.server.listen(0, '127.0.0.1', resolve));
         const port = hosted.server.address().port;
         const result = await chromeRun(`http://127.0.0.1:${port}/?browser-test=1`);
-        const booted = /class="[^"]*pf-shell/.test(result.stdout) &&
-            result.stdout.includes('The Coast Ledger') &&
-            result.stdout.includes('Choose your retirement path') &&
-            result.stdout.includes('pf-path selected') && hosted.misses.length === 0;
+        const booted = /class="[^"]*home-shell/.test(result.stdout) &&
+            result.stdout.includes('Meridian') &&
+            result.stdout.includes('Start with three facts') &&
+            result.stdout.includes('No verdict before the basics') && hosted.misses.length === 0;
         if (result.error || result.status !== 0 || !booted) {
             failed = true;
             console.error('index.html: FAIL');
@@ -228,8 +241,8 @@ async function main() {
         }
         await new Promise((resolve) => hosted.server.close(resolve));
     } finally {
-        fs.rmSync(profile, { recursive: true, force: true });
-        fs.rmSync(swProfile, { recursive: true, force: true });
+        cleanupProfile(profile);
+        cleanupProfile(swProfile);
     }
     if (failed) process.exit(1);
 }
