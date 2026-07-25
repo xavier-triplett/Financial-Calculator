@@ -1,6 +1,6 @@
 # Third-Party Notices
 
-The Coast Ledger redistributes the following runtime libraries and fonts. These notices
+Meridian redistributes the following runtime libraries and fonts. These notices
 apply only to the named third-party material, not to the repository as a whole.
 
 ## JavaScript and CSS

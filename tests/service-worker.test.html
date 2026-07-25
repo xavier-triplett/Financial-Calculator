@@ -44,7 +44,9 @@
             // cache for a new release does not fail this test.
             var release = (await (await fetch('/sw.js')).text()).match(/CACHE = '([^']+)'/)[1];
             cacheNames = await caches.keys();
-            check('new cache replaces old releases',
+            // 'coast-ledger-old' is the app's previous name: purging it proves
+            // a rename does not strand caches from the old one.
+            check('new cache replaces old releases, including the previous app name',
                 cacheNames.indexOf(release) >= 0 && cacheNames.indexOf('coast-ledger-old') < 0);
             var cache = await caches.open(release);
             check('application shell is precached',
@@ -65,7 +67,7 @@
                 frame.addEventListener('error', function () { clearTimeout(timer); resolve(); }, { once: true });
             });
             check('offline navigation falls back to the cached application',
-                frame.contentDocument && frame.contentDocument.title.indexOf('The Coast Ledger') >= 0);
+                frame.contentDocument && frame.contentDocument.title.indexOf('Meridian') >= 0);
         } catch (error) {
             failures++;
             lines.push('EXCEPTION: ' + error.message + '\n' + error.stack);
