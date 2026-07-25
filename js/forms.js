@@ -78,6 +78,7 @@
         var input = U.el('input', {
             type: money ? 'text' : 'number',
             value: state.inputs[f.key],
+            id: 'ff-input-' + f.key,
             'data-key': f.key
         });
         if (!money) input.setAttribute('step', f.step || 1);
@@ -106,13 +107,16 @@
             else if (String(val) !== input.value) input.value = val;
         });
 
-        var labelBits = [U.el('span', { class: 'ff-label-text', text: FireSchema.fieldLabel(f, beginner) })];
+        var labelBits = [U.el('label', {
+            class: 'ff-label-text',
+            for: input.id,
+            text: FireSchema.fieldLabel(f, beginner)
+        })];
         if (f.hint) {
-            labelBits.push(U.el('span', {
+            labelBits.push(U.el('button', {
                 class: 'ff-hint',
+                type: 'button',
                 text: 'i',
-                tabindex: '0',
-                role: 'img',
                 'aria-label': f.hint,
                 'data-tooltip': f.hint
             }));
@@ -123,7 +127,7 @@
             input
         ]);
 
-        return U.el('label', {
+        return U.el('div', {
             class: 'ff-field' + (f.bucket ? ' ff-bucket-' + f.bucket : ''),
             'data-key': f.key
         }, [U.el('span', { class: 'ff-label' }, labelBits), control]);
