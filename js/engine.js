@@ -25,7 +25,7 @@
         // Income & savings — personal dollar figures ship as zero so a
         // signed-out visitor sees no financial data.
         income: 0,
-        incomeTaxRate: 25,        // % of gross pay lost to payroll + income tax
+        incomeTaxRate: 0,         // optional user estimate
         savingsRate: 25,          // %
         savingsRateIncrease: 1,   // % points per year
         maxSavingsRate: 50,       // %
@@ -41,6 +41,11 @@
         // Cash on hand: counts toward net worth but sits outside the market —
         // never grown by returns and never drawn by the simulation.
         balCash: 0,
+
+        // Beginner-only new-savings allocation. The remainder goes to
+        // brokerage; zeroes avoid assuming access to retirement accounts.
+        beginnerDeferredShare: 0,
+        beginnerFreeShare: 0,
 
         // Market assumptions
         marketReturn: 7,          // %
@@ -59,24 +64,24 @@
 
         // Employer match: matchRate% of your 401k contributions,
         // on contributions up to matchCap% of salary.
-        employerMatchRate: 50,    // %
-        employerMatchCap: 6,      // % of salary
+        employerMatchRate: 0,     // %
+        employerMatchCap: 0,      // % of salary
 
         // Shared traditional/Roth account limits, indexed to inflation.
-        limit401k: 24500,
-        limitIRA: 7500,
-        catchUp401k: 8000,
-        superCatchUp401k: 11250,  // SECURE 2.0, ages 60-63
-        catchUpIRA: 1100,
+        limit401k: 0,
+        limitIRA: 0,
+        catchUp401k: 0,
+        superCatchUp401k: 0,
+        catchUpIRA: 0,
         catchUpAge: 50,
 
         // Effective tax rates on withdrawals
-        taxDeferredRate: 15,      // % — ordinary income on 401k/IRA draws
-        taxTaxableRate: 10,       // % — capital gains on brokerage draws
+        taxDeferredRate: 0,       // optional effective estimate
+        taxTaxableRate: 0,        // optional effective estimate
         // Extra charge on tax-deferred draws before standardRetireAge
         // (the IRS rate is 10%; set 0 for Rule of 55 / 72(t) plans).
         // Roth draws are modeled penalty-free, as contribution withdrawals.
-        earlyPenaltyRate: 10,     // %
+        earlyPenaltyRate: 0,      // optional estimate
 
         // Monte Carlo
         volatility: 15,           // % annual std-dev of returns
@@ -101,6 +106,8 @@
         rothContributionBasis: { min: 0, max: 1e15 },
         balTaxable: { min: 0, max: 1e15 },
         balCash: { min: 0, max: 1e15 },
+        beginnerDeferredShare: { min: 0, max: 100 },
+        beginnerFreeShare: { min: 0, max: 100 },
         marketReturn: { min: -99, max: 100 },
         inflation: { min: -99, max: 100 },
         swr: { min: 0.1, max: 100 },
@@ -141,9 +148,8 @@
 
     /* ---------------------------------------------------------------------
      * Beginner model: a second, simpler simulation rather than a filtered
-     * view of the expert one. Every assumption below is a published constant:
-     * a value the user customized in Expert mode can never leak into a
-     * beginner run, so the same answers always come from the same inputs.
+     * view of the expert one. Its fixed assumptions are published constants,
+     * while explicitly owned personal inputs stay shared with Expert mode.
      *
      * Inflation is folded out instead of modeled, which puts every figure in
      * today's dollars. The engine loop needs no special case for this: at
@@ -160,9 +166,11 @@
 
     // Keys the beginner enters. Everything else is frozen at BEGINNER_MODEL.
     var BEGINNER_OWNED = [
-        'planType', 'currentAge', 'coastAge', 'retireAge',
+        'planType', 'currentAge', 'coastAge', 'retireAge', 'standardRetireAge',
         'income', 'expenses', 'savingsRate',
-        'balDeferred', 'balFree', 'balTaxable', 'balCash'
+        'balDeferred', 'balFree', 'rothContributionBasis', 'balTaxable', 'balCash',
+        'beginnerDeferredShare', 'beginnerFreeShare',
+        'employerMatchRate', 'employerMatchCap', 'limit401k', 'limitIRA'
     ];
 
     var BEGINNER_MODEL = Object.assign({}, DEFAULTS, {
@@ -178,25 +186,38 @@
         taxDeferredRate: 0,
         taxTaxableRate: 0,
         earlyPenaltyRate: 0,
-        employerMatchRate: 50,
-        employerMatchCap: 6,
+        employerMatchRate: 0,
+        employerMatchCap: 0,
+        limit401k: 0,
+        limitIRA: 0,
+        catchUp401k: 0,
+        superCatchUp401k: 0,
+        catchUpIRA: 0,
         volatility: 15,
         mcSims: 2000
     });
 
-    // Beginner contributions always split evenly between the two tax-advantaged
-    // buckets; there are no saving phases to edit.
-    var BEGINNER_PHASES = [{ id: 1, age: 0, deferred: 50, free: 50, taxable: 0, isLocked: true }];
+    var BEGINNER_PHASES = [{ id: 1, age: 0, deferred: 0, free: 0, taxable: 100, isLocked: true }];
 
-    /* Project a stored input set onto the beginner model. The employer match
-     * is a yes/no answer in beginner, so the rate is frozen rather than owned. */
+    /* Project a stored input set onto the beginner model. */
     function beginnerInputs(inputs) {
         var d = normalizeInputs(inputs);
         var out = Object.assign({}, BEGINNER_MODEL);
         BEGINNER_OWNED.forEach(function (key) { out[key] = d[key]; });
         out.maxSavingsRate = out.savingsRate;
-        out.employerMatchRate = d.employerMatchRate > 0 ? BEGINNER_MODEL.employerMatchRate : 0;
         return normalizeInputs(out);
+    }
+
+    function beginnerPhases(inputs) {
+        var d = normalizeInputs(inputs);
+        return [{
+            id: 1,
+            age: d.currentAge,
+            deferred: d.beginnerDeferredShare,
+            free: d.beginnerFreeShare,
+            taxable: 100 - d.beginnerDeferredShare - d.beginnerFreeShare,
+            isLocked: true
+        }];
     }
 
     /* The assumptions beginner mode states on screen. Shown, not hidden:
@@ -206,11 +227,11 @@
             { label: 'Dollars', value: "Today's dollars", note: 'Inflation is removed, so every figure reads in money you can feel now.' },
             { label: 'Market growth', value: BEGINNER_MODEL.marketReturn.toFixed(1) + '% a year after inflation', note: BEGINNER_NOMINAL.marketReturn + '% growth less ' + BEGINNER_NOMINAL.inflation + '% inflation.' },
             { label: 'Savings rate', value: 'Fixed for every year', note: 'The rate you enter is the rate the whole projection uses. It never ramps.' },
-            { label: 'Where savings go', value: '50% tax-deferred, 50% Roth', note: 'Overflow past the IRS limits lands in a brokerage account.' },
+            { label: 'Where savings go', value: 'Your editable allocation', note: 'Any remainder and amounts above the limits you enter go to brokerage.' },
             { label: 'Withdrawal rate', value: BEGINNER_MODEL.swr + '% a year', note: 'The standard safe-withdrawal guideline.' },
-            { label: 'Bridge checkpoint', value: 'Age ' + BEGINNER_MODEL.standardRetireAge, note: 'Current Roth balances are treated as locked before then; future modeled Roth IRA contributions are accessible. Tax-deferred shortfalls have no modeled tax or penalty.' },
+            { label: 'Account access', value: 'The age you enter', note: 'Before then, only the Roth contribution basis you enter and modeled future Roth IRA contributions are available. No tax or penalty is estimated.' },
             { label: 'Taxes', value: 'Not modeled', note: 'Pay, contributions, brokerage draws, retirement withdrawals, and early withdrawals are all modeled tax-free.' },
-            { label: 'Contribution limits', value: '2026 IRS limits', note: 'The workplace plan fills first, then the IRA.' }
+            { label: 'Benefits & account access', value: 'Only what you enter', note: 'No workplace plan, IRA room, catch-up contribution, or employer match is assumed.' }
         ];
     }
 
@@ -277,6 +298,9 @@
         }
         if (d.savingsRate > d.maxSavingsRate) d.savingsRate = d.maxSavingsRate;
         if (d.planType === PLAN_TYPES.COAST && d.coastAge > d.retireAge) d.coastAge = d.retireAge;
+        if (d.beginnerDeferredShare + d.beginnerFreeShare > 100) {
+            d.beginnerFreeShare = 100 - d.beginnerDeferredShare;
+        }
         DRAW_SETS.forEach(function (keys) { normalizeDrawSet(d, keys); });
         return d;
     }
@@ -798,6 +822,7 @@
         BEGINNER_PHASES: BEGINNER_PHASES,
         BEGINNER_NOMINAL: BEGINNER_NOMINAL,
         beginnerInputs: beginnerInputs,
+        beginnerPhases: beginnerPhases,
         beginnerAssumptions: beginnerAssumptions,
         normalizeInputs: normalizeInputs,
         spendableAssets: spendableAssets,

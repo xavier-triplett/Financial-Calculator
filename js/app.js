@@ -24,14 +24,14 @@
 
     /* Beginner and Expert are two different simulations, not one simulation
      * behind two levels of detail. Beginner projects the stored plan onto a
-     * fixed model (see FireEngine.BEGINNER_MODEL) so no expert customization
-     * survives into it. Everything on screen must read these inputs rather
-     * than the store's, or the labels describe a run that never happened. */
+     * fixed model while retaining its explicitly owned personal inputs.
+     * Everything on screen must read these inputs rather than the store's,
+     * or the labels describe a run that never happened. */
     function compute() {
         var state = FireStore.get();
         var beginner = pref.mode === 'beginner';
         effective.inputs = beginner ? FireEngine.beginnerInputs(state.inputs) : state.inputs;
-        effective.phases = beginner ? FireEngine.BEGINNER_PHASES : state.phases;
+        effective.phases = beginner ? FireEngine.beginnerPhases(effective.inputs) : state.phases;
         results.sim = FireEngine.simulate(effective.inputs, effective.phases, { startYear: startYear });
         results.mc = FireEngine.monteCarlo(effective.inputs, effective.phases, { seed: beginner ? 1337 : state.mcSeed, startYear: startYear });
         return results;
@@ -41,11 +41,9 @@
         var state = FireStore.get();
         var inputs = effective.inputs || state.inputs;
         var missing = [];
+        if (!state.profile.planTypeSelected) missing.push({ key: 'planType', label: 'retirement path' });
         if (!state.profile.birthDate) missing.push({ key: 'birthDate', label: 'date of birth' });
         if (!(Number(inputs.expenses) > 0)) missing.push({ key: 'expenses', label: 'annual spending' });
-        if (Number(inputs.currentAge) < Number(inputs.retireAge) && !(Number(inputs.income) > 0)) {
-            missing.push({ key: 'income', label: 'annual income' });
-        }
         return { ready: missing.length === 0, missing: missing };
     }
 
@@ -218,8 +216,8 @@
         compute();
         mountActive();
         toast(mode === 'beginner'
-            ? "Beginner model: no tax estimates, standard assumptions, today's dollars"
-            : 'Expert model: your tax and market assumptions, future dollars');
+            ? "Beginner model: no tax estimates, editable benefits, today's dollars"
+            : 'Expert model: optional tax and market inputs, future dollars');
     }
 
     function escapeHtml(s) {
@@ -322,7 +320,7 @@
             '<span class="nav-right">' + authHtml() +
                 '<span class="nav-mode" role="group" aria-label="Planning model">' +
                     '<button type="button" data-mode-set="beginner" title="Simple model with no tax estimates" class="' + (pref.mode === 'beginner' ? 'active' : '') + '" aria-pressed="' + (pref.mode === 'beginner') + '">Beginner</button>' +
-                    '<button type="button" data-mode-set="expert" title="Custom tax-aware model" class="' + (pref.mode === 'expert' ? 'active' : '') + '" aria-pressed="' + (pref.mode === 'expert') + '">Expert</button>' +
+                    '<button type="button" data-mode-set="expert" title="Detailed model with optional tax inputs" class="' + (pref.mode === 'expert' ? 'active' : '') + '" aria-pressed="' + (pref.mode === 'expert') + '">Expert</button>' +
                 '</span>' +
                 '<button class="nav-theme" type="button" data-theme-toggle aria-label="Switch to ' +
                     (pref.theme === 'dark' ? 'light' : 'dark') + ' mode" title="Switch to ' +
@@ -407,7 +405,14 @@
             if (e.target.closest('[data-cloud-resolve]')) resolveCloudConflict();
             if (e.target.closest('[data-cloud-retry]')) FireCloud.flush();
         });
-        window.addEventListener('resize', updateNavCollapse);
+        window.addEventListener('resize', function () {
+            if (navMenuOpen) {
+                navMenuOpen = false;
+                renderNav();
+                return;
+            }
+            updateNavCollapse();
+        });
         document.addEventListener('click', function (e) {
             var modeLink = e.target.closest('[data-mode-set]');
             if (modeLink && !navEl.contains(modeLink)) setMode(modeLink.dataset.modeSet);

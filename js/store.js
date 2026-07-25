@@ -95,7 +95,7 @@
         return {
             schemaVersion: SCHEMA_VERSION,
             inputs: inputs,
-            profile: { birthDate: null },
+            profile: { birthDate: null, planTypeSelected: false },
             phases: normalizePhases(FireEngine.DEFAULT_PHASES, inputs.currentAge),
             mcSeed: 1337,
             meta: { createdAt: createdAt, updatedAt: createdAt }
@@ -126,6 +126,11 @@
         if (!saved || typeof saved !== 'object') return st;
         st.inputs = FireEngine.normalizeInputs(saved.inputs);
         st.profile.birthDate = validBirthDate(saved.profile && saved.profile.birthDate);
+        st.profile.planTypeSelected = !!(saved.profile && saved.profile.planTypeSelected);
+        if (saved.profile && !Object.prototype.hasOwnProperty.call(saved.profile, 'planTypeSelected') &&
+            saved.inputs && Object.prototype.hasOwnProperty.call(saved.inputs, 'planType')) {
+            st.profile.planTypeSelected = true;
+        }
         st.phases = normalizePhases(saved.phases, st.inputs.currentAge);
         applyBirthDate(st);
         var seed = Number(saved.mcSeed);
@@ -202,14 +207,18 @@
             candidate[key] = value;
             changed = true;
         }
-        if (!changed) return false;
+        var selectPlanType = Object.prototype.hasOwnProperty.call(patch, 'planType') &&
+            Number.isFinite(Number(patch.planType));
+        var profileChanged = selectPlanType && !state.profile.planTypeSelected;
+        if (!changed && !profileChanged) return false;
 
         FireEngine.DRAW_SETS.forEach(function (keys) { adjustSingleDraw(candidate, patch, keys); });
         candidate = FireEngine.normalizeInputs(candidate);
         if (state.profile.birthDate) candidate.currentAge = FireUtil.ageFromDOB(state.profile.birthDate);
-        if (JSON.stringify(candidate) === JSON.stringify(state.inputs)) return false;
+        if (JSON.stringify(candidate) === JSON.stringify(state.inputs) && !profileChanged) return false;
         checkpoint();
         state.inputs = candidate;
+        if (selectPlanType) state.profile.planTypeSelected = true;
         state.phases = normalizePhases(state.phases, candidate.currentAge);
         commit();
         return true;

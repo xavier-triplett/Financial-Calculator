@@ -42,13 +42,13 @@
 
             '<section class="lg-verdicts">' +
                 '<article class="lg-verdict" data-v="bridge">' +
-                    '<span class="lg-eyebrow" data-el="firstGoalLabel">Goal I &mdash; the bridge</span>' +
+                    '<span class="lg-eyebrow" data-el="firstMilestoneLabel">Milestone I &mdash; the bridge</span>' +
                     '<span class="lg-v-range" data-el="bridgeRange"></span>' +
                     '<div class="lg-stamp" data-el="bridgeStamp">&mdash;</div>' +
                     '<p class="lg-v-note" data-el="bridgeNote"></p>' +
                 '</article>' +
                 '<article class="lg-verdict" data-v="coast">' +
-                    '<span class="lg-eyebrow" data-el="secondGoalLabel">Goal II &mdash; retirement</span>' +
+                    '<span class="lg-eyebrow" data-el="secondMilestoneLabel">Milestone II &mdash; retirement</span>' +
                     '<span class="lg-v-range" data-el="coastRange"></span>' +
                     '<div class="lg-stamp" data-el="coastStamp">&mdash;</div>' +
                     '<p class="lg-v-note" data-el="coastNote"></p>' +
@@ -84,8 +84,8 @@
                     '<p class="lg-help lg-expert">Which buckets fund each retirement phase.</p>' +
                     '<div class="lg-expert" data-el="drawdown"></div>' +
                     (beginner
-                        ? '<p class="mode-note">Growth, contribution limits and the withdrawal rate are fixed in Beginner mode; taxes are intentionally not modeled. ' +
-                            'Every assumption is listed on the Profile tab. ' +
+                        ? '<p class="mode-note">Growth and the withdrawal rate are fixed in Beginner mode; taxes are intentionally not modeled. ' +
+                            'Allocation, account limits, Roth access, and employer match use only what you enter. Every fixed choice is listed on the Profile tab. ' +
                             '<button type="button" data-mode-set="expert">Switch to Expert</button> to set your own.</p>'
                         : '') +
                 '</aside>' +
@@ -109,7 +109,7 @@
                         '<p class="sr-only" id="mc-chart-summary" data-el="mcSummary"></p>' +
                     '</section>' +
 
-                    '<section class="lg-figures lg-expert">' +
+                    '<section class="lg-figures">' +
                         '<div class="lg-figure"><span class="lg-figure-label">Employer match collected</span><span class="lg-figure-val" data-el="figMatch"></span></div>' +
                         '<div class="lg-figure"><span class="lg-figure-label">Taxes paid in retirement</span><span class="lg-figure-val" data-el="figTaxes"></span></div>' +
                         '<div class="lg-figure"><span class="lg-figure-label">Estate at 95</span><span class="lg-figure-val" data-el="figEstate"></span></div>' +
@@ -260,7 +260,7 @@
         els.planPath.textContent = plan.name + ' · tax-deferred · tax-free · after-tax';
 
         if (coastPlan) {
-            els.firstGoalLabel.textContent = 'Milestone I — reach the coast';
+            els.firstMilestoneLabel.textContent = 'Milestone I — reach the coast';
             els.bridgeRange.textContent = 'Now → Age ' + s.coastStartAge;
             if (s.coastCoverageAtStart >= 100) {
                 stamp(els.bridgeStamp, 'secure', 'Ready');
@@ -272,7 +272,7 @@
                     U.compact(s.coastBalanceAtStart) + '; the coast target is ' + U.compact(s.coastTargetAtStart) + '.';
             }
         } else if (earlyPlan) {
-            els.firstGoalLabel.textContent = 'Goal I — the bridge';
+            els.firstMilestoneLabel.textContent = 'Milestone I — the bridge';
             els.bridgeRange.textContent = 'Age ' + inp.retireAge + ' → ' + inp.standardRetireAge;
             if (v.bridge.code === 'na') {
                 stamp(els.bridgeStamp, 'na', 'Not needed');
@@ -285,7 +285,7 @@
                 els.bridgeNote.textContent = 'The plan carries spending to account access at ' + inp.standardRetireAge + '.';
             }
         } else {
-            els.firstGoalLabel.textContent = 'Milestone I — retirement readiness';
+            els.firstMilestoneLabel.textContent = 'Milestone I — retirement readiness';
             els.bridgeRange.textContent = 'Now → Age ' + inp.retireAge;
             if (s.retirementCoverageAtReadiness >= 100) {
                 stamp(els.bridgeStamp, 'secure', 'Ready');
@@ -309,8 +309,8 @@
             els.infeasible.hidden = true;
         }
 
-        els.secondGoalLabel.textContent = coastPlan ? 'Milestone II — coast to retirement' :
-            (earlyPlan ? 'Goal II — long retirement' : 'Milestone II — retirement runway');
+        els.secondMilestoneLabel.textContent = coastPlan ? 'Milestone II — coast to retirement' :
+            (earlyPlan ? 'Milestone II — long retirement' : 'Milestone II — retirement runway');
         els.coastRange.textContent = coastPlan ? 'Age ' + s.coastStartAge + ' → ' + inp.retireAge :
             'Age ' + Math.max(inp.retireAge, inp.standardRetireAge) + ' → 95';
 

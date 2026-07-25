@@ -52,7 +52,6 @@
     <script src="../js/ui/ledger.js"></script>
     <script src="../js/ui/tracker-observatory.js"></script>
     <script src="../js/ui/tracker-cashbook.js"></script>
-    <script src="../js/ui/goals.js"></script>
     <script src="../js/ui/tracker-settings.js"></script>
     <script src="../js/ui/data-controls.js"></script>
     <script src="../js/ui/guide.js"></script>
@@ -112,7 +111,10 @@
                 FireApp.inputs().earlyPenaltyRate === 0);
 
             FireStore.setProfile('birthDate', '1990-04-28');
-            FireStore.setInputs({ income: 120000, expenses: 54000, balDeferred: 90000, balFree: 30000 });
+            FireStore.setInputs({
+                planType: FireEngine.PLAN_TYPES.COAST,
+                income: 120000, expenses: 54000, balDeferred: 90000, balFree: 30000
+            });
             check('complete facts unlock the home dashboard', /Recommended next move/.test(document.body.textContent));
             check('beginner tax policy stays visible', /no-tax model/.test(document.body.textContent));
 
@@ -125,22 +127,12 @@
             balances[debt.id] = 18000;
             TrackerStore.addDatedSnapshot('2026-07-24', balances);
             TrackerStore.addTxn({ date: '2026-07-05', name: 'Market', amount: 420, category: 'Groceries', accountId: account.id });
-            TrackerStore.addBudget({ name: 'Groceries', category: 'Groceries', monthlyTarget: 700, rollover: true });
-            TrackerStore.addSavingsGoal({ name: 'Emergency fund', currentAmount: 4000, targetAmount: 12000 });
-            TrackerStore.addRecurringTemplate({
-                name: 'Rent', amount: 1800, category: 'Rent', frequency: 'monthly',
-                startDate: '2026-08-01', nextDate: '2026-08-01'
-            });
-            TrackerStore.addMerchantRule({ match: 'Market', mode: 'contains', category: 'Groceries' });
+            TrackerStore.setCategoryKind('Groceries', 'fixed');
+            TrackerStore.setCsvColumn('amount', 'Value');
 
-            FireApp.setView('goals');
-            check('Goals renders all Phase 1 workflows',
-                /Monthly spending plan/.test(document.body.textContent) &&
-                /Savings goals/.test(document.body.textContent) &&
-                /Debt plan/.test(document.body.textContent) &&
-                /Recurring items/.test(document.body.textContent));
-            var goalsFit = noOverflow();
-            check('Goals fits the compact viewport' + (goalsFit ? '' : ' · ' + overflowDebug()), goalsFit);
+            var navText = document.querySelector('.nav-tabs').textContent;
+            check('removed Goals and Rules tabs stay out of navigation',
+                !/Goals/.test(navText) && !/Rules/.test(navText));
 
             FireApp.setView('cashbook');
             document.querySelector('[data-act="toggle-split"]').click();
@@ -150,11 +142,16 @@
             FireApp.setView('observatory');
             check('arbitrary snapshot is visible', /Point-in-time snapshots/.test(document.body.textContent));
             check('account details are available', /Account details/.test(document.body.textContent));
+            check('liability payoff estimate moved beside account data',
+                /interest/.test(document.querySelector('.trk-account-details').textContent));
             check('Net Worth fits the compact viewport', noOverflow());
 
             FireApp.setView('categories');
-            check('merchant rules are visible', /Merchant rules/.test(document.body.textContent));
-            check('Rules fits the compact viewport', noOverflow());
+            check('categories and CSV mapping remain available',
+                /Category types/.test(document.body.textContent) &&
+                /CSV import columns/.test(document.body.textContent) &&
+                /Groceries/.test(document.body.textContent));
+            check('Categories fits the compact viewport', noOverflow());
 
             FireApp.setView('data');
             check('backup and deletion controls render',

@@ -27,25 +27,25 @@
          * every tab) vs. the Planner tab (simulation assumptions). Date of
          * birth is rendered by the Profile tab itself — it lives on the
          * store's `profile`, not in the numeric `inputs`. */
-        profileGroups: ['goals', 'baseline', 'taxes', 'irs'],
-        plannerGroups: ['savings', 'buckets', 'employer', 'market', 'montecarlo'],
+        profileGroups: ['timeline', 'baseline', 'taxes', 'irs'],
+        plannerGroups: ['savings', 'beginnerAllocation', 'buckets', 'employer', 'irs', 'market', 'montecarlo'],
 
         groups: [
             {
-                id: 'goals', title: 'Retirement goals', icon: ICONS.target,
-                blurb: 'The milestones for your selected path.',
+                id: 'timeline', title: 'Projection timeline', icon: ICONS.target,
+                blurb: 'Editable ages used by the selected retirement path.',
                 fields: [
                     { key: 'coastAge', label: 'Coast age', step: 1, min: 25, max: 80, hint: 'The age when retirement contributions stop. You keep working to cover living expenses while invested retirement balances grow on their own.' },
                     { key: 'retireAge', label: 'Full retirement age', step: 1, min: 25, max: 80 },
-                    { key: 'standardRetireAge', label: 'Penalty-free deferred access age', step: 1, min: 50, max: 75, hint: 'Usually 59½ (modeled as 60). Enter 55 only if your employer plan qualifies for the Rule of 55, and note that rule covers only that employer\'s 401k, not IRAs or Roth IRAs, while this age unlocks every account in the model.' }
+                    { key: 'standardRetireAge', label: 'Retirement-account access age', step: 1, min: 0, max: 95, hint: 'Enter the age you want this simplified projection to make all modeled retirement balances available. Actual access, taxes, and penalties depend on account type and your circumstances.' }
                 ]
             },
             {
                 id: 'baseline', title: 'Income & spending', icon: ICONS.dollar,
                 blurb: 'What comes in and what goes out today.',
                 fields: [
-                    { key: 'income', label: 'Annual gross income', unit: '$', step: 1000, min: 0, max: 1000000000000000 },
-                    { key: 'incomeTaxRate', label: 'Effective income tax', unit: '%', step: 1, min: 0, max: 60, hint: 'All payroll and income taxes as a share of gross pay. The Planner uses the same blended rate for current tax savings from employee tax-deferred contributions; the Cashbook uses it to estimate monthly take-home when a month has no income transactions.' },
+                    { key: 'income', label: 'Annual gross income (optional)', unit: '$', step: 1000, min: 0, max: 1000000000000000, hint: 'Leave 0 to project no future employee contributions. This does not affect your ability to store balances or transactions.' },
+                    { key: 'incomeTaxRate', label: 'Effective pay tax estimate (optional)', unit: '%', step: 1, min: 0, max: 60, hint: 'Optional combined estimate for payroll and income taxes as a share of gross pay. Leave 0 to model no pay tax. Filing status, deductions, credits, state, and local taxes are not inferred.' },
                     { key: 'expenses', label: 'Current annual expenses', unit: '$', step: 1000, min: 0, max: 1000000000000000 }
                 ]
             },
@@ -61,42 +61,52 @@
                 ]
             },
             {
+                id: 'beginnerAllocation', title: 'Where new savings go', icon: ICONS.layers,
+                blurb: 'Optional percentages for new savings. The remainder goes to brokerage.',
+                beginnerOnly: true,
+                fields: [
+                    { key: 'beginnerDeferredShare', label: 'To tax-deferred accounts', unit: '%', step: 5, min: 0, max: 100, hint: 'Use only the share you expect to contribute to a traditional workplace plan or IRA.' },
+                    { key: 'beginnerFreeShare', label: 'To Roth accounts', unit: '%', step: 5, min: 0, max: 100, hint: 'Use only the share you expect to contribute to Roth accounts. The two percentages cannot exceed 100%.' }
+                ]
+            },
+            {
                 id: 'buckets', title: 'Current buckets', icon: ICONS.layers,
                 blurb: 'Where your money sits today.',
                 fields: [
                     { key: 'balDeferred', label: 'Tax-deferred (401k / IRA)', unit: '$', step: 1000, min: 0, max: 1000000000000000, bucket: 'deferred' },
                     { key: 'balFree', label: 'Tax-free (Roth)', unit: '$', step: 1000, min: 0, max: 1000000000000000, bucket: 'free' },
-                    { key: 'rothContributionBasis', label: 'Accessible Roth contribution basis', unit: '$', step: 500, min: 0, max: 1000000000000000, bucket: 'free', hint: 'Regular Roth IRA contributions from the current balance that can be withdrawn before the account-access age. Exclude earnings, conversions, and workplace Roth contributions.' },
+                    { key: 'rothContributionBasis', label: 'Accessible Roth contributions (optional)', unit: '$', step: 500, min: 0, max: 1000000000000000, bucket: 'free', hint: 'Enter only regular Roth IRA contributions in the current balance that you expect to be available before the access age. Exclude earnings, conversions, and workplace Roth contributions.' },
                     { key: 'balTaxable', label: 'After-tax (brokerage)', unit: '$', step: 1000, min: 0, max: 1000000000000000, bucket: 'taxable' },
                     { key: 'balCash', label: 'Cash on hand', unit: '$', step: 500, min: 0, max: 1000000000000000, bucket: 'cash', hint: 'Counts toward net worth but sits outside the market — the projection never grows it and never draws it down.' }
                 ]
             },
             {
                 id: 'employer', title: 'Employer match', icon: ICONS.plusCircle,
-                blurb: 'Free money from your employer.',
+                blurb: 'Optional terms from your own workplace plan. Leave both at 0 when there is no match.',
                 fields: [
-                    { key: 'employerMatchRate', label: 'Match rate', unit: '%', step: 5, min: 0, max: 100, hint: '% of traditional or Roth workplace-plan contributions your employer matches' },
-                    { key: 'employerMatchCap', label: 'Match cap', unit: '%', step: 0.5, min: 0, max: 100, hint: 'Matched on workplace-plan contributions up to this % of salary' }
+                    { key: 'employerMatchRate', label: 'Employer match rate (optional)', unit: '%', step: 5, min: 0, max: 100, hint: 'The percentage of your eligible workplace-plan contributions your employer matches. Example: enter 50 for a 50-cent match per dollar.' },
+                    { key: 'employerMatchCap', label: 'Eligible pay cap (optional)', unit: '%', step: 0.5, min: 0, max: 100, hint: 'The share of salary up to which contributions are matched. Enter the terms from your plan; none are assumed.' }
                 ]
             },
             {
-                id: 'irs', title: 'IRS contribution limits', icon: ICONS.landmark,
-                blurb: 'Shared 2026 workplace-plan and IRA ceilings; the model fills the workplace plan first, then the IRA.',
+                id: 'irs', title: 'Contribution access & limits', icon: ICONS.landmark,
+                blurb: 'Optional annual amounts available to you. The model fills the workplace plan first, then the IRA; it does not determine eligibility or tax treatment.',
                 fields: [
-                    { key: 'limit401k', label: '401k employee limit', unit: '$', step: 500, min: 0, max: 1000000000, hint: 'Shared by traditional and Roth workplace contributions; indexed to inflation.' },
-                    { key: 'limitIRA', label: 'IRA employee limit', unit: '$', step: 500, min: 0, max: 1000000000, hint: 'Shared by traditional and Roth IRA contributions; indexed to inflation.' },
-                    { key: 'catchUp401k', label: '401k catch-up (50+)', unit: '$', step: 500, min: 0, max: 1000000000, hint: '2026 IRS catch-up for ages 50+. Ages 60–63 use the super catch-up instead.' },
-                    { key: 'superCatchUp401k', label: '401k super catch-up (60–63)', unit: '$', step: 250, min: 0, max: 1000000000, hint: '2026 IRS cap under SECURE 2.0; replaces the regular 401k catch-up for ages 60–63.' },
-                    { key: 'catchUpIRA', label: 'IRA catch-up (50+)', unit: '$', step: 100, min: 0, max: 1000000000, hint: '2026 IRS catch-up.' }
+                    { key: 'limit401k', label: 'Workplace-plan annual limit (optional)', unit: '$', step: 500, min: 0, max: 1000000000, hint: 'Enter the annual employee contribution amount available under your plan. Leave 0 if unavailable or not modeled.' },
+                    { key: 'limitIRA', label: 'IRA annual limit (optional)', unit: '$', step: 500, min: 0, max: 1000000000, hint: 'Enter the annual contribution amount you want modeled. Eligibility and deductibility are not calculated.' },
+                    { key: 'catchUpAge', label: 'Catch-up start age (optional)', step: 1, min: 0, max: 95, hint: 'Age when the optional workplace and IRA catch-up amounts below begin. The app does not determine whether you qualify.' },
+                    { key: 'catchUp401k', label: 'Workplace catch-up (optional)', unit: '$', step: 500, min: 0, max: 1000000000, hint: 'Additional annual workplace-plan amount available at eligible ages. Verify your plan and current law.' },
+                    { key: 'superCatchUp401k', label: 'Age 60–63 workplace catch-up (optional)', unit: '$', step: 250, min: 0, max: 1000000000, hint: 'Additional amount to use at ages 60–63. Leave 0 unless it applies to you.' },
+                    { key: 'catchUpIRA', label: 'IRA catch-up (optional)', unit: '$', step: 100, min: 0, max: 1000000000, hint: 'Additional annual IRA amount available at eligible ages. Leave 0 unless it applies to you.' }
                 ]
             },
             {
                 id: 'taxes', title: 'Withdrawal taxes', icon: ICONS.percent,
-                blurb: 'Effective rates applied when you draw money out.',
+                blurb: 'Optional effective estimates applied when money is withdrawn. Leave 0 to omit each one.',
                 fields: [
-                    { key: 'taxDeferredRate', label: 'Tax-deferred draws', unit: '%', step: 1, min: 0, max: 99, hint: 'Effective income tax on 401k / IRA withdrawals' },
-                    { key: 'taxTaxableRate', label: 'Brokerage draws', unit: '%', step: 1, min: 0, max: 99, hint: 'Applied to the whole withdrawal, not just the gain. If about half of a typical draw is gains taxed at 15%, enter 7-8%. Roth draws are tax-free.' },
-                    { key: 'earlyPenaltyRate', label: 'Early-withdrawal penalty', unit: '%', step: 1, min: 0, max: 50, hint: 'Extra charge on tax-deferred draws before the penalty-free access age (the IRS rate is 10%). Set 0 for Rule of 55 or 72(t)/SEPP plans. Roth draws are modeled penalty-free, as contribution withdrawals.' }
+                    { key: 'taxDeferredRate', label: 'Tax-deferred draw tax (optional)', unit: '%', step: 1, min: 0, max: 99, hint: 'Your editable effective estimate for tax on traditional retirement-account withdrawals. The app does not infer brackets or filing status.' },
+                    { key: 'taxTaxableRate', label: 'Brokerage draw tax (optional)', unit: '%', step: 1, min: 0, max: 99, hint: 'Applied to the whole modeled withdrawal, not only gains. Enter a blended estimate only if useful for your scenario.' },
+                    { key: 'earlyPenaltyRate', label: 'Early-withdrawal charge (optional)', unit: '%', step: 1, min: 0, max: 50, hint: 'Optional extra charge on tax-deferred draws before the access age you entered. The app does not determine whether an exception applies.' }
                 ]
             },
             {
@@ -123,7 +133,7 @@
         groupsFor: function (ids, beginner) {
             return this.groups.filter(function (g) {
                 if (ids && ids.indexOf(g.id) === -1) return false;
-                if (!beginner) return true;
+                if (!beginner) return !g.beginnerOnly;
                 return g.beginnerToggle || g.fields.some(function (f) { return f.beginner; });
             });
         },
@@ -175,9 +185,6 @@
      * into a field the user can type into that changes nothing. */
     var beginnerLabels = { savingsRate: 'Savings rate' };
     schema.groups.forEach(function (group) {
-        if (group.id === 'employer') {
-            group.beginnerToggle = { key: 'employerMatchRate', label: 'My employer matches 401k contributions' };
-        }
         group.fields.forEach(function (field) {
             field.beginner = FireEngine.BEGINNER_OWNED.indexOf(field.key) !== -1;
             if (beginnerLabels[field.key]) field.beginnerLabel = beginnerLabels[field.key];

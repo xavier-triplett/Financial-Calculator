@@ -7,11 +7,6 @@
     var K = global.TrackerKit;
     var els = {};
 
-    function escapeHtml(value) {
-        return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-    }
-
     function template() {
         return '<div class="home-shell">' +
             '<header class="home-masthead">' +
@@ -41,9 +36,8 @@
     function incomplete(readiness, state) {
         var inputs = FireApp.inputs();
         var setup = [
+            { done: !!state.profile.planTypeSelected, title: 'Choose a projection path', note: 'No retirement path is assumed.' },
             { done: !!state.profile.birthDate, title: 'Place yourself on the timeline', note: 'Add your date of birth.' },
-            { done: Number(inputs.income) > 0 || Number(inputs.currentAge) >= Number(inputs.retireAge),
-                title: 'Add what comes in', note: 'Use annual gross income while you are working.' },
             { done: Number(inputs.expenses) > 0, title: 'Add what life costs', note: 'An annual estimate is enough to start.' }
         ];
         var complete = setup.filter(function (item) { return item.done; }).length;
@@ -51,7 +45,7 @@
             '<div class="home-onboard-copy">' +
                 '<span class="home-kicker">Start with three facts</span>' +
                 '<h2 id="home-start-title">No verdict before the basics</h2>' +
-                '<p>The app will not call a blank plan “ready.” Add the essentials first, then every projection and tracker comparison will have a real foundation.</p>' +
+                '<p>The app will not call a blank projection “ready.” Add these essentials first. Income remains optional; leaving it at 0 models no future contributions.</p>' +
                 '<button class="trk-btn trk-btn-primary" type="button" data-view-target="profile">Finish your profile</button>' +
             '</div>' +
             '<div class="home-setup">' +
@@ -140,18 +134,18 @@
                 (TrackerStore.hasCash() ? 'cashbook' : 'observatory') + '">Review actuals →</button>';
     }
 
-    function goalsHtml(state) {
-        var goals = (state.savingsGoals || []).slice(0, 3);
-        if (!goals.length) {
-            return '<p class="home-empty-copy">Turn an emergency fund, down payment, or other milestone into a visible target.</p>' +
-                '<button class="home-link" type="button" data-view-target="goals">Create a goal →</button>';
-        }
-        return '<div class="home-goals">' + goals.map(function (goal) {
-            var pct = goal.targetAmount > 0 ? Math.max(0, Math.min(100, goal.currentAmount / goal.targetAmount * 100)) : 0;
-            return '<div class="home-goal"><div><strong>' + escapeHtml(goal.name) + '</strong>' +
-                '<span>' + U.compact(goal.currentAmount) + ' of ' + U.compact(goal.targetAmount) + '</span></div>' +
-                '<div class="home-mini-bar"><span style="width:' + pct.toFixed(1) + '%"></span></div></div>';
-        }).join('') + '</div><button class="home-link" type="button" data-view-target="goals">Manage goals →</button>';
+    function storedDataHtml(state) {
+        var balanceRecords = Object.keys(state.snapshots || {}).length + Object.keys(state.datedSnapshots || {}).length;
+        var categories = {};
+        (state.txns || []).forEach(function (transaction) {
+            if (transaction.category) categories[String(transaction.category).toLowerCase()] = true;
+        });
+        return '<dl class="home-data-summary">' +
+            '<div><dt>Accounts</dt><dd>' + state.accounts.length + '</dd></div>' +
+            '<div><dt>Balance dates</dt><dd>' + balanceRecords + '</dd></div>' +
+            '<div><dt>Transactions</dt><dd>' + state.txns.length + '</dd></div>' +
+            '<div><dt>Used categories</dt><dd>' + Object.keys(categories).length + '</dd></div>' +
+        '</dl><button class="home-link" type="button" data-view-target="data">Review data &amp; backups →</button>';
     }
 
     function nextMove(state, netWorth, cash) {
@@ -161,14 +155,16 @@
         if (!cash) {
             return { title: 'Bring in one month of spending', note: 'A CSV import or a few manual entries is enough to begin a monthly review.', view: 'cashbook', action: 'Start Cashbook' };
         }
-        if (!(state.budgets || []).length) {
-            return { title: 'Give one category a target', note: 'Start with a category that matters. You do not need to budget every dollar.', view: 'goals', action: 'Set a budget' };
-        }
         var proposals = K.proposals(state, 'networth').concat(K.proposals(state, 'cashflow'));
         if (proposals.length) {
             return { title: 'Reconcile plan and actuals', note: proposals.length + ' planning input' + (proposals.length === 1 ? '' : 's') + ' differ from tracked reality.', view: 'cashbook', action: 'Review changes' };
         }
-        return { title: 'Run your monthly review', note: 'Check balances, spending targets, goals, and the next recurring bills in one pass.', view: 'goals', action: 'Review this month' };
+        var freshness = E.dataFreshness(state);
+        if (freshness.stale || freshness.missing) {
+            return { title: 'Refresh account balances', note: (freshness.stale + freshness.missing) + ' account' +
+                (freshness.stale + freshness.missing === 1 ? ' needs' : 's need') + ' a current balance date.', view: 'observatory', action: 'Update balances' };
+        }
+        return { title: 'Explore a lightweight projection', note: 'Your stored balances and spending are ready for a scenario check.', view: 'ledger', action: 'Open Planner' };
     }
 
     function complete(state) {
@@ -210,8 +206,8 @@
             '<section class="home-grid">' +
                 '<article class="home-panel"><div class="home-panel-head"><h2>Plan vs. actual</h2><span>What changed?</span></div>' +
                     impactHtml(state) + '</article>' +
-                '<article class="home-panel"><div class="home-panel-head"><h2>Savings goals</h2><span>' + (state.savingsGoals || []).length + ' active</span></div>' +
-                    goalsHtml(state) + '</article>' +
+                '<article class="home-panel"><div class="home-panel-head"><h2>Stored financial data</h2><span>at a glance</span></div>' +
+                    storedDataHtml(state) + '</article>' +
                 '<article class="home-panel home-education"><div class="home-panel-head"><h2>Learn in context</h2><span>2 min</span></div>' +
                     '<h3>' + (FireApp.isBeginner() ? 'Why the starter plan skips taxes' : 'Why spendable assets matter') + '</h3>' +
                     '<p>' + (FireApp.isBeginner()

@@ -1,5 +1,5 @@
 /* ============ TODAY + DATA — the product-level home and trust center ============ */
-.ui-today, .ui-data, .ui-goals {
+.ui-today, .ui-data {
     --paper: #F1F2EE;
     --panel: #FFFFFF;
     --ink: #1A211D;
@@ -19,8 +19,7 @@
 }
 
 html[data-theme="dark"] .ui-today,
-html[data-theme="dark"] .ui-data,
-html[data-theme="dark"] .ui-goals {
+html[data-theme="dark"] .ui-data {
     --paper: #111714;
     --panel: #19211D;
     --ink: #E8ECE8;
@@ -241,7 +240,7 @@ html[data-theme="dark"] .ui-goals {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 18px;
 }
-.data-grid > *, .goal-layout > * { min-width: 0; }
+.data-grid > * { min-width: 0; }
 .home-panel { min-height: 220px; }
 .home-panel-head {
     display: flex;
@@ -257,10 +256,10 @@ html[data-theme="dark"] .ui-goals {
 .home-impact-lead { color: var(--ink) !important; font: 500 15px/1.5 "Fraunces", Georgia, serif; }
 .home-impact-detail { color: var(--green) !important; font-family: "IBM Plex Mono", monospace; }
 .home-method { font-size: 10.5px !important; }
-.home-goals { display: grid; gap: 14px; }
-.home-goal > div:first-child { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
-.home-goal strong { font-size: 12px; }
-.home-goal span { color: var(--muted); font: 500 10px/1.4 "IBM Plex Mono", monospace; }
+.home-data-summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1px; margin: 0 0 14px; background: var(--rule); }
+.home-data-summary div { padding: 13px; background: var(--panel); }
+.home-data-summary dt { color: var(--muted); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+.home-data-summary dd { margin: 4px 0 0; font: 600 22px/1.2 "Fraunces", Georgia, serif; }
 .home-empty-copy { min-height: 48px; }
 
 /* Data center */
@@ -291,77 +290,8 @@ html[data-theme="dark"] .ui-goals {
 }
 .ui-ledger .lg-start p { margin: 0 0 22px; color: var(--muted); line-height: 1.6; }
 
-/* Goals, budgets, recurring items, and debt */
-.goal-month { display: grid; gap: 4px; color: var(--muted); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; }
-.goal-layout {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0 18px;
-    align-items: start;
-}
-.goal-wide { grid-column: 1 / -1; }
-.goal-budget-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.goal-budget-card, .goal-savings-card, .goal-debt {
-    padding: 16px;
-    margin-bottom: 12px;
-    border: 1px solid var(--rule);
-    background: color-mix(in srgb, var(--panel) 96%, var(--green));
-}
-.goal-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.goal-card-top strong { display: block; font-size: 13px; }
-.goal-card-top span, .goal-savings-card small {
-    display: block;
-    margin-top: 3px;
-    color: var(--muted);
-    font-size: 10.5px;
-    font-weight: 400;
-}
-.goal-budget-values { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 14px 0 10px; }
-.goal-budget-values > span { font: 600 13px/1.3 "IBM Plex Mono", monospace; }
-.goal-budget-values small { display: block; color: var(--muted); font: 400 9px/1.4 "Public Sans", sans-serif; text-transform: uppercase; letter-spacing: .08em; }
-.goal-bar { height: 4px; margin: 10px 0 14px; overflow: hidden; background: var(--rule); }
-.goal-bar span { display: block; height: 100%; background: var(--green); }
-.goal-bar span.over { background: var(--red); }
-.goal-inline-fields { display: flex; align-items: end; gap: 10px; flex-wrap: wrap; }
-.goal-inline-fields label {
-    display: grid;
-    flex: 1 1 130px;
-    gap: 4px;
-    color: var(--muted);
-    font-size: 9px;
-    letter-spacing: .06em;
-    text-transform: uppercase;
-}
-.goal-inline-fields .goal-check { display: flex; align-items: center; min-height: 40px; text-transform: none; letter-spacing: 0; }
-.goal-check { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 11px; white-space: nowrap; }
-.goal-check input { accent-color: var(--green); }
-.goal-big-value { margin: 16px 0 8px; font: 600 24px/1.1 "Fraunces", Georgia, serif; }
-.goal-big-value small { display: inline; font: 400 12px/1.2 "Public Sans", sans-serif; }
-.goal-card-list { display: grid; gap: 2px; }
-.goal-add-row {
-    display: grid;
-    grid-template-columns: 1.1fr 1.1fr .8fr auto auto;
-    gap: 8px;
-    align-items: center;
-    padding-top: 14px;
-    margin-top: 14px;
-    border-top: 1px solid var(--rule);
-}
-.goal-add-stack { display: grid; gap: 8px; padding-top: 14px; margin-top: 14px; border-top: 1px solid var(--rule); }
-.goal-add-stack > div { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.goal-add-stack .trk-btn { justify-self: start; }
-.goal-empty { color: var(--muted); font-size: 12px; }
-.goal-debt-fields { margin-top: 14px; }
-.goal-recurring-form { grid-template-columns: 1.1fr .7fr 1fr .7fr .9fr auto; }
-.goal-row-actions { display: flex; align-items: center; gap: 2px; white-space: nowrap; }
-.goal-shell .trk-register td strong { display: block; }
-.goal-shell .trk-register td small { display: block; color: var(--muted); font-size: 10px; }
-
 @media (max-width: 900px) {
     .home-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .goal-layout { grid-template-columns: 1fr; }
-    .goal-wide { grid-column: auto; }
-    .goal-add-row, .goal-recurring-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 720px) {
@@ -380,8 +310,6 @@ html[data-theme="dark"] .ui-goals {
     .home-kpis article { padding: 15px; }
     .home-kpis article > strong { font-size: 20px; }
     .home-link, .home-shell .trk-btn, .data-shell .trk-btn { min-height: 44px; }
-    .goal-budget-grid { grid-template-columns: 1fr; }
-    .goal-shell .trk-btn, .goal-shell .trk-search, .goal-shell .trk-select { min-height: 44px; }
 }
 
 @media (max-width: 430px) {
@@ -390,6 +318,5 @@ html[data-theme="dark"] .ui-goals {
     .home-onboard-copy h2 { max-width: 12ch; font-size: 28px; }
     .home-privacy { padding: 12px 14px; overflow-wrap: anywhere; }
     .home-first-actions article, .home-panel { padding: 18px; }
-    .goal-add-row, .goal-recurring-form, .goal-add-stack > div { grid-template-columns: 1fr; }
-    .goal-budget-values { grid-template-columns: 1fr; }
+    .home-data-summary { grid-template-columns: 1fr; }
 }

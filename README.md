@@ -13,16 +13,17 @@ on an output.
 
 ## Getting started
 
-1. Start on **Today**. The app withholds every readiness verdict until it has a date of
-   birth, annual spending, and income while the user is still working.
-2. In **Profile**, choose a retirement path and enter your date of birth, gross income,
-   annual expenses, and milestone ages. Coast FIRE stops new retirement contributions at
-   the coast age while modeled employment continues until full retirement. The
-   account-access age is fixed at 60 in Beginner mode; switch to **Expert** to change it.
+1. Start on **Today**. The app withholds readiness verdicts until you explicitly choose a
+   path and enter a date of birth and annual spending. Income is optional: leave it at
+   zero to model no future contributions.
+2. In **Profile**, choose a retirement path and enter only the facts you know. Coast FIRE
+   stops new retirement contributions at the coast age while modeled employment continues
+   until full retirement. The account-access age is an editable planning input, not a
+   statement that an account or distribution is eligible.
 3. In **Planner**, review your savings rate, account balances, allocation, employer
-   match, market return, inflation, and drawdown strategy.
-   The default match assumes an employer contributes 50% of eligible workplace-plan
-   contributions up to 6% of salary; set the match rate to zero if that is not yours.
+   match, contribution limits, market return, inflation, and drawdown strategy. Employer
+   match and contribution limits start at zero. Enter the terms that apply to you; the app
+   does not infer a plan, employer benefit, tax status, or contribution eligibility.
 4. Read the four headline results:
 
    - **Path milestones:** adaptive verdicts for reaching and sustaining Coast FIRE,
@@ -36,17 +37,19 @@ on an output.
 5. Adjust the inputs and watch the projection update immediately.
 
 **Beginner** and **Expert** are two different simulations, not one simulation at two levels
-of detail. Beginner runs a fixed model that is the same for every plan and printed in full
-on the Profile tab: one savings rate that never ramps, growth after inflation, standard
-rates and contribution limits, and the 4% withdrawal rule. **Beginner does not invent a
-tax estimate:** income tax, withdrawal tax, brokerage tax, and early-withdrawal penalties
-all start at zero and are stated that way. Because inflation is removed
-rather than modeled, every beginner figure reads in today's dollars. **Expert** exposes
-every rate, saving phase, drawdown rule and diagnostic, projected in future dollars.
+of detail. Beginner uses one savings rate that never ramps, growth after inflation, the
+4% withdrawal rule, and an editable three-account allocation. Employer match, contribution
+limits, account-access age, and Roth contribution basis remain editable because they are
+personal facts. **Beginner does not invent a tax estimate:** income tax, withdrawal tax,
+brokerage tax, and early-withdrawal penalties all start at zero and are stated that way.
+Because inflation is removed rather than modeled, every beginner figure reads in today's
+dollars. **Expert** exposes every rate, saving phase, drawdown preference, and diagnostic,
+projected in future dollars.
 
-A value customized in Expert mode never leaks into a beginner run, so the same saved plan
-reports different numbers in the two modes. Both read and write one saved plan; switching
-modes never rewrites it.
+Expert-only market, tax, drawdown, and simulation settings never leak into a beginner run.
+Shared personal facts such as balances, match terms, and contribution limits remain shared
+and editable in both modes. Both modes read and write one saved plan; switching modes never
+rewrites it.
 The in-app **Guide** explains Coast FIRE, the account buckets, and every result in plain
 language.
 
@@ -66,10 +69,9 @@ The tracker compares the plan with actual results:
   trailing expenses to the Planner. With positive income and at least three months of
   history, it can also send trailing income and the observed savings rate; transaction
   income is treated as take-home pay and grossed up using the Profile tax rate.
-- **Goals** adds monthly category targets with optional rollover, savings goals, recurring
-  transaction reminders, and debt payoff estimates.
-- **Rules** teaches future imports how to categorize merchants and supports custom CSV
-  column mappings.
+- **Categories** lets you classify transaction categories as income, spending, saving, or
+  transfers and map custom CSV columns. Debt accounts can store optional APR and payment
+  details for a lightweight payoff estimate.
 
 The trackers remain separate: Net Worth does not infer balances from transactions, and
 Cashbook does not edit net-worth history.

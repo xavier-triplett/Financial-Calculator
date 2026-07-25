@@ -71,16 +71,22 @@
             check('defaults hold no personal data',
                 FireStore.get().inputs.income === 0 && FireStore.get().inputs.expenses === 0 &&
                 FireStore.get().inputs.balDeferred === 0 && FireStore.get().inputs.balFree === 0 &&
-                FireStore.get().inputs.balTaxable === 0 && FireStore.get().inputs.balCash === 0);
+                FireStore.get().inputs.balTaxable === 0 && FireStore.get().inputs.balCash === 0 &&
+                FireStore.get().inputs.incomeTaxRate === 0 &&
+                FireStore.get().inputs.employerMatchRate === 0 &&
+                FireStore.get().inputs.limit401k === 0 && FireStore.get().inputs.limitIRA === 0);
             FireStore.setProfile('birthDate', (new Date().getFullYear() - 30) + '-01-01');
-            FireStore.setInputs({ income: 180000, expenses: 60000 });
+            FireStore.setInputs({
+                planType: FireEngine.PLAN_TYPES.COAST,
+                income: 180000, expenses: 60000
+            });
             check('complete baseline unlocks results', document.querySelector('[data-el="gate"]').hidden === true &&
                 document.querySelector('[data-el="resultsWrap"]').hidden === false);
             check('bridge stamp populated', text('[data-el="bridgeStamp"]').length > 1);
             check('coast stamp populated', text('[data-el="coastStamp"]').length > 1);
-            check('default path is presented as Coast FIRE',
+            check('selected path is presented as Coast FIRE',
                 text('[data-el="planPath"]').includes('Coast FIRE') &&
-                text('[data-el="firstGoalLabel"]').toLowerCase().includes('coast'));
+                text('[data-el="firstMilestoneLabel"]').toLowerCase().includes('coast'));
             check('coasting years appear in the statement',
                 document.querySelectorAll('.lg-table tbody tr.st-coasting').length > 0);
             check('mc rate rendered', /%$/.test(text('[data-el="mcRate"]')));
@@ -251,6 +257,7 @@
                 FireStore.get().phases[0].deferred === 80 && FireStore.get().phases[0].free === 20 &&
                 FireStore.get().phases[0].taxable === 0);
             FireStore.reset();
+            FireStore.setInput('planType', FireEngine.PLAN_TYPES.COAST);
 
             /* ---------------- Tracker ---------------- */
             function nav(sel) { document.querySelector(sel).click(); }
@@ -365,13 +372,14 @@
             check('re-import is a no-op', TrackerStore.importTxns(parsed.txns).added === 0);
 
             // Cashflow bridge scope: expenses/income only, buckets untouched
+            FireStore.setInput('incomeTaxRate', 25);
             var deferredBefore = FireStore.get().inputs.balDeferred;
             TrackerKit.applyProposals(TrackerStore.get(), 'cashflow');
             check('cashflow bridge pushes trailing expenses',
                 FireStore.get().inputs.expenses === Math.round(TrackerEngine.trailing(TrackerStore.get().txns).annualExpenses));
             check('cashflow bridge leaves buckets alone', FireStore.get().inputs.balDeferred === deferredBefore);
             // Txn income is take-home; the bridge grosses it up with the
-            // Profile's effective income tax (default 25%).
+            // explicitly entered Profile effective pay-tax estimate (25%).
             var tr = TrackerEngine.trailing(TrackerStore.get().txns);
             check('cashflow bridge grosses up income', FireStore.get().inputs.income === Math.round(tr.annualIncome / 0.75));
             var proposedSavingsRate = Math.round(Math.max(0, tr.annualSaved / (tr.annualIncome / 0.75)) * 100);
@@ -473,17 +481,23 @@
 
             // Beginner is a second model, not a filtered view of the expert one.
             var preservedIncome = FireStore.get().inputs.income;
-            FireStore.setInputs({ swr: 9, marketReturn: 30, standardRetireAge: 70 });
+            FireStore.setInputs({
+                swr: 9, marketReturn: 30, standardRetireAge: 70,
+                employerMatchRate: 75, employerMatchCap: 4,
+                limit401k: 24500, beginnerDeferredShare: 60, beginnerFreeShare: 20
+            });
             FireApp.setMode('beginner');
             check('beginner mode stamped on document', document.documentElement.dataset.mode === 'beginner');
-            check('plain-language rules stay available in beginner nav',
-                document.querySelector('[data-view="categories"]') !== null);
+            check('Categories stays available in beginner nav while removed tabs stay absent',
+                document.querySelector('[data-view="categories"]') !== null &&
+                document.querySelector('[data-view="goals"]') === null &&
+                !/Rules/.test(document.querySelector('.nav-tabs').textContent));
             check('expert controls hidden in beginner',
                 getComputedStyle(document.querySelector('.lg-expert')).display === 'none');
 
             // The customizations above must not reach the beginner simulation.
             check('beginner simulates the fixed model, not stored expert values',
-                FireApp.inputs().swr === 4 && FireApp.inputs().standardRetireAge === 60 &&
+                FireApp.inputs().swr === 4 && FireApp.inputs().standardRetireAge === 70 &&
                 FireApp.inputs().marketReturn === FireEngine.BEGINNER_MODEL.marketReturn);
             check('beginner holds the savings rate flat',
                 FireApp.inputs().savingsRateIncrease === 0 &&
@@ -494,15 +508,16 @@
                 document.querySelector('[data-key="marketReturn"]') === null);
             check('beginner states its dollar basis', /today/i.test(text('.lg-basis')));
 
-            var matchToggle = document.querySelector('.ff-beginner-toggle input');
-            check('employer match toggle rendered', matchToggle !== null);
-            matchToggle.click();
-            check('employer toggle disables match and fields',
-                FireStore.get().inputs.employerMatchRate === 0 &&
-                matchToggle.closest('.ff-group-body').querySelector('.ff-fields').classList.contains('ff-toggle-off'));
-            matchToggle.click();
-            check('employer toggle restores the standard match',
-                FireStore.get().inputs.employerMatchRate === FireEngine.DEFAULTS.employerMatchRate);
+            check('beginner exposes editable employer match terms',
+                document.querySelector('[data-key="employerMatchRate"]') !== null &&
+                document.querySelector('[data-key="employerMatchCap"]') !== null &&
+                FireApp.inputs().employerMatchRate === 75 && FireApp.inputs().employerMatchCap === 4);
+            check('beginner exposes optional account access and allocation',
+                document.querySelector('[data-key="limit401k"]') !== null &&
+                document.querySelector('[data-key="beginnerDeferredShare"]') !== null &&
+                FireApp.phases()[0].deferred === 60 &&
+                FireApp.phases()[0].free === 20 &&
+                FireApp.phases()[0].taxable === 20);
             check('Monte Carlo rate remains visible', /^\d+%$/.test(text('[data-el="mcRate"]')));
             check('switching mode preserves plan data', FireStore.get().inputs.income === preservedIncome);
 

@@ -89,12 +89,13 @@ otherwise an unchanged plan produces unchanged results.
 
 ## State and validation
 
-`js/store.js` owns plan state under `fireData_v3`. `js/tracker/store.js` owns schema-v3
-tracker state under the existing `trackerData_v2` storage key. Both use `localStorage`,
-validate data at load/replace boundaries, keep bounded in-session undo, and notify
-subscribers after a successful in-memory update. The tracker migrates valid v2 local
-records to v3 and surfaces a warning if persistence fails so an in-memory edit is not
-mistaken for a durable save.
+`js/store.js` owns plan state under `fireData_v3`. `js/tracker/store.js` owns simplified
+schema-v4 tracker state under `trackerData_v4`. Both use `localStorage`, validate data at
+load/replace boundaries, keep bounded in-session undo, and notify subscribers after a
+successful in-memory update. Older tracker saves are intentionally not adopted because
+the removed planning and automation features no longer belong in the state shape. The
+tracker surfaces a warning if persistence fails so an in-memory edit is not mistaken for
+a durable save.
 
 Input numbers are clamped to engine limits, integer-only values are rounded, drawdown and
 saving splits are normalized, duplicate or invalid phases are repaired, and malformed
@@ -103,16 +104,17 @@ may still reset to defaults.
 
 Beginner and Expert are two models over this same state, not two levels of detail. Beginner
 projects the stored inputs onto `FireEngine.BEGINNER_MODEL`, a published constant for every
-assumption the beginner does not enter, so no Expert customization reaches a beginner run.
+assumption the beginner does not enter, so no Expert-only customization reaches a beginner
+run. Personal facts exposed in both modes remain shared.
 `FireEngine.BEGINNER_OWNED` lists the keys the beginner does enter, and the input schema
 derives its beginner fields from it so the UI cannot offer a field the model ignores.
 
 Beginner needs no special case in the simulation loop. It sets `inflation` to 0 and derives
 `marketReturn` and `incomeGrowth` as real rates from the same nominal pair Expert runs on
 (`FireEngine.BEGINNER_NOMINAL`), which puts every figure in today's dollars: expenses stay
-flat in real terms and the inflation-indexed IRS limits stay constant, which is what those
-limits mean in real terms. `engine.test.js` pins the equivalence by running a growth-only
-plan through both modes and deflating the nominal result.
+flat in real terms and entered annual contribution limits remain constant in today's
+dollars. `engine.test.js` pins the equivalence by running a growth-only plan through both
+modes and deflating the nominal result.
 
 Beginner also fixes every modeled tax and early-withdrawal penalty to zero instead of
 inventing a rate for a new user. Expert models the current tax benefit of deferred
@@ -135,13 +137,13 @@ The tracker domains are intentionally independent:
   PAW/AAW/UAW benchmarks (`AAW = age × income ÷ 10`, `PAW = 2 × AAW`,
   `UAW = AAW ÷ 2`). Its bridge to the Planner sends only the latest mapped account
   balances.
-- **Cashbook** stores linked transactions, optional category splits, explicitly opened
-  months, recurring templates, category budgets, and merchant rules. Categories resolve
-  to income, transfer, saving, fixed, variable, or spending, with user overrides. Its bridge
-  always proposes trailing annual expenses. With positive income and at least three
-  months of history, it also proposes a savings rate and estimates gross income by
-  treating transaction income as take-home pay and applying the Profile's effective
-  income-tax rate.
+- **Cashbook** stores linked transactions, optional category splits, and explicitly opened
+  months. Categories resolve to income, transfer, saving, fixed, variable, or spending,
+  with user overrides. Custom CSV column mappings are stored alongside those category
+  settings. Its bridge always proposes trailing annual expenses. With positive income and
+  at least three months of history, it can also propose a savings rate and estimate gross
+  income by treating transaction income as take-home pay and applying the explicit
+  effective income-tax rate entered in Profile.
 
 Trailing Cashbook figures use a contiguous calendar window ending in the latest covered
 month, including empty covered months instead of annualizing only active months. In each
@@ -150,8 +152,7 @@ used. This supports histories that mix marked and inferred saving without droppi
 kind.
 
 Transaction CSV import accepts Rocket Money and custom-mapped headers, quoted fields,
-validated dates and amounts, ignored-row markers, and merchant rules, and reports rejected
-rows. It only flips
+validated dates and amounts, and ignored-row markers, and reports rejected rows. It only flips
 a debit-negative expense convention when the income/expense evidence is unambiguous;
 ambiguous expense signs are preserved, while income is always normalized positive.
 Import identity is occurrence-aware, so exact duplicate purchases in one source file are
@@ -290,8 +291,9 @@ The scripts can also run separately:
   vendored Firebase/config load check in isolated headless-Chrome profiles. It also
   serves and boots the production `index.html` over a loopback HTTP server and fails on
   missing required assets. The Phase 1 product test covers the first-run gate, zero-tax
-  Beginner model, budgets, goals, debt, recurring items, splits, arbitrary snapshots,
-  data controls, compact-width overflow, and dark-calendar contrast. A secure-context
+  Beginner model, editable personal assumptions, debt details, categories, splits,
+  arbitrary snapshots, data controls, compact-width overflow, and dark-calendar contrast.
+  A secure-context
   browser test installs the service worker,
   removes a stale release cache, verifies network-first behavior, and loads the cached
   application shell with the server offline. Fixture pages use in-memory storage and
@@ -323,7 +325,7 @@ js/tracker/engine.js               tracker calculations and benchmarks
 js/tracker/rocketmoney.js          CSV parser and import normalization
 js/tracker/store.js                validated tracker state and persistence
 js/tracker/kit.js                  tracker charts, import, and Planner bridge helpers
-js/ui/                             Today, Profile, Planner, trackers, Goals, Rules, Data, Guide
+js/ui/                             Today, Profile, Planner, trackers, Categories, Data, Guide
 js/vendor/                         Chart.js, Flatpickr, Firebase compat bundles
 css/                               application styles and vendored fonts
 firestore.rules                    per-user schema and concurrency enforcement

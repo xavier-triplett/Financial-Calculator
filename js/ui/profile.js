@@ -43,14 +43,12 @@
         selectPath(buttons[next]);
     }
 
-    /* Beginner states its assumptions instead of hiding them: the model is
-     * fixed, so it can be read off the page in full. */
+    /* Beginner states its fixed modeling choices instead of hiding them. */
     function assumptionsHtml() {
         return '<section class="pf-card pf-assumptions">' +
             '<div class="pf-card-title">The standard assumptions</div>' +
-            '<p class="pf-help">Beginner mode runs one simple model, the same one for everybody. ' +
-                'These are not editable here &mdash; that is the point. ' +
-                '<button type="button" data-mode-set="expert">Switch to Expert</button> to set your own.</p>' +
+            '<p class="pf-help">Beginner mode keeps market and tax modeling simple while leaving personal facts, account access, allocation, and employer benefits editable. ' +
+                '<button type="button" data-mode-set="expert">Switch to Expert</button> for detailed rates and drawdown controls.</p>' +
             '<dl class="pf-assume-list">' +
                 FireEngine.beginnerAssumptions().map(function (a) {
                     return '<div class="pf-assume">' +
@@ -71,7 +69,7 @@
                 '<div>' +
                     '<span class="pf-eyebrow">Your baseline</span>' +
                     '<h1>Profile</h1>' +
-                    '<span class="pf-sub">The facts every tab builds on &mdash; the Planner and trackers all read from here</span>' +
+                    '<span class="pf-sub">Store the facts you know; personal inputs stay optional unless a projection needs them</span>' +
                 '</div>' +
                 '<button class="pf-reset" type="button" data-el="reset">Reset plan</button>' +
             '</header>' +
@@ -80,7 +78,7 @@
                 '<div class="pf-hero-field">' +
                     '<label class="pf-eyebrow" id="pf-dob-label" for="pf-dob">Date of birth</label>' +
                     '<input id="pf-dob" class="pf-dob" type="date" data-el="dob" aria-labelledby="pf-dob-label">' +
-                    '<p class="pf-hero-note">Your age is derived from this, and used everywhere.</p>' +
+                    '<p class="pf-hero-note">Optional for tracking; required only to place a projection on a timeline.</p>' +
                 '</div>' +
                 '<div class="pf-hero-age">' +
                     '<span class="pf-eyebrow">Current age</span>' +
@@ -90,8 +88,8 @@
             '</section>' +
 
             '<section class="pf-card pf-path-card">' +
-                '<div class="pf-card-title">Choose your retirement path</div>' +
-                '<p class="pf-help">This changes how the projection treats your working and saving years.</p>' +
+                '<div class="pf-card-title">Choose a projection path</div>' +
+                '<p class="pf-help">Choose explicitly when you want a projection. This changes how working and saving years are modeled.</p>' +
                 '<div class="pf-paths" role="radiogroup" aria-label="Retirement path">' + pathOptions() + '</div>' +
                 '<p class="pf-path-note" data-el="pathNote"></p>' +
             '</section>' +
@@ -99,8 +97,8 @@
             '<section class="pf-card">' +
                 '<div class="pf-card-title">Baseline factors</div>' +
                 '<p class="pf-help">' + (beginner
-                    ? 'The handful of facts the simple model needs. Everything else is fixed, and listed below.'
-                    : 'Income, spending, your target ages, withdrawal tax rates and the IRS contribution limits. The trackers measure against these; the Planner projects from them.') + '</p>' +
+                    ? 'Add only what applies to you. Income may stay at 0 to model no future contributions.'
+                    : 'Income, spending, timeline, optional tax estimates, and contribution access. The app does not infer filing status, eligibility, or benefits.') + '</p>' +
                 '<div data-el="groups"></div>' +
             '</section>' +
 
@@ -142,14 +140,15 @@
         var age = U.ageFromDOB(dob);
         els.age.textContent = age === null ? '—' : age;
 
+        var pathSelected = !!state.profile.planTypeSelected;
         var plan = FireSchema.planType(inputs.planType);
-        var coast = inputs.planType === FireEngine.PLAN_TYPES.COAST;
+        var coast = pathSelected && inputs.planType === FireEngine.PLAN_TYPES.COAST;
         els.root.setAttribute('data-plan-type', inputs.planType);
         els.root.querySelectorAll('[data-plan-type]').forEach(function (button) {
-            var selected = Number(button.getAttribute('data-plan-type')) === inputs.planType;
+            var selected = pathSelected && Number(button.getAttribute('data-plan-type')) === inputs.planType;
             button.classList.toggle('selected', selected);
             button.setAttribute('aria-checked', String(selected));
-            button.tabIndex = selected ? 0 : -1;
+            button.tabIndex = selected || (!pathSelected && button === els.root.querySelector('[data-plan-type]')) ? 0 : -1;
         });
 
         var coastField = els.root.querySelector('.ff-field[data-key="coastAge"]');
@@ -160,7 +159,9 @@
                 (inputs.planType === FireEngine.PLAN_TYPES.EARLY ? 'Early retirement age' : 'Retirement age');
         }
 
-        if (coast) {
+        if (!pathSelected) {
+            els.pathNote.textContent = 'No path is assumed. Choose one when you are ready to run a projection.';
+        } else if (coast) {
             els.pathNote.textContent = 'Save through age ' + (inputs.coastAge - 1) + ', coast from ' +
                 inputs.coastAge + ' to ' + inputs.retireAge + ', then retire fully.';
         } else if (inputs.planType === FireEngine.PLAN_TYPES.EARLY) {
@@ -172,6 +173,8 @@
 
         if (age === null) {
             els.ageNote.textContent = 'Set your birth date to place yourself on the timeline.';
+        } else if (!pathSelected) {
+            els.ageNote.textContent = 'Choose a projection path to add retirement milestones.';
         } else {
             var nextAge = coast && age < inputs.coastAge ? inputs.coastAge : inputs.retireAge;
             var milestone = coast && age < inputs.coastAge ? 'Coasting' : 'Retirement';

@@ -38,6 +38,17 @@ function phaseInvariant(phases, currentAge) {
 
 FireStore.init();
 check('default state has a locked current phase', phaseInvariant(FireStore.get().phases, 30));
+check('default path is not silently selected', FireStore.get().profile.planTypeSelected === false);
+check('personal tax, benefit, and account limits default to zero',
+    FireStore.get().inputs.incomeTaxRate === 0 &&
+    FireStore.get().inputs.employerMatchRate === 0 &&
+    FireStore.get().inputs.employerMatchCap === 0 &&
+    FireStore.get().inputs.limit401k === 0 &&
+    FireStore.get().inputs.limitIRA === 0);
+FireStore.setInput('planType', FireEngine.PLAN_TYPES.COAST);
+check('choosing the displayed path records an explicit selection',
+    FireStore.get().profile.planTypeSelected === true);
+FireStore.reset();
 
 const now = new Date();
 const validDob = String(now.getFullYear() - 40).padStart(4, '0') + '-01-01';
