@@ -35,6 +35,8 @@
         // Current buckets
         balDeferred: 0,
         balFree: 0,
+        // Regular Roth IRA contributions available before the access age.
+        rothContributionBasis: 0,
         balTaxable: 0,
         // Cash on hand: counts toward net worth but sits outside the market —
         // never grown by returns and never drawn by the simulation.
@@ -96,6 +98,7 @@
         incomeGrowth: { min: -99, max: 100 },
         balDeferred: { min: 0, max: 1e15 },
         balFree: { min: 0, max: 1e15 },
+        rothContributionBasis: { min: 0, max: 1e15 },
         balTaxable: { min: 0, max: 1e15 },
         balCash: { min: 0, max: 1e15 },
         marketReturn: { min: -99, max: 100 },
@@ -131,7 +134,10 @@
         { id: 1, age: 30, deferred: 50, free: 50, taxable: 0, isLocked: true }
     ];
 
-    var ZERO_CONTRIB = { deferred: 0, free: 0, taxable: 0, match: 0, overflow: 0, workplace: 0, ira: 0 };
+    var ZERO_CONTRIB = {
+        deferred: 0, free: 0, taxable: 0, match: 0, overflow: 0,
+        workplace: 0, ira: 0, rothBasisAdded: 0, taxBenefit: 0
+    };
 
     /* ---------------------------------------------------------------------
      * Beginner model: a second, simpler simulation rather than a filtered
@@ -161,7 +167,7 @@
 
     var BEGINNER_MODEL = Object.assign({}, DEFAULTS, {
         standardRetireAge: 60,
-        incomeTaxRate: 25,
+        incomeTaxRate: 0,
         // The savings rate never ramps: one rate for the whole working life.
         savingsRateIncrease: 0,
         maxSavingsRate: 100,      // replaced by savingsRate in beginnerInputs
@@ -169,6 +175,9 @@
         marketReturn: realRate(BEGINNER_NOMINAL.marketReturn, BEGINNER_NOMINAL.inflation),
         incomeGrowth: realRate(BEGINNER_NOMINAL.incomeGrowth, BEGINNER_NOMINAL.inflation),
         swr: 4,
+        taxDeferredRate: 0,
+        taxTaxableRate: 0,
+        earlyPenaltyRate: 0,
         employerMatchRate: 50,
         employerMatchCap: 6,
         volatility: 15,
@@ -199,8 +208,8 @@
             { label: 'Savings rate', value: 'Fixed for every year', note: 'The rate you enter is the rate the whole projection uses. It never ramps.' },
             { label: 'Where savings go', value: '50% tax-deferred, 50% Roth', note: 'Overflow past the IRS limits lands in a brokerage account.' },
             { label: 'Withdrawal rate', value: BEGINNER_MODEL.swr + '% a year', note: 'The standard safe-withdrawal guideline.' },
-            { label: 'Retirement accounts unlock', value: 'Age ' + BEGINNER_MODEL.standardRetireAge, note: 'Draws before then pay a ' + BEGINNER_MODEL.earlyPenaltyRate + '% early-withdrawal penalty.' },
-            { label: 'Taxes', value: BEGINNER_MODEL.incomeTaxRate + '% on pay, ' + BEGINNER_MODEL.taxDeferredRate + '% on tax-deferred draws', note: BEGINNER_MODEL.taxTaxableRate + '% on brokerage draws. Roth draws are tax-free.' },
+            { label: 'Bridge checkpoint', value: 'Age ' + BEGINNER_MODEL.standardRetireAge, note: 'Current Roth balances are treated as locked before then; future modeled Roth IRA contributions are accessible. Tax-deferred shortfalls have no modeled tax or penalty.' },
+            { label: 'Taxes', value: 'Not modeled', note: 'Pay, contributions, brokerage draws, retirement withdrawals, and early withdrawals are all modeled tax-free.' },
             { label: 'Contribution limits', value: '2026 IRS limits', note: 'The workplace plan fills first, then the IRA.' }
         ];
     }
@@ -272,6 +281,29 @@
         return d;
     }
 
+    // After-tax investable value; cash and age-based access are excluded.
+    function spendableAssets(inputs, balances) {
+        var d = normalizeInputs(inputs);
+        balances = balances && typeof balances === 'object' ? balances : {};
+
+        function balance(key, fallback) {
+            var value = Number(balances[key]);
+            return Number.isFinite(value) ? Math.max(0, value) : fallback;
+        }
+
+        return afterTaxTotal(
+            balance('deferred', d.balDeferred),
+            balance('free', d.balFree),
+            balance('taxable', d.balTaxable),
+            1 - pct(d.taxDeferredRate),
+            1 - pct(d.taxTaxableRate)
+        );
+    }
+
+    function afterTaxTotal(deferred, free, taxable, keepD, keepT) {
+        return deferred * keepD + free + taxable * keepT;
+    }
+
     function normalizePhases(phases, currentAge) {
         var source = phases && phases.length ? phases : DEFAULT_PHASES;
         var list = [];
@@ -338,7 +370,8 @@
         // Deferred draws before the access age also pay the early penalty
         var taxDB = Math.min(0.99, taxD + pct(d.earlyPenaltyRate));
         var keepDB = 1 - taxDB;
-        var keepIncome = 1 - pct(d.incomeTaxRate); // take-home share of gross
+        var incomeTax = pct(d.incomeTaxRate);
+        var keepIncome = 1 - incomeTax; // take-home share before deferred-contribution savings
 
         var drawTB = pct(d.drawTaxableBridge), drawDB = pct(d.drawDeferredBridge), drawFB = pct(d.drawFreeBridge);
         var drawTS = pct(d.drawTaxableStd), drawDS = pct(d.drawDeferredStd), drawFS = pct(d.drawFreeStd);
@@ -348,6 +381,7 @@
 
         var curDeferred = d.balDeferred;
         var curFree = d.balFree;
+        var curRothBasis = d.rothContributionBasis;
         var curTaxable = d.balTaxable;
         var cash = d.balCash; // inert: no growth, no draws
         var curIncome = d.income;
@@ -364,13 +398,16 @@
         var standardCoverage = 0;
         var effectiveCoastAge = Math.max(d.currentAge, Math.min(d.coastAge, d.retireAge));
         var readinessAge = Math.max(d.retireAge, d.standardRetireAge);
-        var coastBalanceAtStart = d.balDeferred * keepD + d.balFree;
-        var retirementBalanceAtReadiness = d.balDeferred * keepD + d.balFree + d.balTaxable * keepT;
+        var coastBalanceAtStart = afterTaxTotal(d.balDeferred, d.balFree, 0, keepD, keepT);
+        var retirementBalanceAtReadiness = afterTaxTotal(
+            d.balDeferred, d.balFree, d.balTaxable, keepD, keepT
+        );
         var netWorthAtRetirement = 0;
         var expensesAtRetirement = 0;
         var totalTaxes = 0;
         var totalMatch = 0;
         var totalContributed = 0;
+        var totalContributionTaxBenefit = 0;
 
         var inflFactor = 1; // (1 + inflation)^yearIndex, updated incrementally
 
@@ -387,12 +424,14 @@
             }
 
             if (age === effectiveCoastAge) {
-                coastBalanceAtStart = curDeferred * keepD + curFree;
+                coastBalanceAtStart = afterTaxTotal(curDeferred, curFree, 0, keepD, keepT);
             }
 
             if (age === readinessAge || (age === d.currentAge && d.currentAge > readinessAge)) {
-                retirementBalanceAtReadiness = curDeferred * keepD + curFree + curTaxable * keepT;
-                var safeAmount = (curDeferred * keepD + curFree) * swr;
+                retirementBalanceAtReadiness = afterTaxTotal(
+                    curDeferred, curFree, curTaxable, keepD, keepT
+                );
+                var safeAmount = afterTaxTotal(curDeferred, curFree, 0, keepD, keepT) * swr;
                 if (curExpenses <= 0) {
                     standardCoverage = 100;
                     standardSuccess = true;
@@ -421,18 +460,9 @@
                     if (phaseList[p].age <= age) { activePhase = phaseList[p]; break; }
                 }
 
-                var plannedSavings = isCoasting ? 0 : curIncome * curSavingsRate;
-                var availableSavings = Math.max(0, curIncome * keepIncome - curExpenses);
-                var totalSavings = Math.min(plannedSavings, availableSavings);
-                usedSavingsRate = curIncome > 0 ? totalSavings / curIncome : 0;
-                if (firstInfeasibleAge === null && plannedSavings > availableSavings + 1) {
-                    firstInfeasibleAge = age;
-                }
-
-                var wantD = totalSavings * pct(activePhase.deferred);
-                var wantF = totalSavings * pct(activePhase.free);
-                var wantT = totalSavings * pct(activePhase.taxable);
-                var wantAdvantaged = wantD + wantF;
+                var phaseD = pct(activePhase.deferred);
+                var phaseF = pct(activePhase.free);
+                var phaseT = pct(activePhase.taxable);
 
                 // IRS limits, indexed to inflation, with catch-up at 50+.
                 // SECURE 2.0: ages 60-63 use the larger 401k super catch-up.
@@ -441,14 +471,38 @@
                 var lim401k = (d.limit401k + catchUp401) * inflFactor;
                 var limIRA = (d.limitIRA + (catchUpEligible ? d.catchUpIRA : 0)) * inflFactor;
 
+                var plannedSavings = isCoasting ? 0 : curIncome * curSavingsRate;
+                var baseAvailable = Math.max(0, curIncome * keepIncome - curExpenses);
+                var advantagedShare = phaseD + phaseF;
+                var deferredShare = advantagedShare > 0 ? phaseD / advantagedShare : 0;
+                var advantagedCapacity = lim401k + limIRA;
+                var uncappedAffordable = baseAvailable / (1 - incomeTax * phaseD);
+                var capacityThreshold = advantagedShare > 0
+                    ? advantagedCapacity / advantagedShare
+                    : Infinity;
+                var availableSavings = uncappedAffordable <= capacityThreshold
+                    ? uncappedAffordable
+                    : baseAvailable + incomeTax * advantagedCapacity * deferredShare;
+                var totalSavings = Math.min(plannedSavings, availableSavings);
+                usedSavingsRate = curIncome > 0 ? totalSavings / curIncome : 0;
+                if (firstInfeasibleAge === null && plannedSavings > availableSavings + 1) {
+                    firstInfeasibleAge = age;
+                }
+
+                var wantD = totalSavings * phaseD;
+                var wantF = totalSavings * phaseF;
+                var wantT = totalSavings * phaseT;
+                var wantAdvantaged = wantD + wantF;
                 var workplace = Math.min(wantAdvantaged, lim401k);
                 var ira = Math.min(wantAdvantaged - workplace, limIRA);
                 var acceptedAdvantaged = workplace + ira;
-                var deferredShare = wantAdvantaged > 0 ? wantD / wantAdvantaged : 0;
                 var cD = acceptedAdvantaged * deferredShare;
                 var cF = acceptedAdvantaged - cD;
                 var overflow = wantAdvantaged - acceptedAdvantaged;
                 var cT = wantT + overflow;
+                var freeShare = wantAdvantaged > 0 ? wantF / wantAdvantaged : 0;
+                var rothBasisAdded = ira * freeShare; // Workplace Roth does not add basis.
+                var contributionTaxBenefit = cD * incomeTax;
 
                 // Employer match: matchRate% of your contributions,
                 // up to matchCap% of salary — free money into Deferred.
@@ -457,16 +511,20 @@
 
                 curDeferred += cD + match;
                 curFree += cF;
+                curRothBasis += rothBasisAdded;
                 curTaxable += cT;
 
                 if (!lean) {
                     contrib = {
                         deferred: cD, free: cF, taxable: cT, match: match,
-                        overflow: overflow, workplace: workplace, ira: ira
+                        overflow: overflow, workplace: workplace, ira: ira,
+                        rothBasisAdded: rothBasisAdded,
+                        taxBenefit: contributionTaxBenefit
                     };
                 }
                 totalMatch += match;
                 totalContributed += cD + cF + cT;
+                totalContributionTaxBenefit += contributionTaxBenefit;
 
                 // Ramp savings rate
                 if (!isCoasting && curSavingsRate < maxSavingsRate) {
@@ -499,8 +557,11 @@
                     curDeferred -= g; wdD += g; gotNet += g * keepDNow;
 
                     g = netNeed * (isStandardAge ? drawFS : drawFB);
-                    if (g > curFree) g = curFree;
-                    curFree -= g; wdF += g; gotNet += g;
+                    var accessibleFree = isStandardAge ? curFree : Math.min(curFree, curRothBasis);
+                    if (g > accessibleFree) g = accessibleFree;
+                    curFree -= g;
+                    curRothBasis = Math.max(0, curRothBasis - g);
+                    wdF += g; gotNet += g;
 
                     var shortfall = netNeed - gotNet;
                     var initialShortfall = shortfall;
@@ -512,7 +573,8 @@
                         var n = 0;
                         if (curTaxable > 0.01) n++;
                         if (curDeferred > 0.01) n++;
-                        if (curFree > 0.01) n++;
+                        accessibleFree = isStandardAge ? curFree : Math.min(curFree, curRothBasis);
+                        if (accessibleFree > 0.01) n++;
                         if (n === 0) break;
                         var chunk = shortfall / n;
                         if (curTaxable > 0.01) {
@@ -525,10 +587,12 @@
                             if (g > curDeferred) g = curDeferred;
                             curDeferred -= g; wdD += g; shortfall -= g * keepDNow;
                         }
-                        if (curFree > 0.01) {
+                        if (accessibleFree > 0.01) {
                             g = chunk;
-                            if (g > curFree) g = curFree;
-                            curFree -= g; wdF += g; shortfall -= g;
+                            if (g > accessibleFree) g = accessibleFree;
+                            curFree -= g;
+                            curRothBasis = Math.max(0, curRothBasis - g);
+                            wdF += g; shortfall -= g;
                         }
                         guard++;
                     }
@@ -554,6 +618,7 @@
 
             if (curDeferred < 0) curDeferred = 0;
             if (curFree < 0) curFree = 0;
+            if (curRothBasis < 0) curRothBasis = 0;
             if (curTaxable < 0) curTaxable = 0;
 
             var portfolio = curDeferred + curFree + curTaxable;
@@ -567,6 +632,7 @@
                     year: startYear + yearIndex,
                     deferred: curDeferred,
                     free: curFree,
+                    rothContributionBasis: curRothBasis,
                     taxable: curTaxable,
                     cash: cash,
                     total: totalNW,
@@ -589,7 +655,7 @@
         var fiNumberAtUnlock = swr > 0 ? unlockExpenses / swr : 0;
         var coastGrowth = 1 + growth;
         var coastNumber = coastGrowth > 0 ? fiNumberAtUnlock / Math.pow(coastGrowth, coastYears) : 0;
-        var coastBalanceToday = d.balDeferred * keepD + d.balFree;
+        var coastBalanceToday = afterTaxTotal(d.balDeferred, d.balFree, 0, keepD, keepT);
         var coastRunwayYears = Math.max(0, readinessAge - effectiveCoastAge);
         var coastTargetAtStart = coastGrowth > 0
             ? fiNumberAtUnlock / Math.pow(coastGrowth, coastRunwayYears)
@@ -628,6 +694,8 @@
                 totalTaxes: totalTaxes,
                 totalMatch: totalMatch,
                 totalContributed: totalContributed,
+                totalContributionTaxBenefit: totalContributionTaxBenefit,
+                endingRothContributionBasis: curRothBasis,
                 bridgeYears: Math.max(0, d.standardRetireAge - d.retireAge),
                 yearsModeled: MAX_AGE - d.currentAge + 1
             }
@@ -732,6 +800,7 @@
         beginnerInputs: beginnerInputs,
         beginnerAssumptions: beginnerAssumptions,
         normalizeInputs: normalizeInputs,
+        spendableAssets: spendableAssets,
         simulate: simulate,
         monteCarlo: monteCarlo
     };

@@ -3,8 +3,19 @@
     'use strict';
 
     var KEY = 'fireData_v3';
+    var SCHEMA_VERSION = 4;
+    var MAX_UNDO = 20;
     var listeners = [];
     var state = null;
+    var undoStack = [];
+
+    function clone(value) {
+        return JSON.parse(JSON.stringify(value));
+    }
+
+    function now() {
+        return new Date().toISOString();
+    }
 
     function defaultInputs() {
         return FireEngine.normalizeInputs(FireEngine.DEFAULTS);
@@ -80,11 +91,14 @@
 
     function defaults() {
         var inputs = defaultInputs();
+        var createdAt = now();
         return {
+            schemaVersion: SCHEMA_VERSION,
             inputs: inputs,
             profile: { birthDate: null },
             phases: normalizePhases(FireEngine.DEFAULT_PHASES, inputs.currentAge),
-            mcSeed: 1337
+            mcSeed: 1337,
+            meta: { createdAt: createdAt, updatedAt: createdAt }
         };
     }
 
@@ -116,6 +130,10 @@
         applyBirthDate(st);
         var seed = Number(saved.mcSeed);
         if (Number.isFinite(seed)) st.mcSeed = Math.trunc(seed);
+        if (saved.meta && typeof saved.meta === 'object') {
+            if (typeof saved.meta.createdAt === 'string') st.meta.createdAt = saved.meta.createdAt;
+            if (typeof saved.meta.updatedAt === 'string') st.meta.updatedAt = saved.meta.updatedAt;
+        }
         return st;
     }
 
@@ -131,7 +149,16 @@
         try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* unavailable */ }
     }
 
-    function commit() {
+    function checkpoint() {
+        if (!state) return;
+        undoStack.push(clone(state));
+        if (undoStack.length > MAX_UNDO) undoStack.shift();
+    }
+
+    function commit(touchMetadata) {
+        state.schemaVersion = SCHEMA_VERSION;
+        state.meta = state.meta || { createdAt: now() };
+        if (touchMetadata !== false || !state.meta.updatedAt) state.meta.updatedAt = now();
         save();
         listeners.slice().forEach(function (fn) { fn(state); });
     }
@@ -180,6 +207,8 @@
         FireEngine.DRAW_SETS.forEach(function (keys) { adjustSingleDraw(candidate, patch, keys); });
         candidate = FireEngine.normalizeInputs(candidate);
         if (state.profile.birthDate) candidate.currentAge = FireUtil.ageFromDOB(state.profile.birthDate);
+        if (JSON.stringify(candidate) === JSON.stringify(state.inputs)) return false;
+        checkpoint();
         state.inputs = candidate;
         state.phases = normalizePhases(state.phases, candidate.currentAge);
         commit();
@@ -187,9 +216,13 @@
     }
 
     global.FireStore = {
-        init: function () { state = load(); },
+        init: function () { state = load(); undoStack = []; },
         get: function () { return state; },
-        replace: function (obj) { state = adopt(obj); commit(); },
+        replace: function (obj) {
+            checkpoint();
+            state = adopt(obj);
+            commit(false);
+        },
 
         isDefault: function () {
             var d = defaults();
@@ -206,23 +239,32 @@
         setInputs: setInputs,
 
         setProfile: function (field, value) {
-            if (field !== 'birthDate') return;
-            state.profile.birthDate = validBirthDate(value);
+            if (field !== 'birthDate') return false;
+            var next = validBirthDate(value);
+            if (state.profile.birthDate === next) return false;
+            checkpoint();
+            state.profile.birthDate = next;
             applyBirthDate(state);
             commit();
+            return true;
         },
 
         age: function () { return FireUtil.ageFromDOB(state.profile.birthDate); },
 
         setPhases: function (phases) {
-            state.phases = normalizePhases(phases, state.inputs.currentAge);
+            var next = normalizePhases(phases, state.inputs.currentAge);
+            if (JSON.stringify(next) === JSON.stringify(state.phases)) return false;
+            checkpoint();
+            state.phases = next;
             commit();
+            return true;
         },
 
         addPhase: function () {
             var prev = state.phases[state.phases.length - 1];
             if (prev.age >= FireEngine.MAX_AGE) return;
             var maxId = state.phases.reduce(function (m, p) { return Math.max(m, p.id); }, 0);
+            checkpoint();
             state.phases.push({
                 id: maxId + 1,
                 age: Math.min(FireEngine.MAX_AGE, prev.age + 5),
@@ -235,6 +277,7 @@
         removePhase: function (id) {
             var phase = state.phases.filter(function (p) { return p.id === id; })[0];
             if (!phase || phase.isLocked) return;
+            checkpoint();
             state.phases = normalizePhases(state.phases.filter(function (p) { return p.id !== id; }), state.inputs.currentAge);
             commit();
         },
@@ -243,8 +286,13 @@
             var phase = state.phases.filter(function (p) { return p.id === id; })[0];
             if (!phase || !Number.isFinite(Number(value))) return;
             var v = Number(value);
+            var previous = JSON.stringify(state.phases);
+            checkpoint();
             if (field === 'age') {
-                if (phase.isLocked) return;
+                if (phase.isLocked) {
+                    undoStack.pop();
+                    return;
+                }
                 phase.age = Math.max(state.inputs.currentAge + 1, Math.min(FireEngine.MAX_AGE, Math.round(v)));
             } else if (field === 'deferred' || field === 'free') {
                 v = Math.max(0, Math.min(100, v));
@@ -252,22 +300,44 @@
                 phase[field] = Math.min(v, 100 - phase[other]);
                 phase.taxable = 100 - phase.deferred - phase.free;
             } else {
+                undoStack.pop();
                 return;
             }
             state.phases = normalizePhases(state.phases, state.inputs.currentAge);
+            if (JSON.stringify(state.phases) === previous) {
+                undoStack.pop();
+                return;
+            }
             commit();
         },
 
         rerollSeed: function () {
+            checkpoint();
             state.mcSeed = (state.mcSeed * 16807 + 12345) % 2147483647;
             if (!state.mcSeed) state.mcSeed = 1337;
             commit();
         },
 
         reset: function () {
+            checkpoint();
             localStorage.removeItem(KEY);
             state = defaults();
             commit();
+        },
+
+        canUndo: function () { return undoStack.length > 0; },
+
+        undo: function () {
+            if (!undoStack.length) return false;
+            state = adopt(undoStack.pop());
+            commit();
+            return true;
+        },
+
+        schemaVersion: function () { return SCHEMA_VERSION; },
+
+        updatedAt: function () {
+            return state && state.meta ? state.meta.updatedAt : null;
         },
 
         subscribe: function (fn) {

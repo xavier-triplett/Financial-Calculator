@@ -40,6 +40,7 @@ const normalized = E.normalizeInputs({
     savingsRate: 75,
     maxSavingsRate: 50,
     taxTaxableRate: -20,
+    rothContributionBasis: -50,
     swr: 0,
     marketReturn: -150,
     mcSims: 50.5
@@ -47,7 +48,7 @@ const normalized = E.normalizeInputs({
 check('input domains clamp unsafe values',
     normalized.currentAge === 95 && normalized.income === 0 && normalized.expenses === E.DEFAULTS.expenses &&
     normalized.savingsRate === 50 && normalized.taxTaxableRate === 0 && normalized.swr === 0.1 &&
-    normalized.marketReturn === -99 && normalized.mcSims === 51);
+    normalized.rothContributionBasis === 0 && normalized.marketReturn === -99 && normalized.mcSims === 51);
 check('draw sets normalize to exactly 100', E.DRAW_SETS.every(keys =>
     approx(keys.reduce((sum, key) => sum + normalized[key], 0), 100)));
 
@@ -79,10 +80,37 @@ const infeasible = E.simulate(Object.assign({}, E.DEFAULTS, {
     incomeGrowth: 0, marketReturn: 0, inflation: 0, employerMatchRate: 0
 }), [{ age: 30, deferred: 50, free: 50, taxable: 0 }], {});
 const infeasibleRow = infeasible.rows[0];
+const infeasibleExpected = 5000 / (1 - 0.25 * 0.5);
 check('infeasible request is flagged', infeasible.summary.firstInfeasibleAge === 30);
-check('infeasible saving is capped to take-home surplus',
-    approx(infeasibleRow.contrib.deferred + infeasibleRow.contrib.free + infeasibleRow.contrib.taxable, 5000));
-check('row reports the savings rate actually used', approx(infeasibleRow.savingsRate, 0.05));
+check('deferred tax savings increase the feasible contribution',
+    approx(infeasibleRow.contrib.deferred + infeasibleRow.contrib.free + infeasibleRow.contrib.taxable, infeasibleExpected));
+check('row reports the tax-adjusted savings rate actually used',
+    approx(infeasibleRow.savingsRate, infeasibleExpected / 100000));
+check('deferred contribution tax benefit is exposed and conserved',
+    approx(infeasibleRow.contrib.taxBenefit, infeasibleRow.contrib.deferred * 0.25) &&
+    approx(infeasible.summary.totalContributionTaxBenefit,
+        infeasible.rows.reduce((sum, row) => sum + row.contrib.taxBenefit, 0)));
+
+const infeasibleRoth = E.simulate(Object.assign({}, E.DEFAULTS, {
+    currentAge: 30, retireAge: 31, standardRetireAge: 31,
+    income: 100000, incomeTaxRate: 25, expenses: 70000,
+    savingsRate: 80, savingsRateIncrease: 0, maxSavingsRate: 80,
+    incomeGrowth: 0, marketReturn: 0, inflation: 0, employerMatchRate: 0
+}), [{ age: 30, deferred: 0, free: 100, taxable: 0 }], {});
+check('Roth contributions receive no current deferred-tax benefit',
+    approx(infeasibleRoth.rows[0].contrib.free, 5000) &&
+    infeasibleRoth.rows[0].contrib.taxBenefit === 0);
+
+const cappedDeferredBenefit = E.simulate(Object.assign({}, E.DEFAULTS, {
+    currentAge: 30, retireAge: 31, standardRetireAge: 31,
+    income: 100000, incomeTaxRate: 25, expenses: 45000,
+    savingsRate: 80, savingsRateIncrease: 0, maxSavingsRate: 80,
+    incomeGrowth: 0, marketReturn: 0, inflation: 0, employerMatchRate: 0
+}), [{ age: 30, deferred: 100, free: 0, taxable: 0 }], {}).rows[0];
+check('deferred tax benefit stops at tax-advantaged contribution limits',
+    approx(cappedDeferredBenefit.contrib.deferred, 32000) &&
+    approx(cappedDeferredBenefit.contrib.taxable, 6000) &&
+    approx(cappedDeferredBenefit.contrib.taxBenefit, 8000));
 
 const cappedRate = E.simulate(Object.assign({}, E.DEFAULTS, {
     currentAge: 30, retireAge: 32, standardRetireAge: 32,
@@ -120,9 +148,25 @@ check('employee contribution dollars are conserved',
     approx(mixedVehicle.deferred + mixedVehicle.free + mixedVehicle.taxable, 40000));
 check('match is based on workplace contributions', approx(mixedVehicle.match, 6000));
 
-const rothVehicle = vehiclePlan({ deferred: 0, free: 100, taxable: 0 }).rows[0].contrib;
+const rothVehicleRow = vehiclePlan({ deferred: 0, free: 100, taxable: 0 }).rows[0];
+const rothVehicle = rothVehicleRow.contrib;
 check('Roth workplace contributions earn match',
     approx(rothVehicle.free, 32000) && approx(rothVehicle.match, 6000) && approx(rothVehicle.deferred, 0));
+check('only Roth IRA contributions add accessible contribution basis',
+    approx(rothVehicle.rothBasisAdded, 7500) &&
+    approx(rothVehicleRow.rothContributionBasis, 7500));
+
+const workplaceOnlyRoth = E.simulate(Object.assign({}, E.DEFAULTS, {
+    currentAge: 30, retireAge: 31, standardRetireAge: 60,
+    income: 200000, incomeTaxRate: 0, expenses: 0,
+    savingsRate: 10, savingsRateIncrease: 0, maxSavingsRate: 10,
+    incomeGrowth: 0, marketReturn: 0, inflation: 0, employerMatchRate: 0
+}), [{ age: 30, deferred: 0, free: 100, taxable: 0 }], {}).rows[0];
+check('workplace Roth contributions do not add accessible basis',
+    approx(workplaceOnlyRoth.contrib.free, 20000) &&
+    workplaceOnlyRoth.contrib.rothBasisAdded === 0 &&
+    workplaceOnlyRoth.rothContributionBasis === 0);
+
 const deferredVehicle = vehiclePlan({ deferred: 100, free: 0, taxable: 0 }).rows[0].contrib;
 check('traditional IRA capacity follows the workplace limit',
     approx(deferredVehicle.deferred, 32000) && approx(deferredVehicle.taxable, 8000));
@@ -141,6 +185,16 @@ const factor64 = Math.pow(1.03, 4);
 check('regular catch-up resumes at 64',
     approx(catchups.rows[4].contrib.workplace, (24500 + 8000) * factor64) &&
     approx(catchups.rows[4].contrib.ira, (7500 + 1100) * factor64));
+
+const spendableInputs = Object.assign({}, E.DEFAULTS, {
+    balDeferred: 1000, balFree: 500, balTaxable: 1000,
+    balCash: 10000, taxDeferredRate: 25, taxTaxableRate: 10
+});
+check('canonical spendable-assets helper tax-adjusts investments and excludes cash',
+    approx(E.spendableAssets(spendableInputs), 2150) &&
+    approx(E.spendableAssets(spendableInputs, {
+        deferred: 2000, free: 250, taxable: 500
+    }), 2200));
 
 const coastInputs = Object.assign({}, E.DEFAULTS, {
     currentAge: 30, retireAge: 60, standardRetireAge: 60,
@@ -257,6 +311,51 @@ check('bridge deferred draws pay deferred tax plus the early penalty',
 check('standard-age deferred draws do not pay the early penalty',
     firstDeferredStandard && firstDeferredStandard.wd.taxes < firstDeferredStandard.wd.deferred * 0.25);
 
+const rothBasisBridgeInputs = Object.assign({}, E.DEFAULTS, {
+    currentAge: 40, retireAge: 40, standardRetireAge: 60,
+    expenses: 100, balDeferred: 0, balFree: 1000, balTaxable: 0,
+    rothContributionBasis: 250,
+    marketReturn: 0, inflation: 0,
+    taxDeferredRate: 0, taxTaxableRate: 0, earlyPenaltyRate: 0,
+    drawTaxableBridge: 0, drawDeferredBridge: 0, drawFreeBridge: 100
+});
+const rothBasisBridge = E.simulate(rothBasisBridgeInputs, null, {});
+check('pre-access Roth draws stop at accessible contribution basis',
+    approx(rothBasisBridge.rows[0].wd.free, 100) &&
+    approx(rothBasisBridge.rows[1].wd.free, 100) &&
+    approx(rothBasisBridge.rows[2].wd.free, 50) &&
+    rothBasisBridge.rows[3].wd.free === 0 &&
+    rothBasisBridge.summary.ranOutOfMoneyAge === 42);
+check('preferred Roth draws decrement basis without consuming inaccessible earnings',
+    approx(rothBasisBridge.rows[0].rothContributionBasis, 150) &&
+    approx(rothBasisBridge.rows[2].rothContributionBasis, 0) &&
+    approx(rothBasisBridge.rows[2].free, 750));
+
+const rothBasisFallback = E.simulate(Object.assign({}, rothBasisBridgeInputs, {
+    currentAge: 40, retireAge: 40, expenses: 100,
+    rothContributionBasis: 200,
+    drawTaxableBridge: 100, drawDeferredBridge: 0, drawFreeBridge: 0
+}), null, {});
+check('fallback Roth draws obey and decrement the same basis',
+    approx(rothBasisFallback.rows[0].wd.free, 100) &&
+    approx(rothBasisFallback.rows[0].rothContributionBasis, 100));
+
+const standardRoth = E.simulate(Object.assign({}, rothBasisBridgeInputs, {
+    currentAge: 60, retireAge: 60, standardRetireAge: 60,
+    rothContributionBasis: 0
+}), null, {});
+check('the full Roth balance is available at the account-access age',
+    approx(standardRoth.rows[0].wd.free, 100));
+
+const inaccessibleRothMc = E.monteCarlo(Object.assign({}, rothBasisBridgeInputs, {
+    expenses: 10, volatility: 0, mcSims: 50, rothContributionBasis: 0
+}), null, { seed: 17 });
+const accessibleRothMc = E.monteCarlo(Object.assign({}, rothBasisBridgeInputs, {
+    expenses: 10, volatility: 0, mcSims: 50, rothContributionBasis: 1000
+}), null, { seed: 17 });
+check('lean Monte Carlo applies the same Roth-basis access limit',
+    inaccessibleRothMc.successRate === 0 && accessibleRothMc.successRate === 1);
+
 const withoutCash = E.simulate(DEMO, regressionPhases, {});
 const withCash = E.simulate(Object.assign({}, DEMO, { balCash: 50000 }), regressionPhases, {});
 check('cash is constant and excluded from market growth and withdrawals',
@@ -282,6 +381,8 @@ const totals = new Float64Array(years);
 const lean = E.simulate(DEMO, null, { returns, lean: true, totalsOut: totals });
 check('lean mode matches full totals', full.rows.every((row, i) => approx(row.total, totals[i])));
 check('lean mode matches summary', approx(full.summary.endingNetWorth, lean.summary.endingNetWorth));
+check('lean mode preserves Roth contribution basis',
+    approx(full.summary.endingRothContributionBasis, lean.summary.endingRothContributionBasis));
 
 const fractionalMc = E.monteCarlo(Object.assign({}, DEMO, { mcSims: 50.1 }), null, { seed: 9 });
 check('Monte Carlo simulation count is integral', fractionalMc.sims === 50);
@@ -318,7 +419,8 @@ check('Monte Carlo is deterministic for a seed',
 // beginner run. Every frozen key here is set to something absurd first.
 const TAMPERED = Object.assign({}, E.DEFAULTS, {
     income: 120000, expenses: 48000, savingsRate: 20,
-    balDeferred: 90000, balFree: 40000, balTaxable: 25000, balCash: 5000,
+    balDeferred: 90000, balFree: 40000, rothContributionBasis: 30000,
+    balTaxable: 25000, balCash: 5000,
     marketReturn: 42, inflation: 19, swr: 11, savingsRateIncrease: 9,
     maxSavingsRate: 95, incomeGrowth: 25, incomeTaxRate: 55,
     standardRetireAge: 72, taxDeferredRate: 90, taxTaxableRate: 80,
@@ -332,9 +434,10 @@ check('beginner ignores customized growth', beg.marketReturn === E.BEGINNER_MODE
 check('beginner ignores customized inflation', beg.inflation === 0);
 check('beginner ignores customized withdrawal rate', beg.swr === 4);
 check('beginner ignores customized access age', beg.standardRetireAge === 60);
-check('beginner ignores customized taxes',
-    beg.taxDeferredRate === E.DEFAULTS.taxDeferredRate &&
-    beg.incomeTaxRate === 25 && beg.earlyPenaltyRate === E.DEFAULTS.earlyPenaltyRate);
+check('beginner models no taxes or early penalty',
+    beg.incomeTaxRate === 0 && beg.taxDeferredRate === 0 &&
+    beg.taxTaxableRate === 0 && beg.earlyPenaltyRate === 0);
+check('beginner ignores expert Roth contribution basis', beg.rothContributionBasis === 0);
 check('beginner ignores customized contribution limits',
     beg.limit401k === E.DEFAULTS.limit401k && beg.limitIRA === E.DEFAULTS.limitIRA);
 check('beginner ignores customized drawdown order',
@@ -378,6 +481,23 @@ const roomyWorking = E.simulate(roomy, E.BEGINNER_PHASES, {}).rows.filter(r => r
 check('beginner saves the same share every working year',
     roomyWorking.length > 1 && roomyWorking.every(r => approx(r.savingsRate, 0.25, 1e-9)));
 
+const beginnerTaxFreeCashflow = E.simulate(E.beginnerInputs(Object.assign({}, E.DEFAULTS, {
+    currentAge: 30, retireAge: 31,
+    income: 100000, expenses: 70000, savingsRate: 80
+})), E.BEGINNER_PHASES, {}).rows[0];
+check('beginner affordability uses tax-free income with no deferred tax credit',
+    approx(beginnerTaxFreeCashflow.contrib.deferred + beginnerTaxFreeCashflow.contrib.free, 30000) &&
+    beginnerTaxFreeCashflow.contrib.taxBenefit === 0);
+
+const beginnerTaxFreeRetirement = E.simulate(E.beginnerInputs(Object.assign({}, E.DEFAULTS, {
+    currentAge: 40, retireAge: 40,
+    expenses: 100, balDeferred: 1000, balTaxable: 100
+})), E.BEGINNER_PHASES, {});
+check('beginner brokerage and early deferred withdrawals pay no modeled tax',
+    approx(beginnerTaxFreeRetirement.rows[0].wd.taxable, 100) &&
+    beginnerTaxFreeRetirement.rows[1].wd.deferred > 0 &&
+    beginnerTaxFreeRetirement.summary.totalTaxes === 0);
+
 /* Beginner's real rates are derived from the same nominal pair Expert runs on,
  * so with no contributions in play the two must agree exactly once the expert
  * run is deflated. This is what lets the modes claim to describe one world. */
@@ -397,5 +517,8 @@ check('beginner real growth matches expert nominal growth, deflated',
 const begAssume = E.beginnerAssumptions();
 check('beginner assumptions are stated for the user',
     begAssume.length > 0 && begAssume.every(a => a.label && a.value && a.note));
+const begTaxAssumption = begAssume.find(a => a.label === 'Taxes');
+check('beginner assumptions explicitly state that taxes are not modeled',
+    begTaxAssumption && /not modeled/i.test(begTaxAssumption.value + ' ' + begTaxAssumption.note));
 
 process.exit(failures ? 1 : 0);

@@ -45,7 +45,7 @@
                 blurb: 'What comes in and what goes out today.',
                 fields: [
                     { key: 'income', label: 'Annual gross income', unit: '$', step: 1000, min: 0, max: 1000000000000000 },
-                    { key: 'incomeTaxRate', label: 'Effective income tax', unit: '%', step: 1, min: 0, max: 60, hint: 'All payroll and income taxes as a share of gross pay. The Cashbook uses it to estimate monthly take-home when a month has no income transactions.' },
+                    { key: 'incomeTaxRate', label: 'Effective income tax', unit: '%', step: 1, min: 0, max: 60, hint: 'All payroll and income taxes as a share of gross pay. The Planner uses the same blended rate for current tax savings from employee tax-deferred contributions; the Cashbook uses it to estimate monthly take-home when a month has no income transactions.' },
                     { key: 'expenses', label: 'Current annual expenses', unit: '$', step: 1000, min: 0, max: 1000000000000000 }
                 ]
             },
@@ -66,6 +66,7 @@
                 fields: [
                     { key: 'balDeferred', label: 'Tax-deferred (401k / IRA)', unit: '$', step: 1000, min: 0, max: 1000000000000000, bucket: 'deferred' },
                     { key: 'balFree', label: 'Tax-free (Roth)', unit: '$', step: 1000, min: 0, max: 1000000000000000, bucket: 'free' },
+                    { key: 'rothContributionBasis', label: 'Accessible Roth contribution basis', unit: '$', step: 500, min: 0, max: 1000000000000000, bucket: 'free', hint: 'Regular Roth IRA contributions from the current balance that can be withdrawn before the account-access age. Exclude earnings, conversions, and workplace Roth contributions.' },
                     { key: 'balTaxable', label: 'After-tax (brokerage)', unit: '$', step: 1000, min: 0, max: 1000000000000000, bucket: 'taxable' },
                     { key: 'balCash', label: 'Cash on hand', unit: '$', step: 500, min: 0, max: 1000000000000000, bucket: 'cash', hint: 'Counts toward net worth but sits outside the market — the projection never grows it and never draws it down.' }
                 ]
